@@ -1,0 +1,736 @@
+{
+    "common": {
+        "appName": "KargaX",
+        "loading": "Loading...",
+        "error": "Error",
+        "success": "Success",
+        "cancel": "Cancel",
+        "save": "Save",
+        "delete": "Delete",
+        "edit": "Edit",
+        "back": "Back",
+        "next": "Next",
+        "previous": "Previous",
+        "search": "Search",
+        "filter": "Filter",
+        "noResults": "No results found",
+        "required": "Required",
+        "optional": "Optional",
+        "yes": "Yes",
+        "no": "No",
+        "or": "or",
+        "and": "and"
+    },
+    "auth": {
+        "login": {
+            "title": "Welcome Back",
+            "subtitle": "Sign in to your KargaX account",
+            "email": "Email address",
+            "emailPlaceholder": "your@email.com",
+            "password": "Password",
+            "passwordPlaceholder": "••••••••",
+            "rememberMe": "Remember me",
+            "forgotPassword": "Forgot password?",
+            "submit": "Sign In",
+            "noAccount": "Don't have an account?",
+            "signUp": "Sign up for free",
+            "errors": {
+                "invalidCredentials": "Invalid email or password",
+                "emailNotConfirmed": "Please confirm your email address",
+                "connectionError": "Could not connect to server. Please try again.",
+                "generic": "Error signing in"
+            }
+        },
+        "register": {
+            "title": "Join KargaX",
+            "subtitle": "Create your account and start moving cargo across Colombia",
+            "steps": {
+                "accountType": "Account Type",
+                "personalInfo": "Personal Info",
+                "credentials": "Credentials",
+                "verification": "Verification"
+            },
+            "accountType": {
+                "title": "How do you want to use KargaX?",
+                "subtitle": "Select the account type that best fits your needs",
+                "trucker": {
+                    "title": "I'm a Trucker",
+                    "description": "I have vehicles and want to find cargo to transport",
+                    "features": [
+                        "Access thousands of daily cargo offers",
+                        "Negotiate directly with businesses",
+                        "Manage your fleet and documents",
+                        "Receive secure payments"
+                    ]
+                },
+                "business": {
+                    "title": "I'm a Business",
+                    "description": "I need to transport cargo and I'm looking for reliable truckers",
+                    "features": [
+                        "Post unlimited cargo offers",
+                        "Receive quotes from verified truckers",
+                        "Track your shipments in real-time",
+                        "Manage all your logistics in one place"
+                    ]
+                }
+            },
+            "personalInfo": {
+                "title": "Personal Information",
+                "subtitle": "Tell us about yourself to personalize your experience",
+                "fullName": "Full name",
+                "fullNamePlaceholder": "John Michael Smith",
+                "documentType": "Document type",
+                "documentNumber": "Document number",
+                "documentNumberPlaceholder": "1234567890",
+                "phone": "Mobile phone",
+                "phonePlaceholder": "+57 (300) 123-4567",
+                "companyName": "Company name",
+                "companyNamePlaceholder": "My Company Inc.",
+                "nit": "Tax ID (NIT)",
+                "nitPlaceholder": "900.123.456-7",
+                "industry": "Industry",
+                "industryPlaceholder": "Select an industry",
+                "address": "Address",
+                "addressPlaceholder": "123 Main Street, Suite 801",
+                "city": "City",
+                "cityPlaceholder": "Select a city",
+                "department": "State/Department",
+                "departmentPlaceholder": "Select a state"
+            },
+            "credentials": {
+                "title": "Create your credentials",
+                "subtitle": "These will be your access credentials to the platform",
+                "email": "Email address",
+                "emailPlaceholder": "your@email.com",
+                "emailHelper": "We'll use this email to send you important notifications",
+                "password": "Password",
+                "passwordPlaceholder": "Minimum 8 characters",
+                "confirmPassword": "Confirm password",
+                "confirmPasswordPlaceholder": "Repeat your password",
+                "passwordRequirements": {
+                    "title": "Your password must have:",
+                    "minLength": "At least 8 characters",
+                    "uppercase": "One uppercase letter",
+                    "lowercase": "One lowercase letter",
+                    "number": "One number",
+                    "special": "One special character (!@#$%^&*)"
+                }
+            },
+            "verification": {
+                "title": "Verify your account",
+                "subtitle": "We've sent a verification code to your email",
+                "codeSent": "Code sent to",
+                "enterCode": "Enter the 6-digit code",
+                "resendCode": "Resend code",
+                "resendIn": "Resend in",
+                "didntReceive": "Didn't receive the code?",
+                "checkSpam": "Check your spam folder"
+            },
+            "terms": {
+                "accept": "I accept the",
+                "termsOfService": "Terms of Service",
+                "and": "and the",
+                "privacyPolicy": "Privacy Policy",
+                "marketing": "I agree to receive marketing communications"
+            },
+            "submit": "Create Account",
+            "submitting": "Creating account...",
+            "haveAccount": "Already have an account?",
+            "signIn": "Sign in",
+            "success": {
+                "title": "Account created successfully!",
+                "subtitle": "Welcome to KargaX. You can now start using the platform.",
+                "emailSent": "We've sent a confirmation email to your inbox.",
+                "continue": "Continue to Dashboard"
+            },
+            "errors": {
+                "emailExists": "This email is already registered",
+                "weakPassword": "Password doesn't meet requirements",
+                "invalidPhone": "Invalid phone number",
+                "invalidNit": "Invalid Tax ID",
+                "invalidDocument": "Invalid document number",
+                "termsRequired": "You must accept the terms and conditions",
+                "generic": "Error creating account. Please try again."
+            }
+        },
+        "forgotPassword": {
+            "title": "Reset password",
+            "subtitle": "Enter your email and we'll send you instructions",
+            "email": "Email address",
+            "submit": "Send instructions",
+            "backToLogin": "Back to sign in",
+            "success": "We've sent instructions to your email"
+        }
+    },
+    "validation": {
+        "required": "This field is required",
+        "email": "Please enter a valid email address",
+        "minLength": "Must be at least {{min}} characters",
+        "maxLength": "Must be at most {{max}} characters",
+        "passwordMatch": "Passwords don't match",
+        "phone": "Invalid phone number. Format: +57 (300) 123-4567",
+        "nit": "Invalid Tax ID. Format: 900.123.456-7",
+        "document": "Invalid document number",
+        "passwordRequirements": "Password doesn't meet all requirements"
+    },
+    "documents": {
+        "CC": "Citizenship Card",
+        "CE": "Foreigner ID",
+        "NIT": "Tax ID",
+        "PP": "Passport",
+        "TI": "Identity Card"
+    },
+    "industries": {
+        "agriculture": "Agriculture & Livestock",
+        "automotive": "Automotive",
+        "construction": "Construction",
+        "consumer": "Consumer Goods",
+        "energy": "Energy & Oil",
+        "food": "Food & Beverages",
+        "manufacturing": "Manufacturing",
+        "mining": "Mining",
+        "pharmaceutical": "Pharmaceutical",
+        "retail": "Retail & Commerce",
+        "technology": "Technology",
+        "textile": "Textile & Apparel",
+        "other": "Other"
+    },
+    "nav": {
+        "home": "Home",
+        "browseOffers": "Browse Offers",
+        "publishOffer": "Publish Offer",
+        "myOffers": "My Offers",
+        "myApplications": "My Applications",
+        "assignedTrips": "Assigned Trips",
+        "acceptedOffers": "Accepted Jobs",
+        "receivedApplications": "Applications",
+        "messages": "Messages",
+        "analytics": "Analytics",
+        "profile": "My Profile",
+        "settings": "Settings",
+        "help": "Help",
+        "logout": "Sign Out",
+        "wallet": "My Wallet",
+        "team": "Team",
+        "plans": "Plans",
+        "notifications": "Notifications",
+        "inspections": "Inspections",
+        "userType": {
+            "trucker": "Trucker",
+            "business": "Business",
+            "admin": "Administrator"
+        }
+    },
+    "offers": {
+        "publish": {
+            "pageTitle": "Publish Cargo Offer",
+            "cargo": {
+                "title": "Cargo Information",
+                "subtitle": "Describe what you need to transport",
+                "type": "Cargo Type",
+                "description": "Cargo Description",
+                "weight": "Weight (kg)",
+                "length": "Length (m)",
+                "width": "Width (m)",
+                "height": "Height (m)",
+                "quantity": "Quantity",
+                "specialReqs": "Special Requirements"
+            },
+            "route": {
+                "title": "Route Information",
+                "subtitle": "Origin, destination and dates",
+                "origin": "Origin Point",
+                "destination": "Destination Point"
+            },
+            "payment": {
+                "title": "Payment Terms",
+                "subtitle": "Define the rate and payment method"
+            },
+            "requirements": {
+                "title": "Transport Requirements",
+                "subtitle": "Vehicle type and driver"
+            },
+            "photos": {
+                "title": "Cargo Photos",
+                "subtitle": "Optional: Help truckers understand"
+            },
+            "review": {
+                "title": "Review and Publish",
+                "subtitle": "Verify everything is correct"
+            }
+        }
+    },
+    "myOffers": {
+        "title": "My Offers",
+        "subtitle": "Manage and monitor your cargo offers",
+        "search": "Search by title or city...",
+        "sortBy": "Sort by",
+        "sortOptions": {
+            "newest": "Newest first",
+            "oldest": "Oldest first",
+            "highestBudget": "Highest budget",
+            "lowestBudget": "Lowest budget"
+        },
+        "tabs": {
+            "all": "All",
+            "draft": "Draft",
+            "active": "Active",
+            "inProgress": "In Progress",
+            "completed": "Completed",
+            "cancelled": "Cancelled"
+        },
+        "status": {
+            "draft": "Draft",
+            "active": "Active",
+            "in_progress": "In Progress",
+            "completed": "Completed",
+            "cancelled": "Cancelled"
+        },
+        "card": {
+            "route": "Route",
+            "budget": "Budget",
+            "pickupDate": "Pickup date",
+            "applications": "applications",
+            "noApplications": "No applications yet",
+            "viewApplications": "View applications",
+            "editOffer": "Edit",
+            "deleteOffer": "Delete",
+            "publishOffer": "Publish",
+            "cancelOffer": "Cancel offer",
+            "viewDetails": "View details"
+        },
+        "applications": {
+            "title": "Applications",
+            "subtitle": "Truckers interested in your cargo",
+            "empty": "No applications for this offer yet",
+            "accept": "Accept",
+            "reject": "Reject",
+            "accepted": "Accepted",
+            "rejected": "Rejected",
+            "pending": "Pending",
+            "proposedAmount": "Proposed",
+            "experience": "years of experience",
+            "message": "Message",
+            "confirmAccept": "Accept this trucker?",
+            "confirmReject": "Reject this application?",
+            "acceptSuccess": "Trucker accepted successfully",
+            "rejectSuccess": "Application rejected"
+        },
+        "empty": {
+            "all": {
+                "title": "No offers yet",
+                "description": "Publish your first offer and find reliable truckers"
+            },
+            "draft": {
+                "title": "No drafts",
+                "description": "Drafts will appear here when you save an unpublished offer"
+            },
+            "active": {
+                "title": "No active offers",
+                "description": "Publish an offer to start receiving applications"
+            },
+            "inProgress": {
+                "title": "No offers in progress",
+                "description": "When you accept a trucker, the offer will appear here"
+            },
+            "completed": {
+                "title": "No completed offers",
+                "description": "Finished offers will appear here"
+            },
+            "cancelled": {
+                "title": "No cancelled offers",
+                "description": "Cancelled offers will appear here"
+            }
+        },
+        "actions": {
+            "newOffer": "New Offer",
+            "refresh": "Refresh"
+        }
+    },
+    "messages": {
+        "title": "Messages",
+        "pageTitle": "Messages",
+        "searchPlaceholder": "Search conversations...",
+        "noConversations": "No messages",
+        "noConversationsDescription": "When you start a conversation with a trucker or business, it will appear here.",
+        "newConversation": "New conversation",
+        "newConversationInfo": "To start a conversation, apply to an offer or contact from the offer details.",
+        "noSearchResults": "No conversations found",
+        "noMessages": "No messages",
+        "noMessagesYet": "No messages yet",
+        "startConversation": "Send the first message!",
+        "selectConversationTitle": "Select a conversation",
+        "selectConversationDescription": "Choose a conversation from the list to start chatting with truckers or businesses.",
+        "selectConversation": "Select conversation",
+        "unknownUser": "User",
+        "typing": "Typing...",
+        "online": "Online",
+        "offline": "Offline",
+        "inputPlaceholder": "Type a message...",
+        "inputAriaLabel": "Message field",
+        "send": "Send message",
+        "sendError": "Failed to send",
+        "loadError": "Failed to load",
+        "attachFile": "Attach file",
+        "addEmoji": "Add emoji",
+        "removeFile": "Remove file",
+        "downloadFile": "Download file",
+        "fileTooLarge": "File is too large (max 10MB)",
+        "call": "Call",
+        "moreOptions": "More options",
+        "timeAgo": {
+            "justNow": "Now",
+            "minutesAgo": "{{count}} min ago",
+            "hoursAgo": "{{count}} h ago",
+            "yesterday": "Yesterday",
+            "daysAgo": "{{count}} days ago"
+        },
+        "status": {
+            "sending": "Sending...",
+            "sent": "Sent",
+            "delivered": "Delivered",
+            "read": "Read",
+            "failed": "Failed to send"
+        },
+        "notifications": {
+            "newMessage": "New message",
+            "viewMessage": "View message"
+        }
+    },
+    "truckerDashboard": {
+        "title": "Trucker Dashboard",
+        "availableOffers": "Available Offers",
+        "searchPlaceholder": "Search by cargo type, origin or destination...",
+        "applied": "Applied",
+        "origin": "Origin",
+        "destination": "Destination",
+        "payment": "Payment",
+        "viewDetails": "View details",
+        "apply": "Apply now",
+        "applySuccess": "Application submitted successfully!",
+        "aiPowered": "AI-optimized offers",
+        "stats": {
+            "available": "Available offers",
+            "pending": "Pending applications",
+            "accepted": "Accepted jobs"
+        },
+        "filters": {
+            "title": "Advanced filters",
+            "origin": "Origin state",
+            "destination": "Destination state",
+            "cargoType": "Cargo type",
+            "vehicleType": "Vehicle type",
+            "reset": "Clear filters"
+        },
+        "empty": {
+            "title": "No available offers",
+            "description": "Check back later or adjust filters to see more offers."
+        }
+    },
+    "applications": {
+        "title": "My Applications",
+        "subtitle": "Track your cargo offer applications",
+        "origin": "Origin",
+        "destination": "Destination",
+        "applied": "Applied",
+        "myProposal": "My proposal",
+        "businessResponse": "Business response",
+        "viewOffer": "View offer",
+        "message": "Message",
+        "browseOffers": "Browse offers",
+        "aiTracking": "AI-powered tracking",
+        "tabs": {
+            "all": "All",
+            "pending": "Pending",
+            "accepted": "Accepted",
+            "rejected": "Rejected"
+        },
+        "status": {
+            "pending": "Pending",
+            "accepted": "Accepted",
+            "rejected": "Rejected"
+        },
+        "empty": {
+            "all": {
+                "title": "No applications",
+                "description": "Browse offers and apply to get started."
+            },
+            "pending": {
+                "title": "No pending applications",
+                "description": "Your pending applications will appear here."
+            },
+            "accepted": {
+                "title": "No accepted applications",
+                "description": "When a business accepts you, it will appear here."
+            },
+            "rejected": {
+                "title": "No rejections",
+                "description": "Great! You have no rejected applications."
+            }
+        }
+    },
+    "acceptedOffers": {
+        "title": "My Jobs",
+        "subtitle": "Manage your accepted jobs",
+        "pickup": "Pickup",
+        "deliver": "Deliver",
+        "payment": "Agreed payment",
+        "contact": "Business contact",
+        "message": "Message",
+        "navigate": "Navigate",
+        "startTrip": "Start Trip",
+        "completeDelivery": "Complete Delivery",
+        "markDelivered": "Mark delivered",
+        "deliveredSuccess": "Job marked as delivered!",
+        "aiOptimized": "AI-optimized routes",
+        "status": {
+            "awaiting": "Awaiting pickup",
+            "in_transit": "In transit",
+            "delivered": "Delivered"
+        },
+        "empty": {
+            "title": "No accepted jobs",
+            "description": "When a business accepts your application, your job will appear here."
+        }
+    },
+    "picking": {
+        "loadingChecklist": "Loading Checklist",
+        "deliveryChecklist": "Delivery Checklist",
+        "pending": "Pending",
+        "loaded": "Loaded",
+        "withIssue": "With issue",
+        "delivered": "Delivered",
+        "partial": "Partial",
+        "rejected": "Rejected",
+        "units": "units",
+        "loadedItems": "loaded",
+        "confirmLoad": "Confirm Load",
+        "confirmDelivery": "Confirm Delivery",
+        "photos": "photos",
+        "addPhoto": "Add photo",
+        "photoEvidence": "Evidence photos",
+        "photoRequired": "Photo required",
+        "hasIssue": "There is an issue with this item",
+        "notes": "Notes",
+        "notesOptional": "Notes (optional)",
+        "notesPlaceholder": "Describe any observations...",
+        "deliveredQty": "Delivered",
+        "rejectedQty": "Rejected",
+        "rejectionReason": "Rejection reason",
+        "selectReason": "Select rejection reason",
+        "rejectionReasons": {
+            "damaged": "Damaged/Broken",
+            "missing": "Missing",
+            "wrong_item": "Wrong item",
+            "customer_refused": "Customer refused",
+            "expired": "Expired",
+            "quality_issue": "Quality issue",
+            "other": "Other reason"
+        },
+        "loadingVerified": "Loading verified with PIN",
+        "deliveryVerified": "Delivery verified with PIN",
+        "noItems": "No items in the manifest",
+        "progress": "Progress",
+        "gps": {
+            "verifyOrigin": "Verify Origin",
+            "verifyDestination": "Verify Destination",
+            "verified": "Verified",
+            "obtainingLocation": "Obtaining GPS location...",
+            "locationVerified": "Location verified successfully!",
+            "tooFar": "You are outside the allowed range",
+            "verifyLocation": "Verify My Location",
+            "tryAgain": "Try Again",
+            "noGPS": "GPS not available",
+            "noGPSDevice": "Your device does not support geolocation or permission was denied.",
+            "noCoords": "No coordinates",
+            "noCoordsConfig": "This location does not have GPS coordinates configured.",
+            "distance": "Distance",
+            "tolerance": "Tolerance",
+            "accuracy": "Accuracy",
+            "excellent": "Excellent",
+            "veryGood": "Very good",
+            "good": "Good",
+            "acceptable": "Acceptable",
+            "lowAccuracy": "Low accuracy",
+            "skipVerification": "Skip verification (development only)",
+            "usingDeviceGPS": "Using device GPS"
+        },
+        "pin": {
+            "enterPin": "Enter PIN",
+            "pickupPin": "Pickup PIN",
+            "deliveryPin": "Delivery PIN",
+            "verifyingPin": "Verifying PIN...",
+            "wrongPin": "Wrong PIN",
+            "pinVerified": "PIN Verified!",
+            "accessBlocked": "Access Blocked",
+            "attemptsRemaining": "attempts remaining",
+            "tooManyAttempts": "Too many failed attempts",
+            "contactAdmin": "Contact administrator to unlock",
+            "clear": "Clear",
+            "requestPin": "Request PIN from warehouse manager"
+        },
+        "stages": {
+            "notStarted": "Not started",
+            "enRouteToOrigin": "En route to origin",
+            "atOrigin": "At origin",
+            "loading": "Loading",
+            "awaitingPickupPin": "Awaiting pickup PIN",
+            "inTransit": "In transit",
+            "atDestination": "At destination",
+            "unloading": "Unloading",
+            "awaitingDeliveryPin": "Awaiting delivery PIN",
+            "completed": "Completed"
+        },
+        "actions": {
+            "startLoading": "Start Loading",
+            "finishLoading": "Finish Loading",
+            "startRoute": "Start Route",
+            "startUnloading": "Start Unloading",
+            "finishDelivery": "Finish Delivery",
+            "viewReceipt": "View Receipt"
+        },
+        "summary": {
+            "loadedItems": "Items loaded",
+            "deliveredItems": "Items delivered",
+            "rejectedItems": "Items rejected",
+            "totalPhotos": "Total photos",
+            "tripDuration": "Trip duration"
+        }
+    },
+    "trip": {
+        "loadingTitle": "Loading at Origin",
+        "deliveryTitle": "Delivery at Destination",
+        "arrivalVerification": "Arrival Verification",
+        "loadCargo": "Load Cargo",
+        "exitPin": "Exit PIN",
+        "deliveryCargo": "Deliver Cargo",
+        "closingPin": "Closing PIN",
+        "tripCompleted": "Trip Completed",
+        "fundsReleased": "Funds have been released to your wallet"
+    },
+    "inspection": {
+        "pageTitle": "Inspection Report",
+        "subtitle": "Digital evidence of loading and delivery process",
+        "backToList": "Back to inspections",
+        "loading": "Loading report...",
+        "error": "Error loading report",
+        "notFound": "Report not found",
+        "noAccess": "You don't have access to this report",
+        "retry": "Retry",
+        "header": {
+            "tripInfo": "Trip Information",
+            "trucker": "Trucker",
+            "route": "Route",
+            "status": "Status",
+            "createdAt": "Created",
+            "totalAmount": "Total Amount"
+        },
+        "status": {
+            "pending": "Pending",
+            "in_progress": "In Progress",
+            "loading": "Loading",
+            "delivery": "Delivery",
+            "completed": "Completed",
+            "cancelled": "Cancelled"
+        },
+        "summary": {
+            "title": "Inspection Summary",
+            "totalItems": "Total Items",
+            "loadedItems": "Loaded Items",
+            "loadIssueItems": "With Issues",
+            "deliveredItems": "Delivered",
+            "partialItems": "Partial",
+            "rejectedItems": "Rejected",
+            "totalPhotos": "Evidence Photos",
+            "loadingCompliance": "Loading Compliance",
+            "deliveryCompliance": "Delivery Compliance"
+        },
+        "timeline": {
+            "title": "Event Timeline",
+            "emptyTitle": "No events recorded",
+            "emptyDescription": "Inspection events will appear here when the trucker performs actions.",
+            "events": {
+                "arrival_origin": "Arrival at origin verified",
+                "loading_started": "Loading process started",
+                "item_loaded": "Item loaded to truck",
+                "item_load_issue": "Issue reported during loading",
+                "loading_completed": "Loading completed",
+                "pickup_verified": "Pickup PIN verified",
+                "arrival_destination": "Arrival at destination verified",
+                "unloading_started": "Unloading process started",
+                "item_delivered": "Item delivered to customer",
+                "item_rejected": "Item rejected",
+                "unloading_completed": "Unloading completed",
+                "delivery_verified": "Delivery PIN verified",
+                "photo_added": "Evidence photo added"
+            }
+        },
+        "manifest": {
+            "title": "Cargo Manifest",
+            "emptyTitle": "No items in manifest",
+            "emptyDescription": "No items registered for this cargo.",
+            "columns": {
+                "item": "Item",
+                "expected": "Expected",
+                "loaded": "Loaded",
+                "delivered": "Delivered",
+                "rejected": "Rejected",
+                "status": "Status",
+                "notes": "Notes",
+                "photos": "Photos"
+            },
+            "showPhotos": "View photos",
+            "hidePhotos": "Hide photos",
+            "loadedAt": "Loaded at",
+            "deliveredAt": "Delivered at",
+            "rejectionReason": "Rejection reason"
+        },
+        "photos": {
+            "title": "Evidence Gallery",
+            "emptyTitle": "No evidence photos",
+            "emptyDescription": "Photos taken during inspection will appear here.",
+            "types": {
+                "loading": "Loading",
+                "unloading": "Unloading",
+                "general": "General",
+                "issue": "Issue"
+            },
+            "viewFull": "View full size",
+            "close": "Close",
+            "download": "Download",
+            "previous": "Previous",
+            "next": "Next"
+        },
+        "locations": {
+            "title": "Verified Locations",
+            "origin": "Origin",
+            "destination": "Destination",
+            "verified": "Verified",
+            "notVerified": "Not verified",
+            "withinTolerance": "Within range",
+            "outsideTolerance": "Outside range",
+            "distance": "Distance",
+            "verifiedAt": "Verified at"
+        },
+        "rejectionReasons": {
+            "damaged": "Damaged/Broken",
+            "missing": "Missing",
+            "wrong_item": "Wrong item",
+            "customer_refused": "Customer refused",
+            "expired": "Expired",
+            "quality_issue": "Quality issue",
+            "other": "Other reason"
+        },
+        "contact": {
+            "pickupContact": "Pickup Contact",
+            "deliveryContact": "Delivery Contact",
+            "phone": "Phone",
+            "call": "Call"
+        },
+        "actions": {
+            "downloadPDF": "Download PDF",
+            "share": "Share",
+            "print": "Print"
+        }
+    }
+}

@@ -1,0 +1,736 @@
+{
+    "common": {
+        "appName": "KargaX",
+        "loading": "Carregando...",
+        "error": "Erro",
+        "success": "Sucesso",
+        "cancel": "Cancelar",
+        "save": "Salvar",
+        "delete": "Excluir",
+        "edit": "Editar",
+        "back": "Voltar",
+        "next": "Próximo",
+        "previous": "Anterior",
+        "search": "Pesquisar",
+        "filter": "Filtrar",
+        "noResults": "Nenhum resultado encontrado",
+        "required": "Obrigatório",
+        "optional": "Opcional",
+        "yes": "Sim",
+        "no": "Não",
+        "or": "ou",
+        "and": "e"
+    },
+    "auth": {
+        "login": {
+            "title": "Bem-vindo de volta",
+            "subtitle": "Entre na sua conta KargaX",
+            "email": "E-mail",
+            "emailPlaceholder": "seu@email.com",
+            "password": "Senha",
+            "passwordPlaceholder": "••••••••",
+            "rememberMe": "Lembrar-me",
+            "forgotPassword": "Esqueceu a senha?",
+            "submit": "Entrar",
+            "noAccount": "Não tem conta?",
+            "signUp": "Cadastre-se grátis",
+            "errors": {
+                "invalidCredentials": "E-mail ou senha incorretos",
+                "emailNotConfirmed": "Por favor confirme seu e-mail",
+                "connectionError": "Não foi possível conectar ao servidor. Tente novamente.",
+                "generic": "Erro ao entrar"
+            }
+        },
+        "register": {
+            "title": "Junte-se ao KargaX",
+            "subtitle": "Crie sua conta e comece a movimentar cargas pela Colômbia",
+            "steps": {
+                "accountType": "Tipo de Conta",
+                "personalInfo": "Dados Pessoais",
+                "credentials": "Credenciais",
+                "verification": "Verificação"
+            },
+            "accountType": {
+                "title": "Como você quer usar o KargaX?",
+                "subtitle": "Selecione o tipo de conta que melhor se adapta às suas necessidades",
+                "trucker": {
+                    "title": "Sou Transportador",
+                    "description": "Tenho veículos e quero encontrar cargas para transportar",
+                    "features": [
+                        "Acesse milhares de ofertas de carga diárias",
+                        "Negocie diretamente com empresas",
+                        "Gerencie sua frota e documentos",
+                        "Receba pagamentos seguros"
+                    ]
+                },
+                "business": {
+                    "title": "Sou Empresa",
+                    "description": "Preciso transportar cargas e procuro transportadores confiáveis",
+                    "features": [
+                        "Publique ofertas de carga ilimitadas",
+                        "Receba cotações de transportadores verificados",
+                        "Rastreie suas remessas em tempo real",
+                        "Gerencie toda sua logística em um só lugar"
+                    ]
+                }
+            },
+            "personalInfo": {
+                "title": "Informações Pessoais",
+                "subtitle": "Conte-nos sobre você para personalizar sua experiência",
+                "fullName": "Nome completo",
+                "fullNamePlaceholder": "João Carlos Silva Santos",
+                "documentType": "Tipo de documento",
+                "documentNumber": "Número do documento",
+                "documentNumberPlaceholder": "1234567890",
+                "phone": "Telefone celular",
+                "phonePlaceholder": "+57 (300) 123-4567",
+                "companyName": "Nome da empresa",
+                "companyNamePlaceholder": "Minha Empresa Ltda.",
+                "nit": "CNPJ/NIT",
+                "nitPlaceholder": "900.123.456-7",
+                "industry": "Setor",
+                "industryPlaceholder": "Selecione um setor",
+                "address": "Endereço",
+                "addressPlaceholder": "Rua Principal, 123, Sala 801",
+                "city": "Cidade",
+                "cityPlaceholder": "Selecione uma cidade",
+                "department": "Estado/Departamento",
+                "departmentPlaceholder": "Selecione um estado"
+            },
+            "credentials": {
+                "title": "Crie suas credenciais",
+                "subtitle": "Estes serão seus dados de acesso à plataforma",
+                "email": "E-mail",
+                "emailPlaceholder": "seu@email.com",
+                "emailHelper": "Usaremos este e-mail para enviar notificações importantes",
+                "password": "Senha",
+                "passwordPlaceholder": "Mínimo 8 caracteres",
+                "confirmPassword": "Confirmar senha",
+                "confirmPasswordPlaceholder": "Repita sua senha",
+                "passwordRequirements": {
+                    "title": "Sua senha deve ter:",
+                    "minLength": "Pelo menos 8 caracteres",
+                    "uppercase": "Uma letra maiúscula",
+                    "lowercase": "Uma letra minúscula",
+                    "number": "Um número",
+                    "special": "Um caractere especial (!@#$%^&*)"
+                }
+            },
+            "verification": {
+                "title": "Verifique sua conta",
+                "subtitle": "Enviamos um código de verificação para seu e-mail",
+                "codeSent": "Código enviado para",
+                "enterCode": "Digite o código de 6 dígitos",
+                "resendCode": "Reenviar código",
+                "resendIn": "Reenviar em",
+                "didntReceive": "Não recebeu o código?",
+                "checkSpam": "Verifique sua pasta de spam"
+            },
+            "terms": {
+                "accept": "Aceito os",
+                "termsOfService": "Termos de Serviço",
+                "and": "e a",
+                "privacyPolicy": "Política de Privacidade",
+                "marketing": "Aceito receber comunicações de marketing"
+            },
+            "submit": "Criar Conta",
+            "submitting": "Criando conta...",
+            "haveAccount": "Já tem conta?",
+            "signIn": "Entre",
+            "success": {
+                "title": "Conta criada com sucesso!",
+                "subtitle": "Bem-vindo ao KargaX. Agora você pode começar a usar a plataforma.",
+                "emailSent": "Enviamos um e-mail de confirmação para sua caixa de entrada.",
+                "continue": "Continuar para o Dashboard"
+            },
+            "errors": {
+                "emailExists": "Este e-mail já está cadastrado",
+                "weakPassword": "A senha não atende aos requisitos",
+                "invalidPhone": "Número de telefone inválido",
+                "invalidNit": "CNPJ/NIT inválido",
+                "invalidDocument": "Número de documento inválido",
+                "termsRequired": "Você deve aceitar os termos e condições",
+                "generic": "Erro ao criar conta. Tente novamente."
+            }
+        },
+        "forgotPassword": {
+            "title": "Recuperar senha",
+            "subtitle": "Digite seu e-mail e enviaremos instruções",
+            "email": "E-mail",
+            "submit": "Enviar instruções",
+            "backToLogin": "Voltar para o login",
+            "success": "Enviamos instruções para seu e-mail"
+        }
+    },
+    "validation": {
+        "required": "Este campo é obrigatório",
+        "email": "Digite um e-mail válido",
+        "minLength": "Deve ter pelo menos {{min}} caracteres",
+        "maxLength": "Deve ter no máximo {{max}} caracteres",
+        "passwordMatch": "As senhas não conferem",
+        "phone": "Número de telefone inválido. Formato: +57 (300) 123-4567",
+        "nit": "CNPJ/NIT inválido. Formato: 900.123.456-7",
+        "document": "Número de documento inválido",
+        "passwordRequirements": "A senha não atende a todos os requisitos"
+    },
+    "documents": {
+        "CC": "Carteira de Cidadania",
+        "CE": "Carteira de Estrangeiro",
+        "NIT": "CNPJ",
+        "PP": "Passaporte",
+        "TI": "Carteira de Identidade"
+    },
+    "industries": {
+        "agriculture": "Agricultura e Pecuária",
+        "automotive": "Automotivo",
+        "construction": "Construção",
+        "consumer": "Bens de Consumo",
+        "energy": "Energia e Petróleo",
+        "food": "Alimentos e Bebidas",
+        "manufacturing": "Manufatura",
+        "mining": "Mineração",
+        "pharmaceutical": "Farmacêutica",
+        "retail": "Varejo e Comércio",
+        "technology": "Tecnologia",
+        "textile": "Têxtil e Confecção",
+        "other": "Outro"
+    },
+    "nav": {
+        "home": "Início",
+        "browseOffers": "Buscar Ofertas",
+        "publishOffer": "Publicar Oferta",
+        "myOffers": "Minhas Ofertas",
+        "myApplications": "Minhas Candidaturas",
+        "assignedTrips": "Viagens atribuídas",
+        "acceptedOffers": "Trabalhos Aceitos",
+        "receivedApplications": "Candidaturas",
+        "messages": "Mensagens",
+        "analytics": "Estatísticas",
+        "profile": "Meu Perfil",
+        "settings": "Configurações",
+        "help": "Ajuda",
+        "logout": "Sair",
+        "wallet": "Minha Carteira",
+        "team": "Equipe",
+        "plans": "Planos",
+        "notifications": "Notificações",
+        "inspections": "Inspeções",
+        "userType": {
+            "trucker": "Transportador",
+            "business": "Empresa",
+            "admin": "Administrador"
+        }
+    },
+    "offers": {
+        "publish": {
+            "pageTitle": "Publicar Oferta de Carga",
+            "cargo": {
+                "title": "Informações da Carga",
+                "subtitle": "Descreva o que você precisa transportar",
+                "type": "Tipo de Carga",
+                "description": "Descrição da Carga",
+                "weight": "Peso (kg)",
+                "length": "Comprimento (m)",
+                "width": "Largura (m)",
+                "height": "Altura (m)",
+                "quantity": "Quantidade",
+                "specialReqs": "Requisitos Especiais"
+            },
+            "route": {
+                "title": "Informações da Rota",
+                "subtitle": "Origem, destino e datas",
+                "origin": "Ponto de Origem",
+                "destination": "Ponto de Destino"
+            },
+            "payment": {
+                "title": "Condições de Pagamento",
+                "subtitle": "Defina a tarifa e forma de pagamento"
+            },
+            "requirements": {
+                "title": "Requisitos do Transporte",
+                "subtitle": "Tipo de veículo e motorista"
+            },
+            "photos": {
+                "title": "Fotos da Carga",
+                "subtitle": "Opcional: Ajuda os transportadores"
+            },
+            "review": {
+                "title": "Revisar e Publicar",
+                "subtitle": "Verifique se tudo está correto"
+            }
+        }
+    },
+    "myOffers": {
+        "title": "Minhas Ofertas",
+        "subtitle": "Gerencie e monitore suas ofertas de carga",
+        "search": "Buscar por título ou cidade...",
+        "sortBy": "Ordenar por",
+        "sortOptions": {
+            "newest": "Mais recentes",
+            "oldest": "Mais antigos",
+            "highestBudget": "Maior orçamento",
+            "lowestBudget": "Menor orçamento"
+        },
+        "tabs": {
+            "all": "Todas",
+            "draft": "Rascunho",
+            "active": "Ativas",
+            "inProgress": "Em Andamento",
+            "completed": "Concluídas",
+            "cancelled": "Canceladas"
+        },
+        "status": {
+            "draft": "Rascunho",
+            "active": "Ativa",
+            "in_progress": "Em Andamento",
+            "completed": "Concluída",
+            "cancelled": "Cancelada"
+        },
+        "card": {
+            "route": "Rota",
+            "budget": "Orçamento",
+            "pickupDate": "Data de coleta",
+            "applications": "candidaturas",
+            "noApplications": "Sem candidaturas ainda",
+            "viewApplications": "Ver candidaturas",
+            "editOffer": "Editar",
+            "deleteOffer": "Excluir",
+            "publishOffer": "Publicar",
+            "cancelOffer": "Cancelar oferta",
+            "viewDetails": "Ver detalhes"
+        },
+        "applications": {
+            "title": "Candidaturas",
+            "subtitle": "Transportadores interessados na sua carga",
+            "empty": "Ainda não há candidaturas para esta oferta",
+            "accept": "Aceitar",
+            "reject": "Rejeitar",
+            "accepted": "Aceito",
+            "rejected": "Rejeitado",
+            "pending": "Pendente",
+            "proposedAmount": "Proposta",
+            "experience": "anos de experiência",
+            "message": "Mensagem",
+            "confirmAccept": "Aceitar este transportador?",
+            "confirmReject": "Rejeitar esta candidatura?",
+            "acceptSuccess": "Transportador aceito com sucesso",
+            "rejectSuccess": "Candidatura rejeitada"
+        },
+        "empty": {
+            "all": {
+                "title": "Sem ofertas ainda",
+                "description": "Publique sua primeira oferta e encontre transportadores confiáveis"
+            },
+            "draft": {
+                "title": "Sem rascunhos",
+                "description": "Os rascunhos aparecerão aqui quando você salvar uma oferta não publicada"
+            },
+            "active": {
+                "title": "Sem ofertas ativas",
+                "description": "Publique uma oferta para começar a receber candidaturas"
+            },
+            "inProgress": {
+                "title": "Sem ofertas em andamento",
+                "description": "Quando você aceitar um transportador, a oferta aparecerá aqui"
+            },
+            "completed": {
+                "title": "Sem ofertas concluídas",
+                "description": "Ofertas finalizadas aparecerão aqui"
+            },
+            "cancelled": {
+                "title": "Sem ofertas canceladas",
+                "description": "Ofertas canceladas aparecerão aqui"
+            }
+        },
+        "actions": {
+            "newOffer": "Nova Oferta",
+            "refresh": "Atualizar"
+        }
+    },
+    "messages": {
+        "title": "Mensagens",
+        "pageTitle": "Mensagens",
+        "searchPlaceholder": "Buscar conversas...",
+        "noConversations": "Sem mensagens",
+        "noConversationsDescription": "Quando você iniciar uma conversa com um transportador ou empresa, ela aparecerá aqui.",
+        "newConversation": "Nova conversa",
+        "newConversationInfo": "Para iniciar uma conversa, candidate-se a uma oferta ou contate pelos detalhes da oferta.",
+        "noSearchResults": "Nenhuma conversa encontrada",
+        "noMessages": "Sem mensagens",
+        "noMessagesYet": "Ainda não há mensagens",
+        "startConversation": "Envie a primeira mensagem!",
+        "selectConversationTitle": "Selecione uma conversa",
+        "selectConversationDescription": "Escolha uma conversa da lista para começar a conversar com transportadores ou empresas.",
+        "selectConversation": "Selecionar conversa",
+        "unknownUser": "Usuário",
+        "typing": "Digitando...",
+        "online": "Online",
+        "offline": "Offline",
+        "inputPlaceholder": "Digite uma mensagem...",
+        "inputAriaLabel": "Campo de mensagem",
+        "send": "Enviar mensagem",
+        "sendError": "Erro ao enviar",
+        "loadError": "Erro ao carregar",
+        "attachFile": "Anexar arquivo",
+        "addEmoji": "Adicionar emoji",
+        "removeFile": "Remover arquivo",
+        "downloadFile": "Baixar arquivo",
+        "fileTooLarge": "O arquivo é muito grande (máx. 10MB)",
+        "call": "Ligar",
+        "moreOptions": "Mais opções",
+        "timeAgo": {
+            "justNow": "Agora",
+            "minutesAgo": "Há {{count}} min",
+            "hoursAgo": "Há {{count}} h",
+            "yesterday": "Ontem",
+            "daysAgo": "Há {{count}} dias"
+        },
+        "status": {
+            "sending": "Enviando...",
+            "sent": "Enviado",
+            "delivered": "Entregue",
+            "read": "Lido",
+            "failed": "Erro ao enviar"
+        },
+        "notifications": {
+            "newMessage": "Nova mensagem",
+            "viewMessage": "Ver mensagem"
+        }
+    },
+    "truckerDashboard": {
+        "title": "Painel do Transportador",
+        "availableOffers": "Ofertas Disponíveis",
+        "searchPlaceholder": "Buscar por tipo de carga, origem ou destino...",
+        "applied": "Candidatado",
+        "origin": "Origem",
+        "destination": "Destino",
+        "payment": "Pagamento",
+        "viewDetails": "Ver detalhes",
+        "apply": "Candidatar-me",
+        "applySuccess": "Candidatura enviada com sucesso!",
+        "aiPowered": "Ofertas otimizadas com IA",
+        "stats": {
+            "available": "Ofertas disponíveis",
+            "pending": "Candidaturas pendentes",
+            "accepted": "Trabalhos aceitos"
+        },
+        "filters": {
+            "title": "Filtros avançados",
+            "origin": "Estado de origem",
+            "destination": "Estado de destino",
+            "cargoType": "Tipo de carga",
+            "vehicleType": "Tipo de veículo",
+            "reset": "Limpar filtros"
+        },
+        "empty": {
+            "title": "Sem ofertas disponíveis",
+            "description": "Volte mais tarde ou ajuste os filtros."
+        }
+    },
+    "applications": {
+        "title": "Minhas Candidaturas",
+        "subtitle": "Acompanhamento das suas candidaturas",
+        "origin": "Origem",
+        "destination": "Destino",
+        "applied": "Candidatado",
+        "myProposal": "Minha proposta",
+        "businessResponse": "Resposta da empresa",
+        "viewOffer": "Ver oferta",
+        "message": "Mensagem",
+        "browseOffers": "Explorar ofertas",
+        "aiTracking": "Acompanhamento inteligente com IA",
+        "tabs": {
+            "all": "Todas",
+            "pending": "Pendentes",
+            "accepted": "Aceitas",
+            "rejected": "Rejeitadas"
+        },
+        "status": {
+            "pending": "Pendente",
+            "accepted": "Aceita",
+            "rejected": "Rejeitada"
+        },
+        "empty": {
+            "all": {
+                "title": "Sem candidaturas",
+                "description": "Explore ofertas e candidate-se."
+            },
+            "pending": {
+                "title": "Sem candidaturas pendentes",
+                "description": "Suas candidaturas pendentes aparecerão aqui."
+            },
+            "accepted": {
+                "title": "Sem candidaturas aceitas",
+                "description": "Quando uma empresa aceitar você, aparecerá aqui."
+            },
+            "rejected": {
+                "title": "Sem rejeições",
+                "description": "Ótimo! Você não tem candidaturas rejeitadas."
+            }
+        }
+    },
+    "acceptedOffers": {
+        "title": "Meus Trabalhos",
+        "subtitle": "Gerencie seus trabalhos aceitos",
+        "pickup": "Coleta",
+        "deliver": "Entrega",
+        "payment": "Pagamento acordado",
+        "contact": "Contato da empresa",
+        "message": "Mensagem",
+        "navigate": "Navegar",
+        "startTrip": "Iniciar Viagem",
+        "completeDelivery": "Completar Entrega",
+        "markDelivered": "Marcar como entregue",
+        "deliveredSuccess": "Trabalho marcado como entregue!",
+        "aiOptimized": "Rotas otimizadas com IA",
+        "status": {
+            "awaiting": "Aguardando coleta",
+            "in_transit": "Em trânsito",
+            "delivered": "Entregue"
+        },
+        "empty": {
+            "title": "Sem trabalhos aceitos",
+            "description": "Quando uma empresa aceitar sua candidatura, seu trabalho aparecerá aqui."
+        }
+    },
+    "picking": {
+        "loadingChecklist": "Checklist de Carregamento",
+        "deliveryChecklist": "Checklist de Entrega",
+        "pending": "Pendente",
+        "loaded": "Carregado",
+        "withIssue": "Com problema",
+        "delivered": "Entregue",
+        "partial": "Parcial",
+        "rejected": "Rejeitado",
+        "units": "unidades",
+        "loadedItems": "carregados",
+        "confirmLoad": "Confirmar Carregamento",
+        "confirmDelivery": "Confirmar Entrega",
+        "photos": "fotos",
+        "addPhoto": "Adicionar foto",
+        "photoEvidence": "Fotos de evidência",
+        "photoRequired": "Foto obrigatória",
+        "hasIssue": "Há um problema com este item",
+        "notes": "Notas",
+        "notesOptional": "Notas (opcional)",
+        "notesPlaceholder": "Descreva qualquer observação...",
+        "deliveredQty": "Entregues",
+        "rejectedQty": "Rejeitados",
+        "rejectionReason": "Motivo da rejeição",
+        "selectReason": "Selecione motivo da rejeição",
+        "rejectionReasons": {
+            "damaged": "Danificado/Quebrado",
+            "missing": "Faltando",
+            "wrong_item": "Item errado",
+            "customer_refused": "Cliente recusou",
+            "expired": "Expirado",
+            "quality_issue": "Problema de qualidade",
+            "other": "Outro motivo"
+        },
+        "loadingVerified": "Carregamento verificado com PIN",
+        "deliveryVerified": "Entrega verificada com PIN",
+        "noItems": "Sem itens no manifesto",
+        "progress": "Progresso",
+        "gps": {
+            "verifyOrigin": "Verificar Origem",
+            "verifyDestination": "Verificar Destino",
+            "verified": "Verificado",
+            "obtainingLocation": "Obtendo localização GPS...",
+            "locationVerified": "Localização verificada com sucesso!",
+            "tooFar": "Você está fora da área permitida",
+            "verifyLocation": "Verificar Minha Localização",
+            "tryAgain": "Tentar Novamente",
+            "noGPS": "GPS não disponível",
+            "noGPSDevice": "Seu dispositivo não suporta geolocalização ou a permissão foi negada.",
+            "noCoords": "Sem coordenadas",
+            "noCoordsConfig": "Esta localização não tem coordenadas GPS configuradas.",
+            "distance": "Distância",
+            "tolerance": "Tolerância",
+            "accuracy": "Precisão",
+            "excellent": "Excelente",
+            "veryGood": "Muito boa",
+            "good": "Boa",
+            "acceptable": "Aceitável",
+            "lowAccuracy": "Baixa precisão",
+            "skipVerification": "Pular verificação (apenas desenvolvimento)",
+            "usingDeviceGPS": "Usando GPS do dispositivo"
+        },
+        "pin": {
+            "enterPin": "Digite o PIN",
+            "pickupPin": "PIN de Saída",
+            "deliveryPin": "PIN de Entrega",
+            "verifyingPin": "Verificando PIN...",
+            "wrongPin": "PIN Incorreto",
+            "pinVerified": "PIN Verificado!",
+            "accessBlocked": "Acesso Bloqueado",
+            "attemptsRemaining": "tentativas restantes",
+            "tooManyAttempts": "Muitas tentativas falhas",
+            "contactAdmin": "Contate o administrador para desbloquear",
+            "clear": "Limpar",
+            "requestPin": "Solicite o PIN ao responsável do armazém"
+        },
+        "stages": {
+            "notStarted": "Não iniciado",
+            "enRouteToOrigin": "A caminho da origem",
+            "atOrigin": "Na origem",
+            "loading": "Carregando",
+            "awaitingPickupPin": "Aguardando PIN de saída",
+            "inTransit": "Em trânsito",
+            "atDestination": "No destino",
+            "unloading": "Descarregando",
+            "awaitingDeliveryPin": "Aguardando PIN de entrega",
+            "completed": "Concluído"
+        },
+        "actions": {
+            "startLoading": "Iniciar Carregamento",
+            "finishLoading": "Finalizar Carregamento",
+            "startRoute": "Iniciar Rota",
+            "startUnloading": "Iniciar Descarga",
+            "finishDelivery": "Finalizar Entrega",
+            "viewReceipt": "Ver Recibo"
+        },
+        "summary": {
+            "loadedItems": "Itens carregados",
+            "deliveredItems": "Itens entregues",
+            "rejectedItems": "Itens rejeitados",
+            "totalPhotos": "Fotos totais",
+            "tripDuration": "Duração da viagem"
+        }
+    },
+    "trip": {
+        "loadingTitle": "Carregamento na Origem",
+        "deliveryTitle": "Entrega no Destino",
+        "arrivalVerification": "Verificação de Chegada",
+        "loadCargo": "Carregar Carga",
+        "exitPin": "PIN de Saída",
+        "deliveryCargo": "Entregar Carga",
+        "closingPin": "PIN de Fechamento",
+        "tripCompleted": "Viagem Concluída",
+        "fundsReleased": "Os fundos foram liberados para sua carteira"
+    },
+    "inspection": {
+        "pageTitle": "Relatório de Inspeção",
+        "subtitle": "Evidência digital do processo de carga e entrega",
+        "backToList": "Voltar para inspeções",
+        "loading": "Carregando relatório...",
+        "error": "Erro ao carregar relatório",
+        "notFound": "Relatório não encontrado",
+        "noAccess": "Você não tem acesso a este relatório",
+        "retry": "Tentar novamente",
+        "header": {
+            "tripInfo": "Informações da Viagem",
+            "trucker": "Transportador",
+            "route": "Rota",
+            "status": "Status",
+            "createdAt": "Criado",
+            "totalAmount": "Valor Total"
+        },
+        "status": {
+            "pending": "Pendente",
+            "in_progress": "Em Andamento",
+            "loading": "Carregando",
+            "delivery": "Entregando",
+            "completed": "Concluído",
+            "cancelled": "Cancelado"
+        },
+        "summary": {
+            "title": "Resumo da Inspeção",
+            "totalItems": "Total de Itens",
+            "loadedItems": "Itens Carregados",
+            "loadIssueItems": "Com Problemas",
+            "deliveredItems": "Entregues",
+            "partialItems": "Parciais",
+            "rejectedItems": "Rejeitados",
+            "totalPhotos": "Fotos de Evidência",
+            "loadingCompliance": "Conformidade Carga",
+            "deliveryCompliance": "Conformidade Entrega"
+        },
+        "timeline": {
+            "title": "Linha do Tempo",
+            "emptyTitle": "Nenhum evento registrado",
+            "emptyDescription": "Os eventos de inspeção aparecerão aqui quando o transportador realizar ações.",
+            "events": {
+                "arrival_origin": "Chegada na origem verificada",
+                "loading_started": "Processo de carregamento iniciado",
+                "item_loaded": "Item carregado no caminhão",
+                "item_load_issue": "Problema reportado no carregamento",
+                "loading_completed": "Carregamento concluído",
+                "pickup_verified": "PIN de coleta verificado",
+                "arrival_destination": "Chegada no destino verificada",
+                "unloading_started": "Processo de descarga iniciado",
+                "item_delivered": "Item entregue ao cliente",
+                "item_rejected": "Item rejeitado",
+                "unloading_completed": "Descarga concluída",
+                "delivery_verified": "PIN de entrega verificado",
+                "photo_added": "Foto de evidência adicionada"
+            }
+        },
+        "manifest": {
+            "title": "Manifesto de Carga",
+            "emptyTitle": "Sem itens no manifesto",
+            "emptyDescription": "Nenhum item registrado para esta carga.",
+            "columns": {
+                "item": "Item",
+                "expected": "Esperado",
+                "loaded": "Carregado",
+                "delivered": "Entregue",
+                "rejected": "Rejeitado",
+                "status": "Status",
+                "notes": "Notas",
+                "photos": "Fotos"
+            },
+            "showPhotos": "Ver fotos",
+            "hidePhotos": "Ocultar fotos",
+            "loadedAt": "Carregado em",
+            "deliveredAt": "Entregue em",
+            "rejectionReason": "Motivo da rejeição"
+        },
+        "photos": {
+            "title": "Galeria de Evidências",
+            "emptyTitle": "Sem fotos de evidência",
+            "emptyDescription": "As fotos tiradas durante a inspeção aparecerão aqui.",
+            "types": {
+                "loading": "Carregamento",
+                "unloading": "Descarga",
+                "general": "Geral",
+                "issue": "Problema"
+            },
+            "viewFull": "Ver tamanho completo",
+            "close": "Fechar",
+            "download": "Baixar",
+            "previous": "Anterior",
+            "next": "Próximo"
+        },
+        "locations": {
+            "title": "Locais Verificados",
+            "origin": "Origem",
+            "destination": "Destino",
+            "verified": "Verificado",
+            "notVerified": "Não verificado",
+            "withinTolerance": "Dentro do alcance",
+            "outsideTolerance": "Fora do alcance",
+            "distance": "Distância",
+            "verifiedAt": "Verificado em"
+        },
+        "rejectionReasons": {
+            "damaged": "Danificado/Quebrado",
+            "missing": "Faltando",
+            "wrong_item": "Item errado",
+            "customer_refused": "Cliente recusou",
+            "expired": "Expirado",
+            "quality_issue": "Problema de qualidade",
+            "other": "Outro motivo"
+        },
+        "contact": {
+            "pickupContact": "Contato de Coleta",
+            "deliveryContact": "Contato de Entrega",
+            "phone": "Telefone",
+            "call": "Ligar"
+        },
+        "actions": {
+            "downloadPDF": "Baixar PDF",
+            "share": "Compartilhar",
+            "print": "Imprimir"
+        }
+    }
+}

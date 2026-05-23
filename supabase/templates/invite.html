@@ -1,0 +1,93 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Invitacion a KargaX</title>
+</head>
+<body style="margin:0;background:#f8fafc;font-family:Inter,Segoe UI,Arial,sans-serif;color:#0f172a;">
+  <span style="display:none!important;visibility:hidden;opacity:0;color:transparent;height:0;width:0;overflow:hidden;">
+    {{ if eq .Data.country_code "BR" }}Sua empresa convidou voce para operar no KargaX.{{ else }}Tu empresa te invito a operar en KargaX.{{ end }}
+  </span>
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f8fafc;padding:32px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;background:#ffffff;border:1px solid #e2e8f0;border-radius:20px;overflow:hidden;">
+          <tr>
+            <td style="background:#0f172a;padding:28px 32px;color:#ffffff;">
+              <div style="font-size:13px;letter-spacing:.18em;text-transform:uppercase;color:#86efac;font-weight:700;">KargaX Team Access</div>
+              <h1 style="margin:14px 0 0;font-size:28px;line-height:1.2;">
+                {{ if eq .Data.country_code "BR" }}Seu acesso empresarial esta pronto{{ else }}Tu acceso empresarial esta listo{{ end }}
+              </h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px;">
+              <p style="margin:0 0 18px;font-size:16px;line-height:1.65;color:#334155;">
+                {{ if eq .Data.country_code "BR" }}
+                  {{ .Data.invited_by_name }} convidou voce para fazer parte da equipe de {{ .Data.company_name }} no KargaX.
+                {{ else }}
+                  {{ .Data.invited_by_name }} te invito a hacer parte del equipo de {{ .Data.company_name }} en KargaX.
+                {{ end }}
+              </p>
+
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:22px 0;border:1px solid #e2e8f0;border-radius:14px;">
+                <tr>
+                  <td style="padding:18px 20px;">
+                    <div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#64748b;font-weight:700;">
+                      {{ if eq .Data.country_code "BR" }}Empresa{{ else }}Empresa{{ end }}
+                    </div>
+                    <div style="margin-top:6px;font-size:18px;font-weight:800;color:#0f172a;">{{ .Data.company_name }}</div>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:18px 20px;border-top:1px solid #e2e8f0;">
+                    <div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#64748b;font-weight:700;">Admin</div>
+                    <div style="margin-top:6px;font-size:16px;font-weight:700;color:#0f172a;">{{ .Data.invited_by_name }}</div>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:18px 20px;border-top:1px solid #e2e8f0;">
+                    <div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#64748b;font-weight:700;">
+                      {{ if eq .Data.country_code "BR" }}Papel atribuido{{ else }}Rol asignado{{ end }}
+                    </div>
+                    <div style="margin-top:6px;font-size:16px;font-weight:700;color:#166534;">
+                      {{ if eq .Data.team_role "manager" }}{{ if eq .Data.country_code "BR" }}Gerente{{ else }}Gerente{{ end }}{{ end }}
+                      {{ if eq .Data.team_role "operator" }}Operador{{ end }}
+                      {{ if eq .Data.team_role "auditor" }}Auditor{{ end }}
+                      {{ if eq .Data.team_role "viewer" }}{{ if eq .Data.country_code "BR" }}Visualizador{{ else }}Visualizador{{ end }}{{ end }}
+                    </div>
+                  </td>
+                </tr>
+              </table>
+
+              <div style="text-align:center;margin:30px 0;">
+                <a href="{{ .ConfirmationURL }}" style="display:inline-block;background:#16a34a;color:#ffffff;text-decoration:none;font-weight:800;padding:14px 24px;border-radius:12px;">
+                  {{ if eq .Data.country_code "BR" }}Aceitar convite{{ else }}Aceptar invitacion{{ end }}
+                </a>
+              </div>
+
+              <div style="margin:24px 0;padding:18px;border-radius:14px;background:#f1f5f9;border:1px solid #e2e8f0;text-align:center;">
+                <div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#64748b;font-weight:700;">
+                  {{ if eq .Data.country_code "BR" }}Codigo de acesso{{ else }}Codigo de acceso{{ end }}
+                </div>
+                <div style="margin-top:8px;font-size:28px;letter-spacing:.18em;font-weight:900;color:#0f172a;">{{ .Token }}</div>
+                <p style="margin:10px 0 0;font-size:13px;color:#64748b;">
+                  {{ if eq .Data.country_code "BR" }}Use este codigo somente se o fluxo de verificacao solicitar.{{ else }}Usa este codigo solo si el flujo de verificacion te lo solicita.{{ end }}
+                </p>
+              </div>
+
+              <p style="margin:22px 0 0;font-size:13px;line-height:1.6;color:#64748b;">
+                {{ if eq .Data.country_code "BR" }}Por seguranca, este convite e pessoal. Nao encaminhe este email.{{ else }}Por seguridad, esta invitacion es personal. No reenvies este correo.{{ end }}
+              </p>
+              <p style="margin:12px 0 0;font-size:13px;line-height:1.6;color:#64748b;">
+                {{ if eq .Data.country_code "BR" }}KargaX conecta operacao logistica, armazens, pagamentos e controle empresarial em uma plataforma.{{ else }}KargaX conecta operacion logistica, bodegas, pagos y control empresarial en una sola plataforma.{{ end }}
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

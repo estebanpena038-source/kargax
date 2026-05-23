@@ -1,0 +1,15 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1024" height="1024" rx="220" fill="#050505"/>
+  <rect x="3" y="3" width="1018" height="1018" rx="217" stroke="#FFFFFF" stroke-opacity="0.1" stroke-width="6"/>
+  <text
+    x="512"
+    y="540"
+    fill="#FFFFFF"
+    font-family="Arial Black, Arial, Helvetica, sans-serif"
+    font-size="336"
+    font-weight="900"
+    letter-spacing="-22"
+    text-anchor="middle"
+    dominant-baseline="middle"
+  >KX</text>
+</svg>

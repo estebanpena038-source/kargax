@@ -1,0 +1,37 @@
+{
+    "name": "KargaX - Transporte de Carga Inteligente",
+    "short_name": "KargaX",
+    "description": "Plataforma premium de logistica, warehouse OS, pagos y control operativo",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#0A0A0A",
+    "theme_color": "#0A0A0A",
+    "orientation": "portrait-primary",
+    "icons": [
+        {
+            "src": "/kargax-mark.svg",
+            "sizes": "any",
+            "type": "image/svg+xml"
+        },
+        {
+            "src": "/kargax-icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "/kargax-icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable"
+        }
+    ],
+    "categories": [
+        "business",
+        "logistics",
+        "transportation"
+    ],
+    "lang": "es",
+    "dir": "ltr",
+    "scope": "/"
+}
