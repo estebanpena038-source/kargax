@@ -51,6 +51,19 @@ CREATE TABLE IF NOT EXISTS public.last_mile_carriers (
     UNIQUE (business_id, provider_key)
 );
 
+ALTER TABLE public.last_mile_carriers
+    ADD COLUMN IF NOT EXISTS provider_key TEXT;
+
+UPDATE public.last_mile_carriers
+SET provider_key = 'carrier-' || id::text
+WHERE provider_key IS NULL;
+
+ALTER TABLE public.last_mile_carriers
+    ALTER COLUMN provider_key SET NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_last_mile_carriers_business_provider_key
+    ON public.last_mile_carriers(business_id, provider_key);
+
 CREATE INDEX IF NOT EXISTS idx_last_mile_carriers_business_status
     ON public.last_mile_carriers(business_id, status, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_last_mile_carriers_provider_key
