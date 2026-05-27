@@ -20,7 +20,8 @@ Optional:
 |---|---|---|
 | Auth + MFA | trucker, business owner, admin plataforma | screenshot or short clip, requestId, final session state |
 | Offer -> pay -> webhook -> trip | business owner, trucker | request payload, webhook trace, payment status, trip state |
-| Wallet -> withdrawal | trucker, finance admin, admin plataforma | transaction ledger, admin approval/rejection, final wallet balances |
+| Wallet -> withdrawal | trucker, finance admin, admin plataforma | marketplace transaction ledger, payout attempt, admin approval/rejection, final marketplace/private wallet separation |
+| Private fleet external proof | business owner, finance_accountant, private_fleet_driver | payroll run, external proof, `paid_external`, wallet before/after unchanged for marketplace |
 | Advance cycle | trucker, finance admin, ops admin | policy snapshot, exposure snapshot, disbursement, repayment evidence |
 | Warehouse ops | owner, operator, auditor | appointment, receipt/dispatch, incident evidence, final status |
 | Holding/admin reconcile | holding owner, finance admin, analyst, admin plataforma | approval queue, reconcile trace, requestId, admin screenshot |

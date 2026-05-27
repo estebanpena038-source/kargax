@@ -40,10 +40,16 @@ export function formatWarehouseDateTime(value?: string | null, countryCode?: str
         return '-';
     }
 
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+        return '-';
+    }
+
     return new Intl.DateTimeFormat(getWarehouseLocale(countryCode), {
         dateStyle: 'medium',
         timeStyle: 'short',
-    }).format(new Date(value));
+    }).format(date);
 }
 
 export function getFlowModeLabel(mode: WarehouseFlowMode) {
@@ -175,8 +181,12 @@ export function mapWarehouseErrorMessage(message: string) {
         return 'Agrega al menos una linea y confirma el numero de recepcion antes de guardar.';
     }
 
-    if (message.includes('dispatchNumber and at least one line are required')) {
-        return 'Agrega al menos una linea y confirma el numero de despacho antes de guardar.';
+    if (message.includes('dispatchNumber and at least one line are required') || message.includes('At least one line is required')) {
+        return 'Agrega al menos una linea antes de guardar el despacho.';
+    }
+
+    if (message.includes('warehouse_dispatch_orders_warehouse_id_dispatch_number_key')) {
+        return 'Ese numero de despacho ya existe. Intenta guardar de nuevo para generar un consecutivo nuevo.';
     }
 
     if (message.includes('Insufficient stock for SKU')) {

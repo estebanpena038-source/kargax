@@ -33,6 +33,10 @@ export interface TripContextPayload {
         deliveryVerifiedAt: string | null;
         manifestItems: unknown;
         totalAmount: number | null;
+        freightPaymentAmount: number | null;
+        expenseAllowanceAmount: number | null;
+        compensationMode: 'salary_no_trip_pay' | 'trip_pay' | 'expenses_only' | 'trip_pay_plus_expenses' | null;
+        expensesReleasePolicy: 'acceptance' | 'pickup_pin' | 'delivery_pod' | 'manual' | null;
         netAmount: number | null;
         platformFee: number | null;
         gpsToleranceMeters: number | null;

@@ -19,9 +19,10 @@ Browser-only execution pack for the operator who will validate staging manually.
 1. Auth + MFA
 2. Offer -> pay -> webhook -> trip
 3. Wallet -> withdrawal
-4. Advance cycle
-5. Warehouse ops
-6. Holding/admin reconcile
+4. Private fleet external proof
+5. Advance cycle
+6. Warehouse ops
+7. Holding/admin reconcile
 
 ## 1. Auth + MFA
 
@@ -82,18 +83,46 @@ Routes:
 
 Capture:
 
-- wallet timeline before withdrawal
+- marketplace wallet before withdrawal
 - withdrawal request evidence
-- admin approval or rejection evidence
-- ledger after final decision
+- payout attempt evidence
+- admin approval, rejection, retry or manual review evidence
+- marketplace wallet after final decision
+- proof that private fleet ledger is not withdrawable
 
 Pass criteria:
 
-- withdrawal hold is visible
+- withdrawal uses only `Marketplace retirable`
+- payout attempt is visible with provider `manual` or `cobre`
 - approval or rejection changes the ledger correctly
 - reversal is visible if rejected
+- private fleet liquidations do not increase marketplace withdrawable balance
 
-## 4. Advance cycle
+## 4. Private fleet external proof
+
+Routes:
+
+- `/dashboard/flota`
+- `/billetera`
+- `/dashboard/inteligencia`
+
+Capture:
+
+- payroll run before approval
+- proof upload or external reference
+- `paid_external` status
+- driver `/billetera` showing `Flota privada`
+- wallet before/after for `Marketplace retirable`
+
+Pass criteria:
+
+- payroll uses `payment_mode = external_proof`
+- proof moves run/item to `proof_uploaded`
+- paid external moves run/item to `paid_external`
+- no private salary/freight appears as marketplace withdrawable balance
+- no `payout_attempt` is created for private fleet payroll or private route freight
+
+## 5. Advance cycle
 
 Routes:
 
@@ -114,7 +143,7 @@ Pass criteria:
 - approval writes the expected snapshots
 - repayment waterfall is visible
 
-## 5. Warehouse ops
+## 6. Warehouse ops
 
 Routes:
 
@@ -138,7 +167,7 @@ Pass criteria:
 - receipt or dispatch completes without hidden step
 - incident can be opened and closed with traceability
 
-## 6. Holding/admin reconcile
+## 7. Holding/admin reconcile
 
 Routes:
 

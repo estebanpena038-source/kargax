@@ -353,6 +353,14 @@ export async function addTripPhoto(
 // FUNCIONES DE UPLOAD A STORAGE
 // =============================================================================
 
+function createUniqueStorageSuffix() {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+        return crypto.randomUUID();
+    }
+
+    return `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
 /**
  * Sube una foto a Supabase Storage y retorna la URL pÃºblica
  * 
@@ -382,7 +390,7 @@ export async function uploadPhoto(
         const extension = file instanceof File
             ? file.name.split('.').pop() || 'jpg'
             : 'jpg';
-        const fileName = `${offerId}/${type}_${Date.now()}.${extension}`;
+        const fileName = `${offerId}/${type}_${Date.now()}_${createUniqueStorageSuffix()}.${extension}`;
 
         // Subir a Storage
         const { data, error } = await supabase.storage

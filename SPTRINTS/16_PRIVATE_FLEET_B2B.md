@@ -56,9 +56,9 @@ ALTER TABLE public.cargo_offers
 ```
 
 ### 2.3 Estructura Financiera (Viáticos y Pagos via KargaX)
-Las empresas pagarán a su flota a través de KargaX. Se usará la billetera actual (`wallets`) pero con clasificaciones claras en `transactions`:
-- **Viáticos (Adelantos):** Dinero que la empresa gira *antes* del viaje para gasolina y peajes. Va al `available_balance` inmediatamente al aceptar el viaje.
-- **Flete/Nómina (Custodia):** Pago por realizar el viaje. Va al `pending_balance` y solo se libera al `available_balance` tras la Prueba de Entrega (POD) validada.
+Las empresas registraran liquidaciones de flota privada en KargaX, pero el pago real se soporta por comprobante externo:
+- **Viaticos (Gastos externos):** Dinero que la empresa gira por fuera para gasolina y peajes. No va a `wallet.available_balance`; queda como `expense_advance` documental con comprobante.
+- **Flete/Nomina (Liquidacion externa):** Pago por realizar el viaje privado. No sube al `pending_balance` ni al `available_balance` de wallet marketplace; queda como liquidacion documental con comprobante externo.
 
 ```sql
 CREATE TABLE public.trip_financial_allocations (
@@ -68,7 +68,7 @@ CREATE TABLE public.trip_financial_allocations (
     trucker_id UUID REFERENCES public.user_profiles(id),
     allocation_type VARCHAR(20) NOT NULL, -- 'expense_advance' (viático), 'freight_payment' (flete)
     amount DECIMAL(15,2) NOT NULL,
-    status VARCHAR(20) DEFAULT 'held_in_custody', -- held_in_custody, released_to_wallet, refunded
+    status VARCHAR(20) DEFAULT 'external_proof_pending', -- external_proof_pending, proof_uploaded, paid_external, released_to_wallet solo legacy, refunded
     released_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -85,13 +85,13 @@ El flujo para un conductor de "Flota Privada" es una versión acelerada pero **i
 2. Selecciona **"Asignación Directa (Mi Flota)"**.
 3. Selecciona a "Juan Pérez" de su lista de `business_fleet_members`.
 4. Ingresa el **Flete** ($500) y los **Viáticos** ($150).
-5. **Checkout:** La empresa usa su saldo corporativo, tarjeta de crédito o transferencia PSE/MercadoPago para fondear $650 a KargaX. 
+5. **Pago externo/comprobante:** La empresa paga el flete privado por fuera de KargaX y luego sube comprobante. KargaX no mezcla ese flete con saldo marketplace retirable.
 6. El estado de la oferta pasa directamente a `assigned` (saltando `draft` y `active/bidding`).
 
 ### B. Aceptación e Inicio (Trucker Side)
 1. Juan recibe push: "Nueva ruta directa asignada por [Empresa]".
 2. Al abrir, ve los detalles y hace clic en **"Confirmar Viaje"**.
-3. **Liberación Inmediata:** Los $150 de viáticos pasan automáticamente a su `available_balance` en la Billetera KargaX para que eche gasolina. Los $500 quedan en `pending_balance`.
+3. **Registro operativo:** Los $150 de viaticos pueden verse como saldo operativo separado si la empresa los habilita. Los $500 de flete quedan como liquidacion externa pendiente de comprobante, no como saldo marketplace.
 
 ### C. Picking y Verificación en Bodega (Salida)
 Debe usar el mismo rigor del módulo de `enhanced_picking`:
@@ -115,7 +115,7 @@ Debe usar el mismo rigor del módulo de `enhanced_picking`:
    - Captura del remito (papel) firmado, si aplica.
    - **Firma Digital:** El cliente dibuja su firma en la pantalla del celular del conductor e ingresa su Cédula/ID.
 3. El estado del viaje pasa a `completed`.
-4. **Liberación Financiera:** El sistema procesa la evidencia. Si todo está correcto (Smart Contract / Auto-reconcile), los $500 pasan al `available_balance` de la billetera del conductor.
+4. **Cierre documental:** El sistema procesa la evidencia y deja el flete privado pendiente de comprobante externo o marcado como `paid_external`. No crea `trip_deposit` ni `payout_attempt` para wallet marketplace.
 
 ---
 

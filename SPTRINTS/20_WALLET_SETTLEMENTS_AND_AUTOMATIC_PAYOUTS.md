@@ -173,7 +173,7 @@ Restricciones:
 ## QA
 
 - Retiro Nequi sandbox exitoso.
-- Retiro Bancolombia/Wompi sandbox exitoso.
+- Retiro Bancolombia con provider `cobre` en dry-run/staging o fallback `manual` exitoso.
 - Proveedor caido pasa a `manual_review`.
 - Intento duplicado no paga dos veces.
 - Saldo no queda negativo.

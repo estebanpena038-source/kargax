@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
         const lendingEnabled = isFeatureFlagEnabled(flags, 'lending_enabled', profile?.country_code);
         if (!lendingEnabled) {
             return NextResponse.json(
-                { error: 'Los adelantos KargaX estan pausados para el piloto.' },
+                { error: 'Los adelantos KargaX estan pausados durante Acceso Operativo.' },
                 { status: 403 }
             );
         }

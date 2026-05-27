@@ -2,7 +2,10 @@ import { NextRequest } from 'next/server';
 import { apiError, apiSuccess, getRequestId } from '@/lib/server/api-response';
 import { requireAal2Route, resolveScopedBusinessId } from '@/lib/server/route-auth';
 import { resolveBusinessAccessContext } from '@/lib/server/warehouses';
-import { getBusinessRoleCapabilities } from '@/lib/business-roles';
+import {
+    getBusinessPolicyCapabilities,
+    resolveEffectiveBusinessRole,
+} from '@/lib/server/role-policy';
 
 function getMonthRange(monthParam: string | null) {
     const base = monthParam && /^\d{4}-\d{2}$/.test(monthParam)
@@ -45,14 +48,10 @@ export async function GET(request: NextRequest) {
         });
     }
 
-    const effectiveRole = profile?.user_type === 'admin'
-        ? 'admin'
-        : access.isOwner
-            ? 'owner'
-            : access.teamMember?.role || 'viewer';
-    const roleCapabilities = getBusinessRoleCapabilities(effectiveRole);
+    const effectiveRole = resolveEffectiveBusinessRole(profile, access);
+    const roleCapabilities = getBusinessPolicyCapabilities(effectiveRole);
 
-    if (!roleCapabilities.canViewIntelligence) {
+    if (!roleCapabilities.canViewBusinessMonthlyReport) {
         return apiError('Tu rol no tiene acceso al dashboard de inteligencia.', {
             status: 403,
             code: 'BUSINESS_INTELLIGENCE_FORBIDDEN',
@@ -134,10 +133,10 @@ export async function GET(request: NextRequest) {
             .filter((row) => ['trip_pay', 'freight_payment'].includes(String(row.allocation_type || '')))
             .reduce((sum, row) => sum + Number(row.amount || 0), 0),
         private_payroll_cop: payrollRows
-            .filter((row) => row.status === 'released_to_wallet')
+            .filter((row) => ['released_to_wallet', 'paid_external'].includes(String(row.status || '')))
             .reduce((sum, row) => sum + Number(row.amount || 0), 0),
         private_payroll_pending_cop: payrollRows
-            .filter((row) => row.status !== 'released_to_wallet')
+            .filter((row) => !['released_to_wallet', 'paid_external'].includes(String(row.status || '')))
             .reduce((sum, row) => sum + Number(row.amount || 0), 0),
         company_expenses_cop: allocationRows
             .filter((row) => ['company_expense', 'expense_advance'].includes(String(row.allocation_type || '')))
@@ -172,20 +171,22 @@ export async function GET(request: NextRequest) {
     const visiblePrivatePayroll = roleCapabilities.canViewFinance ? payrollRows : [];
     const visiblePayouts = roleCapabilities.canViewFinance ? payoutRows : [];
 
-    const { data: exportRow } = await supabaseAdmin
-        .from('report_exports')
-        .insert({
-            business_id: businessId,
-            report_type: 'business_monthly_accounting',
-            period_start: summary.period_start,
-            period_end: summary.period_end,
-            status: 'generated',
-            format: 'json',
-            summary: visibleSummary,
-            generated_by: authUser.id,
-        })
-        .select('*')
-        .single();
+    const exportRow = roleCapabilities.canExportBusinessMonthlyReport
+        ? (await supabaseAdmin
+            .from('report_exports')
+            .insert({
+                business_id: businessId,
+                report_type: 'business_monthly_accounting',
+                period_start: summary.period_start,
+                period_end: summary.period_end,
+                status: 'generated',
+                format: 'json',
+                summary: visibleSummary,
+                generated_by: authUser.id,
+            })
+            .select('*')
+            .single()).data
+        : null;
 
     return apiSuccess({
         export: exportRow,

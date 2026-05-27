@@ -240,6 +240,25 @@ function isLoadRejectedForDelivery(item: ManifestItem) {
     return hasLoadRejectionSignal(item) || getDeliverableQuantity(item) === 0;
 }
 
+function getDeliveryQuantityLabel(item: ManifestItem, deliverableQty: number, isProcessed: boolean) {
+    if (isLoadRejectedForDelivery(item)) {
+        return 'Rechazado en carga';
+    }
+
+    if (!isProcessed) {
+        return `${deliverableQty} unidades por entregar`;
+    }
+
+    const deliveredQty = Math.max(0, Number(item.deliveredQty || 0));
+    const rejectedQty = Math.max(0, Number(item.rejectedQty || 0));
+
+    if (rejectedQty > 0) {
+        return `${deliveredQty} entregados / ${rejectedQty} rechazados`;
+    }
+
+    return `${deliveredQty || deliverableQty} entregados`;
+}
+
 // =============================================================================
 // SUBCOMPONENTS
 // =============================================================================
@@ -861,9 +880,7 @@ function ItemCard({ item, mode, isLocked, isProcessing, onSubmit, draftNamespace
                         <span className="font-medium">
                             {mode === 'loading'
                                 ? `${item.quantity} unidades`
-                                : loadRejectedForDelivery
-                                    ? 'Rechazado en carga'
-                                    : `${deliverableQty} cargados`
+                                : getDeliveryQuantityLabel(item, deliverableQty, isProcessed)
                             }
                         </span>
 

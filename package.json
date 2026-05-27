@@ -7,11 +7,12 @@
     "lint": "npm --prefix frontend run lint",
     "typecheck": "npm --prefix frontend run typecheck",
     "repo:audit": "node ./scripts/repo-audit.mjs",
+    "check:roles": "node ./scripts/check-role-policy.mjs",
     "security:audit": "node ./scripts/security-audit.mjs",
     "supabase:inspect": "node ./scripts/supabase-inspect.mjs",
     "supabase:auth-url-check": "node ./scripts/supabase-auth-url-check.mjs",
-    "check:release": "npm run repo:audit && npm --prefix frontend run check:release",
-    "check": "npm run repo:audit && npm --prefix frontend run check"
+    "check:release": "npm run repo:audit && npm run check:roles && npm --prefix frontend run check:release",
+    "check": "npm run repo:audit && npm run check:roles && npm --prefix frontend run check"
   },
   "devDependencies": {
     "supabase": "^2.95.3"

@@ -214,7 +214,8 @@
         "team": "Team",
         "plans": "Plans",
         "notifications": "Notifications",
-        "inspections": "Inspections",
+        "inspections": "Marketplace Digital Evidence",
+        "podMarketplace": "Marketplace Digital Evidence",
         "userType": {
             "trucker": "Trucker",
             "business": "Business",

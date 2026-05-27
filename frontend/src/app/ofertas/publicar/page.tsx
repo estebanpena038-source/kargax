@@ -42,6 +42,8 @@ import { WarehouseOfferFields } from '@/components/warehouses/WarehouseOfferFiel
 import {
     COLOMBIAN_DEPARTMENTS,
     getCitiesByDepartment,
+    getCityName,
+    getDepartmentName,
     CARGO_TYPES,
     VEHICLE_TYPES,
     formatCOP,
@@ -85,6 +87,8 @@ interface CargoOfferFormData {
     originDepartment: string;
     originCity: string;
     originAddress: string;
+    originLatitude?: number | null;
+    originLongitude?: number | null;
     // Pickup Contact (NEW - for PIN delivery)
     pickupContactName: string;
     pickupContactPhone: string;
@@ -92,6 +96,8 @@ interface CargoOfferFormData {
     destinationDepartment: string;
     destinationCity: string;
     destinationAddress: string;
+    destinationLatitude?: number | null;
+    destinationLongitude?: number | null;
     // Delivery Contact (NEW - for PIN delivery)
     deliveryContactName: string;
     deliveryContactPhone: string;
@@ -185,6 +191,8 @@ const offerSchema = z.object({
     originDepartment: z.string().min(1, 'Selecciona un departamento'),
     originCity: z.string().min(1, 'Selecciona una ciudad'),
     originAddress: z.string().min(5, 'Dirección muy corta'),
+    originLatitude: z.number().nullable().optional(),
+    originLongitude: z.number().nullable().optional(),
     pickupContactName: z.string().min(2, 'Ingresa el nombre del contacto'),
     pickupContactPhone: z.string().refine(
         (value) => validateAndeanPhoneValue(value, 'CO'),
@@ -193,6 +201,8 @@ const offerSchema = z.object({
     destinationDepartment: z.string().min(1, 'Selecciona un departamento'),
     destinationCity: z.string().min(1, 'Selecciona una ciudad'),
     destinationAddress: z.string().min(5, 'Dirección muy corta'),
+    destinationLatitude: z.number().nullable().optional(),
+    destinationLongitude: z.number().nullable().optional(),
     deliveryContactName: z.string().min(2, 'Ingresa el nombre del contacto'),
     deliveryContactPhone: z.string().refine(
         (value) => validateAndeanPhoneValue(value, 'CO'),
@@ -1010,7 +1020,11 @@ function StepRouteInfo({
     const { register, watch, setValue, formState: { errors } } = form;
 
     const originDepartment = watch('originDepartment');
+    const originCity = watch('originCity');
     const destinationDepartment = watch('destinationDepartment');
+    const destinationCity = watch('destinationCity');
+    const originAddressField = register('originAddress');
+    const destinationAddressField = register('destinationAddress');
 
     const departmentOptions = COLOMBIAN_DEPARTMENTS.map((d) => ({
         value: d.code,
@@ -1076,7 +1090,7 @@ function StepRouteInfo({
                     <Select
                         label="Ciudad"
                         options={originCityOptions}
-                        value={watch('originCity')}
+                        value={originCity}
                         onChange={(value) => setValue('originCity', value)}
                         disabled={!originDepartment}
                         errorMessage={errors.originCity?.message}
@@ -1089,7 +1103,7 @@ function StepRouteInfo({
                     label="Dirección Completa"
                     placeholder="Calle 123 #45-67, Bodega 5"
                     errorMessage={errors.originAddress?.message}
-                    {...register('originAddress')}
+                    {...originAddressField}
                 />
 
                 {/* Pickup Contact - Critical for PIN delivery */}
@@ -1175,7 +1189,7 @@ function StepRouteInfo({
                     <Select
                         label="Ciudad"
                         options={destinationCityOptions}
-                        value={watch('destinationCity')}
+                        value={destinationCity}
                         onChange={(value) => setValue('destinationCity', value)}
                         disabled={!destinationDepartment}
                         errorMessage={errors.destinationCity?.message}
@@ -1188,7 +1202,7 @@ function StepRouteInfo({
                     label="Dirección Completa"
                     placeholder="Zona Industrial Norte, Bodega 12"
                     errorMessage={errors.destinationAddress?.message}
-                    {...register('destinationAddress')}
+                    {...destinationAddressField}
                 />
 
                 {/* Delivery Contact - Critical for PIN delivery */}
@@ -1893,11 +1907,11 @@ function StepReview({
                     <dl className="space-y-1 text-sm">
                         <div className="flex items-start gap-2">
                             <dt className="text-slate-500">Origen:</dt>
-                            <dd className="font-medium">{data.originCity || '-'}</dd>
+                            <dd className="font-medium">{data.originCity ? getCityName(data.originCity) : '-'}</dd>
                         </div>
                         <div className="flex items-start gap-2">
                             <dt className="text-slate-500">Destino:</dt>
-                            <dd className="font-medium">{data.destinationCity || '-'}</dd>
+                            <dd className="font-medium">{data.destinationCity ? getCityName(data.destinationCity) : '-'}</dd>
                         </div>
                         <div className="flex justify-between">
                             <dt className="text-slate-500">Fecha:</dt>
@@ -2152,11 +2166,15 @@ export default function PublishOfferPage() {
             originDepartment: '',
             originCity: '',
             originAddress: '',
+            originLatitude: null,
+            originLongitude: null,
             pickupContactName: '',
             pickupContactPhone: '',
             destinationDepartment: '',
             destinationCity: '',
             destinationAddress: '',
+            destinationLatitude: null,
+            destinationLongitude: null,
             deliveryContactName: '',
             deliveryContactPhone: '',
             pickupDate: '',
@@ -2412,30 +2430,47 @@ export default function PublishOfferPage() {
                 ? Number(data.expenseAllowanceAmount || 0)
                 : 0;
             const offerAmount = isPrivateAssignment ? 0 : Number(data.totalAmount || 0);
+            const originCityName = getCityName(data.originCity || '');
+            const originDepartmentName = getDepartmentName(data.originDepartment || '');
+            const destinationCityName = getCityName(data.destinationCity || '');
+            const destinationDepartmentName = getDepartmentName(data.destinationDepartment || '');
 
             // Import API dynamically to avoid issues
             const { api } = await import('@/lib/api/client');
 
             // Map form data to backend DTO format
             const payload = {
-                title: `${data.cargoType} - ${data.originCity} a ${data.destinationCity}`,
+                title: `${data.cargoType} - ${originCityName} a ${destinationCityName}`,
                 description: data.cargoDescription,
                 cargoType: data.cargoType,
+                cargoDescription: data.cargoDescription,
                 weight: derivedWeightKg,
                 weightKg: derivedWeightKg,
                 weightUnit: 'kg',
                 volume: derivedVolumeM3,
                 volumeUnit: 'm3',
+                dimensionLength: data.dimensionLength,
+                dimensionWidth: data.dimensionWidth,
+                dimensionHeight: data.dimensionHeight,
                 quantity: derivedQuantity,
-                originCity: data.originCity,
-                originDepartment: data.originDepartment,
+                temperatureMin: data.temperatureMin,
+                temperatureMax: data.temperatureMax,
+                originCity: originCityName,
+                originDepartment: originDepartmentName,
                 originAddress: data.originAddress,
+                originLatitude: data.originLatitude,
+                originLongitude: data.originLongitude,
                 // NEW: Pickup contact for PIN delivery
                 pickupContactName: data.pickupContactName,
                 pickupContactPhone: data.pickupContactPhone,
-                destCity: data.destinationCity,
-                destDepartment: data.destinationDepartment,
+                destinationCity: destinationCityName,
+                destinationDepartment: destinationDepartmentName,
+                destCity: destinationCityName,
+                destDepartment: destinationDepartmentName,
+                destinationAddress: data.destinationAddress,
                 destAddress: data.destinationAddress,
+                destinationLatitude: data.destinationLatitude,
+                destinationLongitude: data.destinationLongitude,
                 // NEW: Delivery contact for PIN delivery
                 deliveryContactName: data.deliveryContactName,
                 deliveryContactPhone: data.deliveryContactPhone,
@@ -2463,8 +2498,12 @@ export default function PublishOfferPage() {
                 freightPaymentAmount: isPrivateAssignment ? privateFreightPaymentAmount : undefined,
                 expenseAllowanceAmount: isPrivateAssignment ? privateExpenseAllowanceAmount : undefined,
                 privateFleetNotes: isPrivateAssignment ? data.additionalTerms : undefined,
-                pickupDate: `${data.pickupDate}T${data.pickupTimeStart}:00`,
-                deliveryDate: data.deliveryDate ? `${data.deliveryDate}T${data.deliveryTimeStart}:00` : undefined,
+                pickupDate: data.pickupDate,
+                pickupTimeStart: data.pickupTimeStart,
+                pickupTimeEnd: data.pickupTimeEnd,
+                deliveryDate: data.deliveryDate,
+                deliveryTimeStart: data.deliveryTimeStart,
+                deliveryTimeEnd: data.deliveryTimeEnd,
                 budgetMin: offerAmount,
                 budgetMax: offerAmount,
                 totalAmount: offerAmount,
@@ -2472,7 +2511,10 @@ export default function PublishOfferPage() {
                 countryCode: country,
                 currencyCode: config.currencyCode,
                 requiredVehicle: data.vehicleType as any,
+                vehicleType: data.vehicleType,
                 minExperienceYears: data.minExperienceYears,
+                requiredLicenses: data.requiredLicenses,
+                requiredCertifications: data.requiredCertifications,
                 insuranceRequired: data.insuranceRequired,
                 specialRequirements: [
                     data.specialRequirements,
@@ -2481,8 +2523,10 @@ export default function PublishOfferPage() {
                     data.insuranceRequired ? 'Seguro requerido' : null,
                 ].filter(Boolean).join('. '),
                 ratePerKm: undefined,
-                paymentMethod: 'bank_transfer',
-                paymentSchedule: 'on_delivery',
+                additionalTerms: data.additionalTerms,
+                additionalRequirements: data.additionalRequirements,
+                paymentMethod: data.paymentMethod || 'bank_transfer',
+                paymentSchedule: data.paymentSchedule || 'on_delivery',
                 publishImmediately,
                 photos: (data.photos || []).filter(Boolean),
             };

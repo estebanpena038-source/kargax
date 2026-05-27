@@ -23,6 +23,7 @@ import type {
     WarehouseAppointment,
     WarehouseAccessResponse,
     WarehouseDetailResponse,
+    WarehouseDigitalEvidenceResponse,
     WarehouseDispatchOrder,
     WarehouseDock,
     WarehouseIncident,
@@ -68,6 +69,20 @@ async function getAuthHeaders() {
     return {
         Authorization: `Bearer ${session.access_token}`,
         'Content-Type': 'application/json',
+    };
+}
+
+async function getAuthBearerHeaders() {
+    const {
+        data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+        throw new Error('No active session');
+    }
+
+    return {
+        Authorization: `Bearer ${session.access_token}`,
     };
 }
 
@@ -122,6 +137,32 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
             throw new PlanLimitReachedError(message, details);
         }
 
+        throw new Error(message);
+    }
+
+    if (!rawText) {
+        throw new Error('Empty API response');
+    }
+
+    if (isApiEnvelope<T>(json)) {
+        return unwrapApiEnvelope<T>(json) as T;
+    }
+
+    return json as T;
+}
+
+async function requestFormData<T>(path: string, formData: FormData): Promise<T> {
+    const headers = await getAuthBearerHeaders();
+    const response = await fetch(path, {
+        method: 'POST',
+        headers,
+        body: formData,
+    });
+
+    const { json, rawText } = await parseApiResponse<T>(response);
+
+    if (!response.ok) {
+        const message = extractApiErrorMessage(json, rawText || `Warehouse request failed (${response.status})`);
         throw new Error(message);
     }
 
@@ -225,6 +266,13 @@ export const warehouseClient = {
         }),
     listDispatches: (warehouseId: string) =>
         request<WarehouseDispatchOrder[]>(`/api/warehouses/${warehouseId}/dispatches`),
+    listDigitalEvidence: (warehouseId: string, filters?: { status?: string; q?: string }) => {
+        const search = new URLSearchParams();
+        if (filters?.status) search.set('status', filters.status);
+        if (filters?.q) search.set('q', filters.q);
+        const query = search.toString();
+        return requestEnvelope<WarehouseDigitalEvidenceResponse>(`/api/warehouses/${warehouseId}/digital-evidence${query ? `?${query}` : ''}`);
+    },
     createDispatch: (warehouseId: string, payload: Record<string, unknown>) =>
         request<WarehouseDispatchOrder>(`/api/warehouses/${warehouseId}/dispatches`, {
             method: 'POST',
@@ -473,6 +521,74 @@ export const warehouseClient = {
         }>(`/api/business/fleet/payroll/${runId}/checkout`, {
             method: 'POST',
             body: JSON.stringify({}),
+        }),
+    uploadPrivateFleetPayrollProof: (runId: string, payload: {
+        paymentMethod?: 'nequi' | 'bank_transfer' | 'cash' | 'other';
+        externalReference?: string;
+        note?: string;
+        paidAt?: string;
+        amountCop?: number;
+        proofUrl?: string;
+        proofFile?: File | null;
+    }) => {
+        if (payload.proofFile) {
+            const formData = new FormData();
+            formData.append('proofFile', payload.proofFile);
+            if (payload.paymentMethod) formData.append('paymentMethod', payload.paymentMethod);
+            if (payload.externalReference) formData.append('externalReference', payload.externalReference);
+            if (payload.note) formData.append('note', payload.note);
+            if (payload.paidAt) formData.append('paidAt', payload.paidAt);
+            if (payload.amountCop) formData.append('amountCop', String(payload.amountCop));
+
+            return requestFormData<{ run: PrivateFleetPayrollResponse['runs'][number]; proof: Record<string, unknown> }>(`/api/business/fleet/payroll/${runId}/proof`, formData);
+        }
+
+        return request<{ run: PrivateFleetPayrollResponse['runs'][number]; proof: Record<string, unknown> }>(`/api/business/fleet/payroll/${runId}/proof`, {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        });
+    },
+    updatePrivateFleetPayrollStatus: (runId: string, payload: {
+        status: 'paid_external' | 'rejected' | 'cancelled';
+        note?: string;
+    }) =>
+        request<{ run: PrivateFleetPayrollResponse['runs'][number] }>(`/api/business/fleet/payroll/${runId}/status`, {
+            method: 'PATCH',
+            body: JSON.stringify(payload),
+        }),
+    uploadPrivateFleetAllocationProof: (allocationId: string, payload: {
+        paymentMethod?: 'nequi' | 'bank_transfer' | 'cash' | 'other';
+        externalReference?: string;
+        note?: string;
+        paidAt?: string;
+        amountCop?: number;
+        proofUrl?: string;
+        proofFile?: File | null;
+    }) => {
+        if (payload.proofFile) {
+            const formData = new FormData();
+            formData.append('proofFile', payload.proofFile);
+            if (payload.paymentMethod) formData.append('paymentMethod', payload.paymentMethod);
+            if (payload.externalReference) formData.append('externalReference', payload.externalReference);
+            if (payload.note) formData.append('note', payload.note);
+            if (payload.paidAt) formData.append('paidAt', payload.paidAt);
+            if (payload.amountCop) formData.append('amountCop', String(payload.amountCop));
+
+            return requestFormData<{ allocation: Record<string, unknown>; proof: Record<string, unknown> }>(`/api/business/fleet/allocations/${allocationId}/proof`, formData);
+        }
+
+        return request<{ allocation: Record<string, unknown>; proof: Record<string, unknown> }>(`/api/business/fleet/allocations/${allocationId}/proof`, {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        });
+    },
+    updatePrivateFleetAllocationStatus: (allocationId: string, payload: {
+        status: 'paid_external' | 'rejected' | 'cancelled';
+        note?: string;
+    }) =>
+        request<{ allocation: Record<string, unknown> }>(`/api/business/fleet/allocations/${allocationId}/status`, {
+            method: 'PATCH',
+            body: JSON.stringify(payload),
         }),
     acceptBusinessFleetInvitation: (payload?: {
         inviteCode?: string;

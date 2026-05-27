@@ -500,9 +500,13 @@ const _apiBase = {
             originDepartment: string;
             originCity: string;
             originAddress: string;
+            originLatitude?: number | null;
+            originLongitude?: number | null;
             destinationDepartment: string;
             destinationCity: string;
             destinationAddress: string;
+            destinationLatitude?: number | null;
+            destinationLongitude?: number | null;
             pickupDate: string;
             pickupTimeStart: string;
             pickupTimeEnd: string;
@@ -511,8 +515,8 @@ const _apiBase = {
             deliveryTimeEnd: string;
             totalAmount: number;
             ratePerKm?: number;
-            paymentMethod: 'bank_transfer' | 'cash' | 'check';
-            paymentSchedule: 'on_delivery' | 'advance' | 'partial';
+            paymentMethod: string;
+            paymentSchedule: string;
             additionalTerms?: string;
             vehicleType: string;
             minExperienceYears: number;
@@ -521,6 +525,26 @@ const _apiBase = {
             insuranceRequired: boolean;
             additionalRequirements?: string;
             publishImmediately?: boolean;
+            manifestItems?: unknown[];
+            pickupContactName?: string;
+            pickupContactPhone?: string;
+            deliveryContactName?: string;
+            deliveryContactPhone?: string;
+            warehouseFlowMode?: string;
+            originWarehouseId?: string;
+            destinationWarehouseId?: string;
+            originDockId?: string;
+            destinationDockId?: string;
+            assignmentMode?: 'public' | 'private';
+            privateFleetTruckerId?: string;
+            compensationMode?: string;
+            expensesReleasePolicy?: string;
+            freightPaymentAmount?: number;
+            expenseAllowanceAmount?: number;
+            privateFleetNotes?: string;
+            countryCode?: string;
+            currencyCode?: string;
+            photos?: string[];
         }) => apiRequest<{ id: string; status: string }>('/offers', {
             method: 'POST',
             body: data,

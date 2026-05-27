@@ -1,11 +1,11 @@
 import { NextRequest } from 'next/server';
 import { paymentApi } from '@/lib/mercadopago/config';
-import { requireAal2Route, resolveScopedBusinessId, createAdminNotification } from '@/lib/server/route-auth';
+import { requireAal2Route, createAdminNotification } from '@/lib/server/route-auth';
 import { apiError, apiSuccess, getRequestId } from '@/lib/server/api-response';
 import {
     getBusinessPlanSnapshot,
-    resolveBusinessAccessContext,
 } from '@/lib/server/warehouses';
+import { resolveBusinessRolePolicy } from '@/lib/server/role-policy';
 
 /**
  * POST /api/billing/subscription/reconcile
@@ -27,23 +27,35 @@ export async function POST(request: NextRequest) {
     }
 
     const { supabaseAdmin, authUser, profile } = auth.context;
-    const access = await resolveBusinessAccessContext(supabaseAdmin, authUser.id, profile);
-
-    const scopedBusiness = resolveScopedBusinessId({
-        requestedBusinessId: undefined,
-        resolvedBusinessId: access.businessId,
-        profile,
+    const policy = await resolveBusinessRolePolicy(supabaseAdmin, authUser.id, profile, {
+        requestedBusinessId: request.nextUrl.searchParams.get('businessId'),
     });
 
-    if ('error' in scopedBusiness) {
-        return apiError(scopedBusiness.error || 'Business scope error', {
-            status: scopedBusiness.status,
+    if (policy.scopeError) {
+        return apiError(policy.scopeError.error || 'Business scope error', {
+            status: policy.scopeError.status,
             code: 'BUSINESS_SCOPE_ERROR',
             requestId,
         });
     }
 
-    const businessId = scopedBusiness.businessId;
+    if (!policy.capabilities.canManageBilling) {
+        return apiError('Only owners or admins can reconcile billing payments', {
+            status: 403,
+            code: 'BILLING_OWNER_REQUIRED',
+            requestId,
+        });
+    }
+
+    const businessId = policy.businessId;
+
+    if (!businessId) {
+        return apiError('businessId is required', {
+            status: 400,
+            code: 'BUSINESS_SCOPE_REQUIRED',
+            requestId,
+        });
+    }
 
     try {
         // 1. Find most recent pending attempt for this business

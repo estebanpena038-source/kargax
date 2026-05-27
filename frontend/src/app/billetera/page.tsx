@@ -63,6 +63,10 @@ interface Transaction {
     amount: number;
     description: string;
     reference_id?: string | null;
+    money_rail?: string | null;
+    payout_eligible?: boolean;
+    locked_for_payout?: boolean;
+    external_proof_only?: boolean;
     balance_before?: number;
     balance_after?: number;
     pending_balance_before?: number;
@@ -93,14 +97,63 @@ interface BankDetails {
     documentNumber: string;
 }
 
-interface PrivateFleetSummary {
-    freightReleasedCop: number;
-    freightHeldCop: number;
-    expenseReleasedCop: number;
-    expenseHeldCop: number;
-    salaryReleasedCop?: number;
-    salaryPendingCop?: number;
-    totalAllocations: number;
+interface MarketplaceWalletSummary {
+    availableCop: number;
+    pendingReleaseCop: number;
+    payoutProcessingCop: number;
+    paidThisMonthCop: number;
+    totalPaidCop: number;
+    derivedAvailableCop?: number;
+    legacyWalletAvailableCop?: number;
+    balanceMismatchCop?: number;
+    canWithdraw?: boolean;
+    minimumWithdrawalCop?: number;
+}
+
+interface PrivateFleetLedger {
+    pendingExternalPayCop: number;
+    proofUploadedCop: number;
+    paidExternalCop: number;
+    payrollPendingExternalCop?: number;
+    payrollProofUploadedCop?: number;
+    payrollPaidExternalCop?: number;
+    freightPendingExternalCop?: number;
+    freightProofUploadedCop?: number;
+    freightPaidExternalCop?: number;
+    expensePendingExternalCop?: number;
+    expenseProofUploadedCop?: number;
+    expensePaidExternalCop?: number;
+    legacyWalletFundedCop?: number;
+    items: Array<{
+        id: string;
+        amount: number;
+        status: string;
+        kind?: 'payroll' | 'allocation';
+        label?: string;
+        compensation_mode?: 'nomina_mensual' | 'ruta' | 'viaticos' | string;
+        payment_mode?: string;
+        allocation_type?: string;
+        offer_id?: string;
+        external_payment_status?: string;
+        proof_url?: string | null;
+        proof_storage_path?: string | null;
+        run?: {
+            period_start?: string;
+            period_end?: string;
+            external_payment_reference?: string | null;
+            external_payment_method?: string | null;
+        };
+    }>;
+}
+
+interface PayoutAttempt {
+    id: string;
+    amount_cop: number;
+    status: string;
+    provider: string;
+    method: string;
+    receipt_url?: string | null;
+    created_at: string;
 }
 
 const MIN_WITHDRAWAL_AMOUNT = 50000;
@@ -129,20 +182,20 @@ const PAYOUT_STEPS = [
         description: 'La solicitud queda registrada con referencia interna.',
     },
     {
-        title: 'En revision',
-        description: 'Operaciones valida saldo, titular, documento y destino.',
+        title: 'Validado',
+        description: 'KargaX valida saldo marketplace, titular, documento y destino.',
     },
     {
-        title: 'Aprobado',
-        description: 'El retiro pasa a giro manual o proveedor configurado.',
+        title: 'Procesando',
+        description: 'El retiro operativo pasa al proveedor configurado o revision manual.',
     },
     {
         title: 'Pagado',
-        description: 'El dinero fue marcado como enviado al metodo elegido.',
+        description: 'El payout fue marcado como enviado al metodo elegido.',
     },
     {
         title: 'Rechazado/devuelto',
-        description: 'Si falla la validacion, el saldo vuelve a la billetera.',
+        description: 'Si falla la validacion, el saldo operativo vuelve al marketplace.',
     },
 ];
 
@@ -331,7 +384,7 @@ function getTransactionNarrative(transaction: Transaction) {
     }
 
     if (transaction.type === 'private_fleet_salary' || transaction.source_kind === 'private_fleet_salary') {
-        return 'Tu empresa libero nomina privada a tu billetera operativa.';
+        return 'Tu empresa registro una liquidacion privada con soporte externo.';
     }
 
     if (transaction.type === 'advance_disbursement') {
@@ -365,6 +418,49 @@ function getTransactionIcon(transaction: Transaction) {
     return DollarSign;
 }
 
+function isPrivateFleetFinancialTransaction(transaction: Transaction) {
+    const sourceKind = typeof transaction.source_kind === 'string'
+        ? transaction.source_kind
+        : typeof transaction.metadata?.source_kind === 'string'
+            ? transaction.metadata.source_kind
+            : transaction.type;
+
+    return transaction.external_proof_only === true
+        || transaction.type === 'private_fleet_salary'
+        || String(transaction.money_rail || '').startsWith('private_fleet')
+        || sourceKind.startsWith('private_fleet');
+}
+
+function getPrivateLedgerStatusLabel(status?: string) {
+    switch (status) {
+        case 'paid_external':
+            return 'Pagado externo';
+        case 'proof_uploaded':
+            return 'Comprobante cargado';
+        case 'rejected':
+            return 'Rechazado';
+        case 'cancelled':
+            return 'Cancelado';
+        case 'legacy_wallet_funded':
+        case 'released_to_wallet':
+            return 'Pagado externo';
+        default:
+            return 'Pendiente externo';
+    }
+}
+
+function getPrivateLedgerModeLabel(item: PrivateFleetLedger['items'][number]) {
+    if (item.compensation_mode === 'nomina_mensual' || item.kind === 'payroll') {
+        return 'Nomina mensual';
+    }
+
+    if (item.compensation_mode === 'viaticos' || item.allocation_type === 'expense_advance' || item.allocation_type === 'company_expense') {
+        return 'Viaticos';
+    }
+
+    return 'Pago por ruta';
+}
+
 export default function WalletPage() {
     const { user: authUser } = useAuthStore();
 
@@ -379,7 +475,9 @@ export default function WalletPage() {
     const [eligibleAdvanceOffers, setEligibleAdvanceOffers] = useState<EligibleAdvanceOffer[]>([]);
     const [lendingSettings, setLendingSettings] = useState<LendingSettingsSnapshot | null>(null);
     const [lendingPaused, setLendingPaused] = useState(true);
-    const [privateFleetSummary, setPrivateFleetSummary] = useState<PrivateFleetSummary | null>(null);
+    const [marketplaceWallet, setMarketplaceWallet] = useState<MarketplaceWalletSummary | null>(null);
+    const [privateFleetLedger, setPrivateFleetLedger] = useState<PrivateFleetLedger | null>(null);
+    const [payoutAttempts, setPayoutAttempts] = useState<PayoutAttempt[]>([]);
     const [loading, setLoading] = useState(true);
 
     const [showWithdrawModal, setShowWithdrawModal] = useState(false);
@@ -449,7 +547,9 @@ export default function WalletPage() {
             setEligibleAdvanceOffers(data.eligibleAdvanceOffers || []);
             setLendingSettings(data.lendingSettings || null);
             setLendingPaused(data.lendingPaused !== false);
-            setPrivateFleetSummary(data.privateFleetSummary || null);
+            setMarketplaceWallet(data.marketplaceWallet || null);
+            setPrivateFleetLedger(data.privateFleetLedger || null);
+            setPayoutAttempts(data.payoutAttempts || []);
 
             if (data.defaultPaymentMethod) {
                 setBankDetails((prev) => ({
@@ -471,11 +571,12 @@ export default function WalletPage() {
     }, [loadWalletData]);
 
     const withdrawalAmountNumber = parseCopInput(withdrawAmount);
+    const withdrawableMarketplaceBalance = marketplaceWallet?.availableCop ?? 0;
     const withdrawalDetailsError = validateWithdrawalDetails(
         withdrawalAmountNumber,
         selectedMethod,
         bankDetails,
-        wallet?.available_balance || 0
+        withdrawableMarketplaceBalance
     );
 
     const withdrawAmountError = useMemo(() => {
@@ -487,17 +588,17 @@ export default function WalletPage() {
             return 'El retiro minimo es de $50,000.';
         }
 
-        if (withdrawalAmountNumber > Number(wallet?.available_balance || 0)) {
-            return 'El monto supera tu saldo disponible.';
+        if (withdrawalAmountNumber > Number(withdrawableMarketplaceBalance || 0)) {
+            return 'El monto supera tu saldo marketplace disponible.';
         }
 
         return null;
-    }, [wallet?.available_balance, withdrawAmount, withdrawalAmountNumber]);
+    }, [withdrawableMarketplaceBalance, withdrawAmount, withdrawalAmountNumber]);
 
-    const visibleTransactions = settlementTimeline.length > 0 ? settlementTimeline : transactions;
+    const visibleTransactions = (settlementTimeline.length > 0 ? settlementTimeline : transactions)
+        .filter((transaction) => !isPrivateFleetFinancialTransaction(transaction));
     const latestWithdrawal = pendingWithdrawals[0] || transactions.find((item) => item.type === 'withdrawal') || null;
-    const releasedOperational = Number(privateFleetSummary?.freightReleasedCop || 0) + Number(privateFleetSummary?.expenseReleasedCop || 0);
-    const canWithdraw = Number(wallet?.available_balance || 0) >= MIN_WITHDRAWAL_AMOUNT;
+    const canWithdraw = Boolean(marketplaceWallet?.canWithdraw ?? Number(withdrawableMarketplaceBalance || 0) >= MIN_WITHDRAWAL_AMOUNT);
     const walletCardNumber = useMemo(() => {
         const seed = (wallet?.id || authUser?.id || 'kargaxwallet').replace(/-/g, '').toUpperCase().padEnd(16, '0');
         return `KX ${seed.slice(0, 4)} ${seed.slice(4, 8)} ${seed.slice(8, 12)}`;
@@ -505,28 +606,28 @@ export default function WalletPage() {
 
     const summaryCards = [
         {
-            label: 'Pago por ruta',
-            value: formatCOP(privateFleetSummary?.freightReleasedCop || 0),
-            detail: `${formatCOP(privateFleetSummary?.freightHeldCop || 0)} en custodia`,
+            label: 'Comprobantes privados',
+            value: formatCOP((privateFleetLedger?.proofUploadedCop || 0) + (privateFleetLedger?.paidExternalCop || 0)),
+            detail: 'Soportes externos registrados',
+            icon: ShieldCheck,
+        },
+        {
+            label: 'Marketplace disponible',
+            value: formatCOP(withdrawableMarketplaceBalance || 0),
+            detail: `${formatCOP(marketplaceWallet?.payoutProcessingCop || 0)} en payout marketplace`,
             icon: Truck,
         },
         {
-            label: 'Salario mensual',
-            value: formatCOP(privateFleetSummary?.salaryReleasedCop || 0),
-            detail: `${formatCOP(privateFleetSummary?.salaryPendingCop || 0)} pendiente de fondeo`,
+            label: 'Liquidaciones privadas',
+            value: formatCOP(privateFleetLedger?.paidExternalCop || 0),
+            detail: `${formatCOP(privateFleetLedger?.pendingExternalPayCop || 0)} pendiente externo`,
             icon: Wallet,
         },
         {
-            label: 'Gastos del viaje',
-            value: formatCOP(privateFleetSummary?.expenseReleasedCop || 0),
-            detail: `${formatCOP(privateFleetSummary?.expenseHeldCop || 0)} pendiente por confirmar`,
+            label: 'Viaticos privados',
+            value: formatCOP(privateFleetLedger?.expensePaidExternalCop || 0),
+            detail: `${formatCOP(privateFleetLedger?.expensePendingExternalCop || 0)} pendiente externo`,
             icon: Coins,
-        },
-        {
-            label: 'Operativo liberado',
-            value: formatCOP(releasedOperational + Number(privateFleetSummary?.salaryReleasedCop || 0)),
-            detail: 'Disponible despues de validaciones internas',
-            icon: ShieldCheck,
         },
     ];
 
@@ -534,13 +635,13 @@ export default function WalletPage() {
         {
             label: 'Movimientos recientes',
             value: String(visibleTransactions.length),
-            detail: 'Depositos, retiros y devoluciones trazables.',
+            detail: 'Abonos, retiros y devoluciones trazables.',
             icon: History,
         },
         {
-            label: 'Retiros pendientes',
-            value: String(pendingWithdrawals.length),
-            detail: 'Solicitudes bajo revision administrativa.',
+            label: 'Payouts en proceso',
+            value: String(payoutAttempts.filter((attempt) => ['queued', 'processing', 'failed', 'manual_review'].includes(attempt.status)).length),
+            detail: 'Retiros operativos con trazabilidad.',
             icon: Clock,
         },
         {
@@ -550,9 +651,9 @@ export default function WalletPage() {
             icon: Truck,
         },
         {
-            label: 'Retirado',
-            value: formatCOP(wallet?.total_withdrawn || 0),
-            detail: 'Historico procesado desde tu billetera.',
+            label: 'Retirado marketplace',
+            value: formatCOP(marketplaceWallet?.totalPaidCop || 0),
+            detail: 'Historico procesado desde marketplace.',
             icon: ArrowUpCircle,
         },
     ];
@@ -561,7 +662,7 @@ export default function WalletPage() {
         {
             value: 'nequi' as const,
             title: 'Nequi',
-            detail: 'Celular validado y giro con revision admin.',
+            detail: 'Celular validado para payout operativo.',
             icon: Smartphone,
         },
         {
@@ -573,7 +674,7 @@ export default function WalletPage() {
         {
             value: 'checking' as const,
             title: 'Cuenta corriente',
-            detail: 'Transferencia revisada antes de liberar fondos.',
+            detail: 'Transferencia validada antes de procesar.',
             icon: CreditCard,
         },
     ];
@@ -615,7 +716,7 @@ export default function WalletPage() {
             withdrawalAmountNumber,
             selectedMethod,
             bankDetails,
-            wallet?.available_balance || 0
+            withdrawableMarketplaceBalance
         );
 
         if (validationError) {
@@ -726,8 +827,8 @@ export default function WalletPage() {
                         <div className="relative flex h-full flex-col justify-between">
                             <div className="flex items-start justify-between gap-4">
                                 <div>
-                                    <p className="font-sans text-[11px] uppercase tracking-[0.28em] text-white/48">KargaX Wallet</p>
-                                    <p className="mt-1 font-display text-lg font-semibold text-white sm:text-xl">Black Matte Operator</p>
+                                    <p className="font-sans text-[11px] uppercase tracking-[0.28em] text-white/48">KargaX Marketplace</p>
+                                    <p className="mt-1 font-display text-lg font-semibold text-white sm:text-xl">Saldo retirable</p>
                                 </div>
                                 <div className="flex h-12 w-12 items-center justify-center rounded-lg border border-white/15 bg-white/[0.075] shadow-[inset_0_1px_0_rgba(255,255,255,.18)]">
                                     <span className="font-display text-lg font-semibold">KX</span>
@@ -741,9 +842,9 @@ export default function WalletPage() {
                                     ))}
                                 </div>
                                 <div className="min-w-0 sm:text-right">
-                                    <p className="font-sans text-[11px] uppercase tracking-[0.24em] text-white/45">Saldo disponible</p>
+                                    <p className="font-sans text-[11px] uppercase tracking-[0.24em] text-white/45">Marketplace retirable</p>
                                     <p className="font-money mt-1 text-4xl font-bold tracking-normal text-white sm:text-5xl">
-                                        {formatCOP(wallet?.available_balance || 0)}
+                                        {formatCOP(withdrawableMarketplaceBalance || 0)}
                                     </p>
                                 </div>
                             </div>
@@ -773,23 +874,28 @@ export default function WalletPage() {
                 >
                     <div>
                         <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Informacion de billetera</p>
-                        <h2 className="mt-2 text-xl font-semibold text-zinc-950">Saldo operativo y retiros</h2>
+                        <h2 className="mt-2 text-xl font-semibold text-zinc-950">Saldo marketplace y liquidaciones</h2>
                         <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-600">
-                            Saldo operativo generado dentro de KargaX. No es deposito bancario; cada retiro pasa por
-                            validacion, conciliacion y controles de seguridad antes de pagarse.
+                            El saldo retirable corresponde a marketplace confirmado. Las liquidaciones de flota privada
+                            se registran como comprobante externo y no aumentan el saldo de retiro.
                         </p>
+                        {marketplaceWallet && Math.abs(Number(marketplaceWallet.balanceMismatchCop || 0)) > 0 ? (
+                            <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm leading-6 text-zinc-600">
+                                Operaciones tiene una diferencia historica de {formatCOP(Math.abs(Number(marketplaceWallet.balanceMismatchCop || 0)))} entre wallet tecnica y rail marketplace. Tu retiro usa solo el saldo marketplace validado.
+                            </div>
+                        ) : null}
                         <div className="mt-4 grid gap-3 sm:grid-cols-3">
                             <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4">
-                                <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">En transito</p>
-                                <p className="font-money mt-2 text-lg font-semibold text-zinc-950">{formatCOP(wallet?.pending_balance || 0)}</p>
+                                <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Pendiente marketplace</p>
+                                <p className="font-money mt-2 text-lg font-semibold text-zinc-950">{formatCOP(marketplaceWallet?.pendingReleaseCop || 0)}</p>
                             </div>
                             <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4">
-                                <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Total ganado</p>
-                                <p className="font-money mt-2 text-lg font-semibold text-zinc-950">{formatCOP(wallet?.total_earned || 0)}</p>
+                                <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Pagado este mes</p>
+                                <p className="font-money mt-2 text-lg font-semibold text-zinc-950">{formatCOP(marketplaceWallet?.paidThisMonthCop || 0)}</p>
                             </div>
                             <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4">
-                                <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Total retirado</p>
-                                <p className="font-money mt-2 text-lg font-semibold text-zinc-950">{formatCOP(wallet?.total_withdrawn || 0)}</p>
+                                <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Base marketplace</p>
+                                <p className="font-money mt-2 text-lg font-semibold text-zinc-950">{formatCOP(marketplaceWallet?.derivedAvailableCop || 0)}</p>
                             </div>
                         </div>
                     </div>
@@ -819,10 +925,10 @@ export default function WalletPage() {
                     <div className="flex items-start gap-3">
                         <ShieldCheck className="mt-0.5 h-5 w-5 text-zinc-950" />
                         <div>
-                            <p className="font-semibold text-zinc-950">Saldo operativo, no deposito bancario</p>
+                            <p className="font-semibold text-zinc-950">Ledger operativo, no producto financiero</p>
                             <p className="mt-1 text-sm leading-6 text-zinc-600">
-                                KargaX muestra dinero operativo ligado a viajes, liquidaciones y aprobaciones internas.
-                                Los retiros se registran como solicitud, se revisan, se aprueban o se devuelven con trazabilidad.
+                                KargaX separa saldo marketplace retirable de liquidaciones privadas externas.
+                                El pago privado lo realiza tu empresa por su canal habitual; aqui queda el soporte operativo.
                             </p>
                         </div>
                     </div>
@@ -980,12 +1086,67 @@ export default function WalletPage() {
                         <div className="flex items-start gap-3">
                             <Clock className="mt-0.5 h-5 w-5 text-zinc-950" />
                             <div>
-                                <p className="font-semibold text-zinc-950">Retiros pendientes</p>
+                                <p className="font-semibold text-zinc-950">Payouts en proceso</p>
                                 <p className="mt-1 text-sm leading-6 text-zinc-600">
-                                    Tienes {pendingWithdrawals.length} solicitud(es) en revision administrativa. El saldo ya esta reservado
-                                    mientras KargaX valida el destino y la conciliacion.
+                                    Tienes {pendingWithdrawals.length} solicitud(es) con saldo marketplace reservado.
+                                    KargaX conserva referencia, destino enmascarado y estado de conciliacion.
                                 </p>
                             </div>
+                        </div>
+                    </motion.section>
+                ) : null}
+
+                {(privateFleetLedger?.items?.length || 0) > 0 ? (
+                    <motion.section
+                        initial={{ opacity: 0, y: 18 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.125 }}
+                        className="overflow-hidden rounded-lg border border-zinc-200 bg-white"
+                    >
+                        <div className="border-b border-zinc-100 p-6">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                <div>
+                                    <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Flota privada</p>
+                                    <h2 className="mt-2 text-xl font-semibold text-zinc-950">Liquidaciones con comprobante externo</h2>
+                                    <p className="mt-2 text-sm leading-6 text-zinc-600">
+                                        Estas liquidaciones no suman al saldo retirable. La empresa conserva el soporte del pago externo.
+                                    </p>
+                                </div>
+                                <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3">
+                                    <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Pagado externo</p>
+                                    <p className="font-money mt-1 font-semibold text-zinc-950">{formatCOP(privateFleetLedger?.paidExternalCop || 0)}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="divide-y divide-zinc-100">
+                            {privateFleetLedger?.items.slice(0, 5).map((item) => (
+                                <div key={item.id} className="grid gap-3 p-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                                    <div className="min-w-0">
+                                        <p className="font-money text-base font-semibold text-zinc-950">{formatCOP(item.amount || 0)}</p>
+                                        <p className="mt-1 text-sm font-semibold text-zinc-950">
+                                            {item.label || getPrivateLedgerModeLabel(item)}
+                                        </p>
+                                        <p className="mt-1 text-sm leading-5 text-zinc-500">
+                                            {getPrivateLedgerModeLabel(item)} - {item.run?.period_start || 'Periodo'} a {item.run?.period_end || 'sin cierre'} - {item.run?.external_payment_method || 'comprobante externo'}
+                                        </p>
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <span className="rounded-md border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-zinc-700">
+                                            {getPrivateLedgerStatusLabel(item.external_payment_status || item.status)}
+                                        </span>
+                                        {item.proof_url ? (
+                                            <a
+                                                href={item.proof_url}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="rounded-md border border-zinc-300 bg-white px-2.5 py-1 text-xs font-semibold text-zinc-700 transition-colors hover:border-zinc-950 hover:text-zinc-950"
+                                            >
+                                                Ver soporte
+                                            </a>
+                                        ) : null}
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     </motion.section>
                 ) : null}
@@ -1002,7 +1163,7 @@ export default function WalletPage() {
                                 <Clock className="h-5 w-5 text-zinc-950" />
                             </div>
                             <div>
-                                <p className="font-semibold text-zinc-950">Pago expres no disponible en piloto</p>
+                                <p className="font-semibold text-zinc-950">Pago expres no disponible durante Acceso Operativo</p>
                                 <p className="mt-1 text-sm leading-6 text-zinc-600">
                                     KargaX mantiene esta opcion apagada por feature flag hasta completar compliance,
                                     capital/partner, reglas de disputa y auditoria operacional. No se reactiva lending visual en este sprint.
@@ -1030,8 +1191,8 @@ export default function WalletPage() {
                     <div className="border-b border-zinc-100 p-6">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                             <div>
-                                <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Ledger privado</p>
-                                <h2 className="mt-2 text-xl font-semibold text-zinc-950">Historial de movimientos</h2>
+                                <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Ledger marketplace</p>
+                                <h2 className="mt-2 text-xl font-semibold text-zinc-950">Historial retirable</h2>
                             </div>
                             <p className="text-sm text-zinc-500">Referencias cortas, sin datos sensibles.</p>
                         </div>
@@ -1144,9 +1305,9 @@ export default function WalletPage() {
                             {withdrawStep === 1 ? (
                                 <div className="space-y-6 p-6">
                                     <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-5 text-center">
-                                        <p className="text-sm text-zinc-500">Saldo disponible</p>
+                                        <p className="text-sm text-zinc-500">Saldo marketplace retirable</p>
                                         <p className="font-money mt-2 text-3xl font-semibold text-zinc-950">
-                                            {formatCOP(wallet?.available_balance || 0)}
+                                            {formatCOP(withdrawableMarketplaceBalance || 0)}
                                         </p>
                                     </div>
 
@@ -1164,7 +1325,7 @@ export default function WalletPage() {
 
                                     <div className="rounded-lg border border-zinc-200 bg-white p-4 text-sm leading-6 text-zinc-600">
                                         Minimo visible: <span className="font-money font-semibold text-zinc-950">{formatCOP(MIN_WITHDRAWAL_AMOUNT)}</span>.
-                                        La solicitud no se crea si el monto deja el saldo en negativo.
+                                        La solicitud solo usa saldo marketplace confirmado; las liquidaciones privadas quedan documentales.
                                     </div>
 
                                     {withdrawAmountError ? (
@@ -1251,7 +1412,7 @@ export default function WalletPage() {
                                     <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4">
                                         <p className="font-money text-lg font-semibold text-zinc-950">{withdrawAmount}</p>
                                         <p className="mt-1 text-sm leading-6 text-zinc-600">
-                                            Retiro a {getPaymentMethodLabel(selectedMethod)}. Queda pendiente de aprobacion administrativa antes del giro.
+                                            Retiro a {getPaymentMethodLabel(selectedMethod)}. KargaX valida el destino y procesa el payout operativo si el proveedor esta habilitado.
                                         </p>
                                     </div>
 
@@ -1336,8 +1497,8 @@ export default function WalletPage() {
                                     </label>
 
                                     <div className="rounded-lg border border-zinc-200 bg-white p-4 text-sm leading-6 text-zinc-600">
-                                        Validamos titular, documento, destino y saldo antes de aprobar. Esta accion crea una solicitud,
-                                        no un pago instantaneo.
+                                        Validamos titular, documento, destino y saldo marketplace antes de procesar. Esta accion crea una solicitud
+                                        trazable, no un pago instantaneo.
                                     </div>
 
                                     {withdrawResult && !withdrawResult.success ? (
@@ -1381,13 +1542,13 @@ export default function WalletPage() {
                                     <div>
                                         <h4 className="text-xl font-semibold text-zinc-950">Solicitud enviada</h4>
                                         <p className="mt-2 text-sm leading-6 text-zinc-600">
-                                            Solicitud registrada y pendiente de aprobacion administrativa.
+                                            {withdrawResult?.message || 'Solicitud registrada para payout operativo.'}
                                         </p>
                                     </div>
                                     <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 text-left">
                                         <p className="text-sm leading-6 text-zinc-600">
                                             <Mail className="mr-2 inline h-4 w-4 text-zinc-950" />
-                                            Te notificaremos cuando operaciones valide el retiro y cambie su estado.
+                                            Te notificaremos cuando cambie el estado del retiro operativo.
                                         </p>
                                     </div>
                                     <Button onClick={resetWithdrawal} className="w-full">

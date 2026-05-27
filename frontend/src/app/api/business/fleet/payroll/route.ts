@@ -161,6 +161,12 @@ export async function GET(request: NextRequest) {
     const releasedThisMonthCop = itemRows
         .filter((item) => item.status === 'released_to_wallet')
         .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const externalPaidThisMonthCop = itemRows
+        .filter((item) => item.status === 'paid_external')
+        .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const externalProofUploadedCop = itemRows
+        .filter((item) => item.status === 'proof_uploaded')
+        .reduce((sum, item) => sum + Number(item.amount || 0), 0);
 
     return apiSuccess({
         runs: enrichedRuns,
@@ -170,6 +176,8 @@ export async function GET(request: NextRequest) {
         summary: {
             configuredDrivers: (membersResponse.data || []).filter((member) => Number(member.monthly_salary_amount || 0) > 0).length,
             releasedThisMonthCop,
+            externalPaidThisMonthCop,
+            externalProofUploadedCop,
             pendingRuns: runs.filter((run) => ['draft', 'approved', 'checkout_pending', 'funded'].includes(run.status)).length,
         },
     }, {
@@ -297,6 +305,8 @@ export async function POST(request: NextRequest) {
             period_end: periodEnd,
             currency_code: currencyCode,
             status: 'draft',
+            payment_mode: 'external_proof',
+            external_payment_status: 'pending_external_pay',
             gross_amount: grossAmount,
             processing_fee_amount: processingFeeAmount,
             total_amount: totalAmount,

@@ -81,6 +81,7 @@ interface Offer {
     currency: string;
     requiredVehicle: string | null;
     status: OfferStatus;
+    assignmentMode?: 'public' | 'private';
     companyName: string | null;
     createdAt: string;
     applicationsCount?: number;
@@ -258,6 +259,9 @@ function OfferCard({
     onPublish: (id: string) => void;
 }) {
     const applicationsCount = offer.applicationsCount || 0;
+    const canShowMarketplaceEvidence =
+        offer.assignmentMode !== 'private'
+        && (['reserved', 'in_progress', 'completed'] as OfferStatus[]).includes(offer.status);
 
     return (
         <motion.div
@@ -319,6 +323,14 @@ function OfferCard({
 
                 {/* Actions */}
                 <div className="flex flex-wrap items-center gap-2">
+                    {canShowMarketplaceEvidence ? (
+                        <Button asChild size="sm" variant="outline">
+                            <Link href={`/pod-marketplace/${offer.id}`}>
+                                <Eye className="w-4 h-4" />
+                                Evidencia
+                            </Link>
+                        </Button>
+                    ) : null}
                     {offer.status === 'draft' && (
                         <Button
                             size="sm"
@@ -547,7 +559,7 @@ export default function MyOffersPage() {
             // API returns { success: true, data: [...], meta: {...} }
             // The data array is directly in result.data (not nested)
             if (result.success) {
-                const offersData = Array.isArray(result.data) ? result.data : [];
+                const offersData = (Array.isArray(result.data) ? result.data : []) as Offer[];
                 setOffers(offersData);
             } else {
                 setError('Error loading offers');

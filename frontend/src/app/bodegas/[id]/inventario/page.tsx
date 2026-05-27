@@ -10,7 +10,12 @@ import { Button, Input, toast } from '@/components/ui';
 import { SectionCard, WarehouseWorkspace } from '@/components/warehouses/WarehouseWorkspace';
 import {
     WmsEmptyState,
-    WmsCardGrid,
+    WmsFleetCard,
+    WmsFleetDarkPanel,
+    WmsFleetIdentity,
+    WmsFleetInfoGrid,
+    WmsFleetInfoItem,
+    WmsFleetSection,
     WmsImageThumb,
     WmsMetric,
     WmsMetricGrid,
@@ -29,6 +34,10 @@ interface InventorySkuCard {
     balances: WarehouseStockBalance[];
 }
 
+function normalizeSkuCode(value: string) {
+    return value.trim().toUpperCase();
+}
+
 function aggregateStock(stock: WarehouseStockBalance[]): InventorySkuCard[] {
     const grouped = new Map<string, InventorySkuCard>();
 
@@ -37,19 +46,27 @@ function aggregateStock(stock: WarehouseStockBalance[]): InventorySkuCard[] {
             continue;
         }
 
-        const current = grouped.get(balance.sku.id);
+        const quantityOnHand = Number(balance.quantity_on_hand || 0);
+        const quantityReserved = Number(balance.quantity_reserved || 0);
+
+        if (quantityOnHand <= 0 && quantityReserved <= 0) {
+            continue;
+        }
+
+        const skuKey = normalizeSkuCode(balance.sku.sku_code) || balance.sku.id;
+        const current = grouped.get(skuKey);
         if (!current) {
-            grouped.set(balance.sku.id, {
+            grouped.set(skuKey, {
                 sku: balance.sku,
-                totalOnHand: Number(balance.quantity_on_hand || 0),
-                reservedQty: Number(balance.quantity_reserved || 0),
+                totalOnHand: quantityOnHand,
+                reservedQty: quantityReserved,
                 balances: [balance],
             });
             continue;
         }
 
-        current.totalOnHand += Number(balance.quantity_on_hand || 0);
-        current.reservedQty += Number(balance.quantity_reserved || 0);
+        current.totalOnHand += quantityOnHand;
+        current.reservedQty += quantityReserved;
         current.balances.push(balance);
     }
 
@@ -57,9 +74,9 @@ function aggregateStock(stock: WarehouseStockBalance[]): InventorySkuCard[] {
 }
 
 function findSkuTotal(stock: WarehouseStockBalance[], skuCode: string) {
-    const normalized = skuCode.trim().toUpperCase();
+    const normalized = normalizeSkuCode(skuCode);
     return stock
-        .filter((balance) => balance.sku?.sku_code?.toUpperCase() === normalized)
+        .filter((balance) => normalizeSkuCode(balance.sku?.sku_code || '') === normalized)
         .reduce((sum, balance) => sum + Number(balance.quantity_on_hand || 0), 0);
 }
 
@@ -111,7 +128,7 @@ function SkuImageDropzone({
     return (
         <div
             {...getRootProps()}
-            className={`rounded-lg border border-dashed p-4 text-center transition ${
+            className={`flex min-h-14 items-center justify-center rounded-lg border border-dashed px-3 py-2 text-center transition ${
                 disabled || limitReached
                     ? 'cursor-not-allowed border-zinc-200 bg-zinc-50 text-zinc-400'
                     : isDragActive
@@ -126,10 +143,12 @@ function SkuImageDropzone({
                     Subiendo imagen
                 </div>
             ) : (
-                <div className="space-y-2">
-                    <ImagePlus className="mx-auto h-5 w-5" aria-hidden="true" />
-                    <p className="text-sm font-medium">{limitReached ? 'Galeria completa' : 'Agregar imagen de SKU'}</p>
-                    <p className="text-xs text-zinc-500">JPG, PNG o WEBP. Maximo 8MB. {imageCount}/5 imagenes.</p>
+                <div className="flex min-w-0 items-center justify-center gap-3">
+                    <ImagePlus className="h-5 w-5 shrink-0" aria-hidden="true" />
+                    <div className="min-w-0 text-left">
+                        <p className="truncate text-sm font-medium">{limitReached ? 'Galeria completa' : 'Agregar imagen de SKU'}</p>
+                        <p className="truncate text-xs text-zinc-500">JPG, PNG o WEBP. {imageCount}/5 imagenes.</p>
+                    </div>
                 </div>
             )}
         </div>
@@ -214,7 +233,7 @@ export default function WarehouseInventoryPage() {
                     };
 
                     return (
-                        <div className="space-y-6">
+                        <div className="space-y-4 sm:space-y-5">
                             {!hasInventory ? (
                                 <WmsRiskNotice
                                     title="Inventario avanzado requiere plan con WMS"
@@ -284,18 +303,23 @@ export default function WarehouseInventoryPage() {
                                     </div>
                                 </SectionCard>
 
-                                <SectionCard title="Catalogo visual" description="SKU, stock mono, ubicaciones e imagenes sin romper la tarjeta.">
-                                    <div className="mb-5">
+                                <WmsFleetSection
+                                    icon={Layers3}
+                                    title="Catalogo visual"
+                                    description="SKU, stock, ubicaciones e imagenes en una vista rapida."
+                                    action={(
                                         <Input
-                                            label="Buscar SKU"
+                                            label=""
                                             value={search}
                                             onChange={(event) => setSearch(event.target.value)}
                                             placeholder="Buscar por SKU o nombre"
                                             leftIcon={<Search className="h-4 w-4" />}
                                         />
-                                    </div>
+                                    )}
+                                >
 
-                                    <div className="grid gap-4">
+                                    {inventoryCards.length ? (
+                                    <>
                                         {inventoryCards.map((item) => {
                                             const images = item.sku.images || [];
                                             const coverImage = images.find((image) => image.is_cover) || images[0] || null;
@@ -303,77 +327,78 @@ export default function WarehouseInventoryPage() {
                                             const lots = new Set(item.balances.map((balance) => balance.lot_code || 'std')).size;
 
                                             return (
-                                                <div key={item.sku.id} className="min-w-0 rounded-lg border border-zinc-200 bg-white p-4 shadow-[0_18px_44px_-38px_rgba(10,10,10,.55)] sm:p-5">
-                                                    <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(9rem,168px)_minmax(0,1fr)]">
-                                                        <WmsImageThumb src={coverImage?.public_url} alt={item.sku.name} caption={coverImage ? 'Portada' : 'Sin portada'} />
-
-                                                        <div className="min-w-0 space-y-4">
-                                                            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                                                                <div className="min-w-0">
-                                                                    <WmsStatusBadge label={item.sku.sku_code} tone="strong" />
-                                                                    <h3 className="mt-3 text-lg font-semibold text-zinc-950 min-[380px]:text-xl">{item.sku.name}</h3>
-                                                                    <p className="mt-1 text-sm text-zinc-500">{item.sku.description || 'SKU listo para recepcion, picking y despacho.'}</p>
-                                                                </div>
-                                                                <div className="min-w-0 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3 text-left lg:text-right">
-                                                                    <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Stock disponible</p>
-                                                                    <p className="mt-1 truncate font-money text-2xl font-semibold leading-none text-zinc-950 min-[380px]:text-3xl">{item.totalOnHand}</p>
-                                                                </div>
-                                                            </div>
-
-                                                            <WmsMetricGrid dense>
-                                                                <WmsMetric label="Ubicaciones" value={locations} />
-                                                                <WmsMetric label="Lotes" value={lots} />
-                                                                <WmsMetric label="Imagenes" value={images.length} />
-                                                            </WmsMetricGrid>
-
+                                                <WmsFleetCard
+                                                    key={item.sku.id}
+                                                    identity={(
+                                                        <WmsFleetIdentity
+                                                            title={item.sku.name}
+                                                            subtitle={item.sku.description || 'SKU listo para recepcion, picking y despacho.'}
+                                                            status={<WmsStatusBadge label={item.sku.sku_code} tone="strong" />}
+                                                            media={<WmsImageThumb src={coverImage?.public_url} alt={item.sku.name} caption={coverImage ? 'Portada' : 'Sin portada'} />}
+                                                        />
+                                                    )}
+                                                    info={(
+                                                        <WmsFleetInfoGrid>
+                                                            <WmsFleetInfoItem label="Reservado" value={item.reservedQty} />
+                                                            <WmsFleetInfoItem label="Ubicaciones" value={locations} />
+                                                            <WmsFleetInfoItem label="Lotes" value={lots} />
+                                                            <WmsFleetInfoItem
+                                                                label="Saldo por ubicacion"
+                                                                value={(
+                                                                    <div className="flex min-w-0 flex-wrap gap-2 text-sm">
+                                                                        {item.balances.map((balance) => (
+                                                                            <span key={balance.id} className="min-w-0 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-xs font-medium text-zinc-600">
+                                                                                <Layers3 className="mr-1 inline h-3 w-3" aria-hidden="true" />
+                                                                                {balance.location?.code || 'Sin ubicacion'} / <span className="font-money text-zinc-950">{balance.quantity_on_hand}</span>
+                                                                            </span>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
+                                                                className="min-[520px]:col-span-2 xl:col-span-1 2xl:col-span-2"
+                                                            />
+                                                        </WmsFleetInfoGrid>
+                                                    )}
+                                                    darkPanel={<WmsFleetDarkPanel label="Disponible" value={item.totalOnHand} detail={`${images.length}/5 imagenes asociadas`} />}
+                                                    actions={(
+                                                        <div className="grid min-w-0 gap-3">
                                                             {hasInventory ? (
                                                                 <SkuImageDropzone skuId={item.sku.id} disabled={!hasInventory} imageCount={images.length} onUploaded={reload} />
                                                             ) : null}
-
                                                             {images.length ? (
-                                                                <WmsCardGrid compact>
+                                                                <div className="flex min-w-0 gap-3 overflow-x-auto pb-1 [scrollbar-width:none]">
                                                                     {images.map((image: WarehouseSkuImage) => (
-                                                                        <WmsImageThumb
-                                                                            key={image.id}
-                                                                            src={image.public_url}
-                                                                            alt={item.sku.name}
-                                                                            caption={image.is_cover ? 'Portada' : `Foto ${image.sort_order + 1}`}
-                                                                            onDelete={hasInventory ? async () => {
-                                                                                try {
-                                                                                    await warehouseClient.deleteSkuImage(image.id);
-                                                                                    toast.success('Inventario', 'Imagen eliminada');
-                                                                                    await reload();
-                                                                                } catch (error) {
-                                                                                    toast.error('Inventario', error instanceof Error ? error.message : 'No se pudo eliminar la imagen');
-                                                                                }
-                                                                            } : undefined}
-                                                                        />
+                                                                        <div key={image.id} className="w-24 shrink-0">
+                                                                            <WmsImageThumb
+                                                                                src={image.public_url}
+                                                                                alt={item.sku.name}
+                                                                                caption={image.is_cover ? 'Portada' : `Foto ${image.sort_order + 1}`}
+                                                                                onDelete={hasInventory ? async () => {
+                                                                                    try {
+                                                                                        await warehouseClient.deleteSkuImage(image.id);
+                                                                                        toast.success('Inventario', 'Imagen eliminada');
+                                                                                        await reload();
+                                                                                    } catch (error) {
+                                                                                        toast.error('Inventario', error instanceof Error ? error.message : 'No se pudo eliminar la imagen');
+                                                                                    }
+                                                                                } : undefined}
+                                                                            />
+                                                                        </div>
                                                                     ))}
-                                                                </WmsCardGrid>
+                                                                </div>
                                                             ) : null}
-
-                                                            <div className="flex flex-wrap gap-2">
-                                                                {item.balances.map((balance) => (
-                                                                    <span key={balance.id} className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-xs font-medium text-zinc-600">
-                                                                        <Layers3 className="mr-1 inline h-3 w-3" aria-hidden="true" />
-                                                                        {balance.location?.code || 'Sin ubicacion'} / <span className="font-money text-zinc-950">{balance.quantity_on_hand}</span>
-                                                                    </span>
-                                                                ))}
-                                                            </div>
                                                         </div>
-                                                    </div>
-                                                </div>
+                                                    )}
+                                                />
                                             );
                                         })}
-
-                                        {inventoryCards.length === 0 ? (
-                                            <WmsEmptyState
-                                                title={search ? 'Sin coincidencias' : 'Catalogo listo para el primer SKU'}
-                                                description={search ? 'Ajusta la busqueda por codigo o nombre.' : 'Haz un ajuste justificado para crear saldo y activar el catalogo visual.'}
-                                            />
-                                        ) : null}
-                                    </div>
-                                </SectionCard>
+                                    </>
+                                    ) : (
+                                        <WmsEmptyState
+                                            title={search ? 'Sin coincidencias' : 'Catalogo listo para el primer SKU'}
+                                            description={search ? 'Ajusta la busqueda por codigo o nombre.' : 'Haz un ajuste justificado para crear saldo y activar el catalogo visual.'}
+                                        />
+                                    )}
+                                </WmsFleetSection>
                             </WmsPanelGrid>
                         </div>
                     );

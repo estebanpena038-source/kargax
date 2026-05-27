@@ -4,12 +4,13 @@ import { apiError, apiSuccess, getRequestId } from '@/lib/server/api-response';
 import {
     getWarehouseCapabilities,
     getBusinessPlanSnapshot,
+    getBusinessCommercialActivationSnapshot,
     ensureWarehouseAccess,
     resolveBusinessAccessContext,
     setActiveWarehousePreference,
 } from '@/lib/server/warehouses';
 import { resolveHoldingAccessContext } from '@/lib/server/holding';
-import { getBusinessRoleCapabilities } from '@/lib/business-roles';
+import { getBusinessPolicyCapabilities } from '@/lib/server/role-policy';
 
 export async function GET(request: NextRequest) {
     const requestId = getRequestId(request);
@@ -34,6 +35,7 @@ export async function GET(request: NextRequest) {
                 capabilities: null,
                 subscription: null,
                 limits: null,
+                commercialActivation: null,
                 holdingReady: holdingAccess.ready,
                 holdingMessage: holdingAccess.message,
                 holdingAccountId: holdingAccess.holdingAccountId,
@@ -67,7 +69,7 @@ export async function GET(request: NextRequest) {
             access.teamMember?.role ||
             (access.isOwner ? 'owner' : profile?.user_type === 'admin' ? 'admin' : null);
         const effectiveCapabilities = effectiveRole ? getWarehouseCapabilities(effectiveRole) : null;
-        const roleCapabilities = getBusinessRoleCapabilities(effectiveRole);
+        const roleCapabilities = getBusinessPolicyCapabilities(effectiveRole || 'viewer');
 
         const warehouseQuery = supabaseAdmin
             .from('warehouses')
@@ -75,7 +77,7 @@ export async function GET(request: NextRequest) {
             .eq('business_id', businessId)
             .order('name', { ascending: true });
 
-        const [warehousesResponse, snapshot, businessProfileResponse] = await Promise.all([
+        const [warehousesResponse, snapshot, businessProfileResponse, commercialActivation] = await Promise.all([
             access.isOwner || profile?.user_type === 'admin'
                 ? warehouseQuery
                 : access.accessibleWarehouseIds.length
@@ -87,6 +89,7 @@ export async function GET(request: NextRequest) {
                 .select('company_name')
                 .eq('user_id', businessId)
                 .maybeSingle(),
+            getBusinessCommercialActivationSnapshot(supabaseAdmin, businessId),
         ]);
 
         if (warehousesResponse.error) {
@@ -106,6 +109,7 @@ export async function GET(request: NextRequest) {
             capabilities: effectiveCapabilities,
             subscription: snapshot.subscription,
             limits: snapshot.limits,
+            commercialActivation,
             isOwner: access.isOwner,
             canManageBilling: roleCapabilities.canManageBilling,
             canManageTeam: roleCapabilities.canManageTeam,
@@ -114,8 +118,16 @@ export async function GET(request: NextRequest) {
             canViewOperations: roleCapabilities.canViewOperations,
             canCreateMarketplaceOffers: roleCapabilities.canCreateMarketplaceOffers,
             canManagePrivateFleet: roleCapabilities.canManagePrivateFleet,
+            canViewPrivateFleet: roleCapabilities.canViewPrivateFleet,
+            canOperatePrivateFleet: roleCapabilities.canOperatePrivateFleet,
+            canManagePrivateFleetDrivers: roleCapabilities.canManagePrivateFleetDrivers,
+            canManagePrivateFleetMoney: roleCapabilities.canManagePrivateFleetMoney,
+            canViewPrivateFleetMoney: roleCapabilities.canViewPrivateFleetMoney,
+            canUploadPrivateFleetProofs: roleCapabilities.canUploadPrivateFleetProofs,
+            canClosePrivateFleetProofs: roleCapabilities.canClosePrivateFleetProofs,
             canViewTracking: roleCapabilities.canViewTracking,
             canViewIntelligence: roleCapabilities.canViewIntelligence,
+            rolePolicyCapabilities: roleCapabilities,
             holdingReady: holdingAccess.ready,
             holdingMessage: holdingAccess.message,
             holdingAccountId: holdingAccess.holdingAccountId,

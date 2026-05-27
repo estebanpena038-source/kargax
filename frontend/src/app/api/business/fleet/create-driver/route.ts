@@ -8,6 +8,10 @@ import {
     isPlanLimitError,
     resolveBusinessAccessContext,
 } from '@/lib/server/warehouses';
+import {
+    getBusinessPolicyCapabilities,
+    resolveEffectiveBusinessRole,
+} from '@/lib/server/role-policy';
 import { normalizePhoneForNotification } from '@/lib/phone/andean';
 import { normalizeTeamCountryCode } from '@/lib/team/localization';
 import { isValidTeamInviteEmail } from '@/lib/server/team-invitations';
@@ -68,8 +72,18 @@ export async function POST(request: NextRequest) {
 
     const { supabaseAdmin, authUser, profile } = auth.context;
     const businessAccess = await resolveBusinessAccessContext(supabaseAdmin, authUser.id, profile);
+    const effectiveRole = resolveEffectiveBusinessRole(profile, businessAccess);
+    const roleCapabilities = getBusinessPolicyCapabilities(effectiveRole);
 
-    if (profile?.user_type !== 'admin' && (!businessAccess.businessId || !businessAccess.isOwner)) {
+    if (!businessAccess.businessId && profile?.user_type !== 'admin') {
+        return apiError('Business access required', {
+            requestId,
+            status: 403,
+            code: 'BUSINESS_FLEET_BUSINESS_REQUIRED',
+        });
+    }
+
+    if (!roleCapabilities.canManagePrivateFleetDrivers) {
         return apiError('Solo owner/admin puede crear conductores privados', {
             requestId,
             status: 403,

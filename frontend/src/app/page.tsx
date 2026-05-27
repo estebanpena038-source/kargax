@@ -49,11 +49,11 @@ const money = [
   'Reporte mensual',
 ];
 
-const pilot = [
-  'Día 1: empresa, equipo, bodega y conductores.',
-  'Día 2-3: inventario, despacho y manifiesto.',
-  'Día 4-5: ruta con GPS, PIN, fotos y firma.',
-  'Día 6-7: wallet, gastos y reporte ejecutivo.',
+const operationalAccess = [
+  'Dia 1: empresa, equipo, bodega y conductores.',
+  'Dia 2-3: inventario, despacho y manifiesto.',
+  'Dia 4-5: ruta con GPS, PIN, fotos y firma.',
+  'Dia 6-7: wallet, gastos y reporte ejecutivo.',
 ];
 
 function OperationalMock() {
@@ -152,7 +152,7 @@ export default function HomePage() {
                   href="/registro?tipo=business"
                   onClick={() => void captureMarketingEvent('home_business_register_cta', { source: 'hero' })}
                 >
-                  Iniciar piloto
+                  Activar Acceso Operativo gratis
                   <ArrowRight className="h-4 w-4" />
                 </Link>
               </Button>
@@ -238,10 +238,10 @@ export default function HomePage() {
         </div>
 
         <div className="kx-public-card rounded-lg border border-zinc-200 bg-white p-5 sm:p-7">
-          <Eyebrow>Piloto</Eyebrow>
-          <h2 className="kx-public-heading mt-4 font-semibold">Siete días, pasos visibles.</h2>
+          <Eyebrow>Acceso Operativo</Eyebrow>
+          <h2 className="kx-public-heading mt-4 font-semibold">Entregas reales, pasos visibles.</h2>
           <div className="mt-7 space-y-3">
-            {pilot.map((step) => (
+            {operationalAccess.map((step) => (
               <div key={step} className="flex gap-3 rounded-lg border border-zinc-200 p-4">
                 <Check className="mt-0.5 h-4 w-4 shrink-0 text-zinc-950" />
                 <p className="text-sm leading-6 text-zinc-700">{step}</p>
@@ -250,7 +250,7 @@ export default function HomePage() {
           </div>
           <div className="kx-action-stack mt-7">
             <Button asChild>
-              <Link href="/registro?tipo=business">Agendar piloto</Link>
+              <Link href="/registro?tipo=business">Ver flujo operativo</Link>
             </Button>
             <Button variant="outline" asChild>
               <Link href="/ofertas/publicar">Crear primer despacho</Link>

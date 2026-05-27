@@ -56,6 +56,46 @@ function formatTimeRange(start?: string | null, end?: string | null) {
     return (start || end || '').slice(0, 5);
 }
 
+function TripCompensation({
+    trip,
+    formatAmount,
+}: {
+    trip: PrivateFleetDriverTrip;
+    formatAmount: (amount: number) => string;
+}) {
+    const compensation = trip.compensation;
+    const freightAmount = compensation?.freightAmount ?? Number(trip.freightPaymentAmount || 0);
+    const expenseAmount = compensation?.expenseAmount ?? Number(trip.expenseAllowanceAmount || 0);
+    const hasFreight = freightAmount > 0;
+    const hasExpenses = expenseAmount > 0;
+
+    if (!hasFreight && !hasExpenses) {
+        return (
+            <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-left lg:text-right">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">Nomina mensual</p>
+                <p className="mt-1 text-sm font-medium text-zinc-950">Se liquida por nomina mensual separada.</p>
+            </div>
+        );
+    }
+
+    return (
+        <div className="grid min-w-0 gap-2 sm:grid-cols-2 lg:w-full">
+            {hasFreight ? (
+                <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-left lg:text-right">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">Pago ruta</p>
+                    <p className="font-money mt-1 text-lg font-semibold text-zinc-950">{formatAmount(freightAmount)}</p>
+                </div>
+            ) : null}
+            {hasExpenses ? (
+                <div className="rounded-lg border border-zinc-950 bg-zinc-950 px-3 py-2 text-left text-white lg:text-right">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/55">Viaticos</p>
+                    <p className="font-money mt-1 text-lg font-semibold">{formatAmount(expenseAmount)}</p>
+                </div>
+            ) : null}
+        </div>
+    );
+}
+
 function TripStatusPill({ trip }: { trip: PrivateFleetDriverTrip }) {
     const copy = assignmentCopy[trip.assignmentStatus] || assignmentCopy.pending;
 
@@ -126,7 +166,7 @@ function AssignedTripRow({
 
                 <div className="flex min-w-0 flex-col gap-3 lg:min-w-[18rem] lg:items-end">
                     <div className="min-w-0 text-left lg:text-right">
-                        <p className="font-money text-xl font-semibold text-zinc-950">{formatAmount(trip.totalAmount)}</p>
+                        <TripCompensation trip={trip} formatAmount={formatAmount} />
                         <p className="mt-1 text-xs text-zinc-500">
                             Recogida {formatDate(trip.pickupDate)} · {formatTimeRange(trip.pickupTimeStart, trip.pickupTimeEnd)}
                         </p>

@@ -5,6 +5,12 @@ import { isBusinessFleetMembersTableMissing } from '@/lib/server/warehouses';
 
 const ACTIVE_PRIVATE_TRIP_STATUSES = new Set(['assigned', 'reserved', 'in_progress']);
 const ACCEPTED_PRIVATE_TRIP_STATUSES = new Set(['reserved', 'in_progress', 'completed']);
+const PRIVATE_COMPENSATION_MODES = new Set([
+    'salary_no_trip_pay',
+    'trip_pay',
+    'expenses_only',
+    'trip_pay_plus_expenses',
+]);
 
 function isPrivateFleetPayrollSchemaMissing(error: unknown) {
     if (!error || typeof error !== 'object') {
@@ -83,6 +89,71 @@ function resolveNextAction(trip: Record<string, unknown>, assignmentStatus: stri
     ) return 'pickup';
 
     return 'open_trip';
+}
+
+function resolvePrivateTripCompensation(trip: Record<string, unknown>) {
+    const expenseAmount = Number(trip.expense_allowance_amount || 0);
+    const storedFreightAmount = Number(trip.freight_payment_amount || 0);
+    const legacyFreightAmount = Number(trip.total_amount || 0);
+    const rawMode = typeof trip.compensation_mode === 'string' ? trip.compensation_mode : null;
+    const explicitMode = rawMode && PRIVATE_COMPENSATION_MODES.has(rawMode) ? rawMode : null;
+    const shouldUseLegacyFreight = !explicitMode || explicitMode === 'trip_pay' || explicitMode === 'trip_pay_plus_expenses';
+    const freightAmount = storedFreightAmount > 0
+        ? storedFreightAmount
+        : shouldUseLegacyFreight
+            ? legacyFreightAmount
+            : 0;
+    const mode = explicitMode
+        ? explicitMode
+        : freightAmount > 0 && expenseAmount > 0
+            ? 'trip_pay_plus_expenses'
+            : expenseAmount > 0
+                ? 'expenses_only'
+                : freightAmount > 0
+                    ? 'trip_pay'
+                    : 'salary_no_trip_pay';
+
+    if (mode === 'expenses_only') {
+        return {
+            mode,
+            freightAmount,
+            expenseAmount,
+            visiblePrimaryAmount: expenseAmount,
+            primaryLabel: 'Viaticos',
+            summaryLabel: 'Solo viaticos',
+        };
+    }
+
+    if (mode === 'trip_pay_plus_expenses') {
+        return {
+            mode,
+            freightAmount,
+            expenseAmount,
+            visiblePrimaryAmount: freightAmount,
+            primaryLabel: 'Pago ruta',
+            summaryLabel: 'Pago ruta + viaticos',
+        };
+    }
+
+    if (mode === 'trip_pay') {
+        return {
+            mode,
+            freightAmount,
+            expenseAmount,
+            visiblePrimaryAmount: freightAmount,
+            primaryLabel: 'Pago ruta',
+            summaryLabel: 'Pago por ruta',
+        };
+    }
+
+    return {
+        mode,
+        freightAmount,
+        expenseAmount,
+        visiblePrimaryAmount: 0,
+        primaryLabel: 'Nomina mensual',
+        summaryLabel: 'Nomina mensual separada',
+    };
 }
 
 export async function GET(request: NextRequest) {
@@ -185,7 +256,7 @@ export async function GET(request: NextRequest) {
     monthStart.setDate(1);
     monthStart.setHours(0, 0, 0, 0);
 
-    let [businessProfileResponse, businessUserResponse, tripsResponse, payrollItemsResponse] = await Promise.all([
+    const [businessProfileResponse, businessUserResponse, initialTripsResponse, payrollItemsResponse] = await Promise.all([
         supabaseAdmin
             .from('business_profiles')
             .select('company_name')
@@ -218,6 +289,8 @@ export async function GET(request: NextRequest) {
                 total_amount,
                 freight_payment_amount,
                 expense_allowance_amount,
+                compensation_mode,
+                expenses_release_policy,
                 private_fleet_notes,
                 private_fleet_confirmed_at,
                 pickup_verified_at,
@@ -244,6 +317,7 @@ export async function GET(request: NextRequest) {
 
     let assignmentSchemaReady = true;
 
+    let tripsResponse = initialTripsResponse;
     if (tripsResponse.error && isPrivateFleetAssignmentSchemaMissing(tripsResponse.error)) {
         assignmentSchemaReady = false;
         tripsResponse = await supabaseAdmin
@@ -268,6 +342,8 @@ export async function GET(request: NextRequest) {
                 total_amount,
                 freight_payment_amount,
                 expense_allowance_amount,
+                compensation_mode,
+                expenses_release_policy,
                 private_fleet_notes,
                 private_fleet_confirmed_at,
                 pickup_verified_at,
@@ -333,7 +409,7 @@ export async function GET(request: NextRequest) {
         return assignmentStatus !== 'rejected' && trip.status === 'completed';
     }).length;
     const payrollReleasedThisMonthCop = payrollItems
-        .filter((item) => item.status === 'released_to_wallet')
+        .filter((item) => ['released_to_wallet', 'paid_external'].includes(item.status))
         .reduce((total, item) => total + Number(item.amount || 0), 0);
     const payrollPendingCop = payrollItems
         .filter((item) => ['pending', 'funded'].includes(String(item.status)))
@@ -358,6 +434,7 @@ export async function GET(request: NextRequest) {
         assignedTrips: trips.map((trip) => {
             const assignmentStatus = resolveAssignmentStatus(trip);
             const canDecide = assignmentStatus === 'pending' && trip.status === 'assigned';
+            const compensation = resolvePrivateTripCompensation(trip);
 
             return {
                 id: trip.id,
@@ -381,8 +458,11 @@ export async function GET(request: NextRequest) {
                 deliveryTimeStart: trip.delivery_time_start,
                 deliveryTimeEnd: trip.delivery_time_end,
                 totalAmount: Number(trip.total_amount || 0),
-                freightPaymentAmount: Number(trip.freight_payment_amount || 0),
-                expenseAllowanceAmount: Number(trip.expense_allowance_amount || 0),
+                freightPaymentAmount: compensation.freightAmount,
+                expenseAllowanceAmount: compensation.expenseAmount,
+                compensationMode: compensation.mode,
+                expensesReleasePolicy: trip.expenses_release_policy || null,
+                compensation,
                 privateFleetNotes: trip.private_fleet_notes,
                 rejectedAt: trip.private_fleet_rejected_at || null,
                 rejectionReason: trip.private_fleet_rejection_reason || null,

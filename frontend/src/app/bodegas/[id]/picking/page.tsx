@@ -2,25 +2,29 @@
 
 import * as React from 'react';
 import { useParams } from 'next/navigation';
-import { AlertTriangle, Check, ClipboardList, LockKeyhole, Play, RotateCcw } from 'lucide-react';
+import { AlertTriangle, ClipboardList, LockKeyhole, Play, RotateCcw } from 'lucide-react';
 import { DashboardLayout } from '@/components/layouts/DashboardLayout';
 import { Button, Input, Select, toast } from '@/components/ui';
 import { SectionCard, WarehouseWorkspace, formatDateTime } from '@/components/warehouses/WarehouseWorkspace';
 import {
-    WmsCompletionMark,
     WmsEmptyState,
+    WmsFleetCard,
+    WmsFleetDarkPanel,
+    WmsFleetIdentity,
+    WmsFleetInfoGrid,
+    WmsFleetInfoItem,
+    WmsFleetSection,
     WmsMetric,
     WmsMetricGrid,
     WmsPanelGrid,
     WmsProgress,
-    WmsRiskNotice,
     WmsActionRow,
     WmsStatusBadge,
     WmsTextArea,
 } from '@/components/warehouses/WarehouseExecutionLuxury';
 import warehouseClient from '@/lib/warehouses/client';
 import { getDispatchStatusLabel } from '@/lib/warehouses/localization';
-import type { WarehouseDispatchLine, WarehouseDispatchOrder, WarehouseTask } from '@/lib/warehouses/types';
+import type { WarehouseDispatchOrder, WarehouseTask } from '@/lib/warehouses/types';
 
 const TASK_TYPE_OPTIONS = [
     { value: 'picking', label: 'Picking' },
@@ -150,7 +154,7 @@ export default function WarehousePickingPage() {
                     };
 
                     return (
-                        <div className="space-y-6">
+                        <div className="space-y-4 sm:space-y-5">
                             <WmsMetricGrid>
                                 <WmsMetric label="Checklist" value={pickingTasks.length} detail="Tareas de ejecucion" />
                                 <WmsMetric label="Activas" value={activeTasks.length} detail="Pendientes o en curso" />
@@ -159,61 +163,60 @@ export default function WarehousePickingPage() {
                             </WmsMetricGrid>
 
                             <WmsPanelGrid reverse>
-                                <SectionCard title="Checklist de picking" description="Una tarea, una accion siguiente, sin doble submit.">
-                                    <div className="mb-5">
-                                        <WmsProgress label="Progreso monocromo" value={completedTasks} total={pickingTasks.length} />
-                                    </div>
+                                <WmsFleetSection
+                                    icon={ClipboardList}
+                                    title="Checklist de picking"
+                                    description="Cada tarea muestra estado, pasos y accion siguiente sin ruido."
+                                    action={<WmsProgress label="Avance de tareas" value={completedTasks} total={pickingTasks.length} />}
+                                >
 
-                                    <div className="space-y-4">
+                                    {pickingTasks.length ? (
+                                    <>
                                         {pickingTasks.map((task) => {
                                             const checklist = visibleChecklist(task.description);
                                             const rejectionNote = getMetadataText(task, 'rejectionNote');
                                             const canTransition = capabilities?.manageTasks && processingId !== task.id;
 
                                             return (
-                                                <div key={task.id} className="min-w-0 rounded-lg border border-zinc-200 bg-white p-4">
-                                                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                                                        <div className="flex min-w-0 items-start gap-3">
-                                                            <WmsCompletionMark done={task.status === 'completed'} />
-                                                            <div className="min-w-0">
-                                                                <div className="flex flex-wrap items-center gap-2">
-                                                                    <p className="font-semibold text-zinc-950">{task.title}</p>
-                                                                    <WmsStatusBadge label={TASK_STATUS_LABELS[task.status]} tone={taskTone(task.status)} />
-                                                                </div>
-                                                                <p className="mt-1 text-sm text-zinc-500">
-                                                                    {task.task_type} / vence {formatDateTime(task.due_at)} / {task.offer_id ? `viaje ${task.offer_id.slice(0, 8)}` : 'sin viaje'}
-                                                                </p>
-                                                            </div>
-                                                        </div>
-                                                        <p className="font-money text-xs text-zinc-400">{task.id.slice(0, 8)}</p>
-                                                    </div>
-
-                                                    <div className="mt-4 overflow-hidden rounded-lg border border-zinc-200">
-                                                        {checklist.map((item, index) => {
-                                                            const done = task.status === 'completed';
-                                                            return (
-                                                                <div key={`${task.id}-${index}`} className="flex min-w-0 items-center gap-3 border-b border-zinc-100 px-3 py-3 last:border-b-0 min-[380px]:px-4">
-                                                                    <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border ${done ? 'border-zinc-950 bg-zinc-950 text-white' : 'border-zinc-200 bg-white text-zinc-400'}`}>
-                                                                        {done ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : index + 1}
-                                                                    </span>
-                                                                    <p className="text-sm text-zinc-700">{item}</p>
-                                                                </div>
-                                                            );
-                                                        })}
-                                                    </div>
-
-                                                    {task.status === 'blocked' ? (
-                                                        <div className="mt-4">
-                                                            <WmsRiskNotice
-                                                                critical
-                                                                title="Rejection flow visible"
-                                                                description={rejectionNote || 'La tarea esta bloqueada. Documenta faltante, dano, SKU incorrecto o novedad antes de continuar.'}
+                                                <WmsFleetCard
+                                                    key={task.id}
+                                                    identity={(
+                                                        <WmsFleetIdentity
+                                                            title={task.title}
+                                                            subtitle={`Vence: ${formatDateTime(task.due_at)}`}
+                                                            status={<WmsStatusBadge label={TASK_STATUS_LABELS[task.status]} tone={taskTone(task.status)} />}
+                                                            activity={`ID ${task.id.slice(0, 8)} / ${task.offer_id ? `Viaje ${task.offer_id.slice(0, 8)}` : 'Sin viaje'}`}
+                                                        />
+                                                    )}
+                                                    info={(
+                                                        <WmsFleetInfoGrid>
+                                                            <WmsFleetInfoItem label="Tipo" value={task.task_type} />
+                                                            <WmsFleetInfoItem label="Checklist" value={`${checklist.length} pasos`} />
+                                                            <WmsFleetInfoItem
+                                                                label="Pasos visibles"
+                                                                value={(
+                                                                    <div className="space-y-2 text-sm font-normal text-zinc-700">
+                                                                        {checklist.slice(0, 3).map((item, index) => (
+                                                                            <p key={`${task.id}-${index}`} className="truncate">{index + 1}. {item}</p>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
+                                                                detail={checklist.length > 3 ? `+${checklist.length - 3} pasos mas` : undefined}
+                                                                className="min-[520px]:col-span-2 xl:col-span-1 2xl:col-span-2"
                                                             />
-                                                        </div>
-                                                    ) : null}
-
-                                                    {capabilities?.manageTasks ? (
-                                                        <div className="mt-4 space-y-3">
+                                                        </WmsFleetInfoGrid>
+                                                    )}
+                                                    darkPanel={(
+                                                        <WmsFleetDarkPanel
+                                                            label={task.status === 'blocked' ? 'Novedad registrada' : 'Avance de tarea'}
+                                                            value={TASK_STATUS_LABELS[task.status]}
+                                                            detail={task.status === 'blocked'
+                                                                ? rejectionNote || 'Documenta faltante, dano, SKU incorrecto o novedad antes de continuar.'
+                                                                : 'Checklist operativo listo para avanzar.'}
+                                                        />
+                                                    )}
+                                                    actions={capabilities?.manageTasks ? (
+                                                        <div className="space-y-3">
                                                             {(task.status === 'open' || task.status === 'in_progress') ? (
                                                                 <Input
                                                                     label="PIN / confirmacion operativa"
@@ -291,18 +294,17 @@ export default function WarehousePickingPage() {
                                                             </WmsActionRow>
                                                         </div>
                                                     ) : null}
-                                                </div>
+                                                />
                                             );
                                         })}
-
-                                        {pickingTasks.length === 0 ? (
-                                            <WmsEmptyState
-                                                title="No hay checklist de picking"
-                                                description="Crea una tarea o genera un despacho para que el alistamiento aparezca aqui."
-                                            />
-                                        ) : null}
-                                    </div>
-                                </SectionCard>
+                                    </>
+                                    ) : (
+                                        <WmsEmptyState
+                                            title="No hay checklist de picking"
+                                            description="Crea una tarea o genera un despacho para que el alistamiento aparezca aqui."
+                                        />
+                                    )}
+                                </WmsFleetSection>
 
                                 <SectionCard title="Nueva tarea" description="Crea solo lo necesario para el siguiente alistamiento.">
                                     <div className="space-y-3">
@@ -358,58 +360,45 @@ export default function WarehousePickingPage() {
                                 </SectionCard>
                             </WmsPanelGrid>
 
-                            <SectionCard title="Manifiestos en alistamiento" description="Despachos conectados a picking, listos para confirmar sin perder trazabilidad.">
-                                <div className="wms-card-grid">
+                            <WmsFleetSection icon={ClipboardList} title="Manifiestos en alistamiento" description="Despachos conectados a picking, listos para confirmar sin perder trazabilidad.">
+                                {pickingDispatches.length ? (
+                                <>
                                     {pickingDispatches.map((dispatchItem) => {
                                         const totals = dispatchLineTotals(dispatchItem);
 
                                         return (
-                                            <div key={dispatchItem.id} className="min-w-0 rounded-lg border border-zinc-200 bg-white p-4">
-                                                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                                                    <div className="min-w-0">
-                                                        <div className="flex flex-wrap items-center gap-2">
-                                                            <ClipboardList className="h-4 w-4 text-zinc-500" aria-hidden="true" />
-                                                            <p className="font-semibold text-zinc-950">{dispatchItem.dispatch_number}</p>
-                                                            <WmsStatusBadge label={getDispatchStatusLabel(dispatchItem.status)} tone={dispatchItem.status === 'ready' ? 'strong' : 'neutral'} />
-                                                        </div>
-                                                        <p className="mt-2 text-sm text-zinc-500">
-                                                            {dispatchItem.offer_id ? `Viaje ${dispatchItem.offer_id.slice(0, 8)}` : 'Despacho sin viaje vinculado'} / {formatDateTime(dispatchItem.scheduled_at)}
-                                                        </p>
-                                                    </div>
-                                                    <p className="font-money text-sm text-zinc-500">{dispatchItem.lines?.length || 0} lineas</p>
-                                                </div>
-
-                                                <WmsMetricGrid dense className="mt-4">
-                                                    <WmsMetric label="Solicitado" value={totals.requested} />
-                                                    <WmsMetric label="Picked" value={totals.picked} />
-                                                    <WmsMetric label="Despacho" value={totals.dispatched} />
-                                                    <WmsMetric label="Rechazo" value={totals.rejected} />
-                                                </WmsMetricGrid>
-
-                                                {dispatchItem.lines?.length ? (
-                                                    <div className="mt-4 overflow-hidden rounded-lg border border-zinc-200">
-                                                        {dispatchItem.lines.map((line: WarehouseDispatchLine) => (
-                                                            <div key={line.id} className="border-b border-zinc-100 px-4 py-3 last:border-b-0">
-                                                                <p className="font-medium text-zinc-950">{line.sku_code_snapshot} / {line.sku_name_snapshot}</p>
-                                                                <p className="mt-1 font-money text-xs text-zinc-500">
-                                                                    Sol {line.requested_qty} / Pick {line.picked_qty} / Rech {line.rejected_qty}
-                                                                </p>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                ) : null}
-                                            </div>
+                                            <WmsFleetCard
+                                                key={dispatchItem.id}
+                                                identity={(
+                                                    <WmsFleetIdentity
+                                                        title={dispatchItem.dispatch_number}
+                                                        subtitle={formatDateTime(dispatchItem.scheduled_at)}
+                                                        status={<WmsStatusBadge label={getDispatchStatusLabel(dispatchItem.status)} tone={dispatchItem.status === 'ready' ? 'strong' : 'neutral'} />}
+                                                        activity={dispatchItem.offer_id ? `Viaje ${dispatchItem.offer_id.slice(0, 8)}` : 'Sin viaje vinculado'}
+                                                    />
+                                                )}
+                                                info={(
+                                                    <WmsFleetInfoGrid
+                                                        items={[
+                                                            { label: 'Lineas', value: dispatchItem.lines?.length || 0 },
+                                                            { label: 'Solicitado', value: totals.requested },
+                                                            { label: 'Picked', value: totals.picked },
+                                                            { label: 'Rechazo', value: totals.rejected },
+                                                        ]}
+                                                    />
+                                                )}
+                                                darkPanel={<WmsFleetDarkPanel label="Despacho" value={totals.dispatched} detail={getDispatchStatusLabel(dispatchItem.status)} />}
+                                            />
                                         );
                                     })}
-
-                                    {pickingDispatches.length === 0 ? (
-                                        <WmsEmptyState
-                                            title="Sin despachos en picking"
-                                            description="Los despachos en borrador, picking o listos apareceran como manifiestos vivos."
-                                        />
-                                    ) : null}
-                                </div>
-                            </SectionCard>
+                                </>
+                                ) : (
+                                    <WmsEmptyState
+                                        title="Sin despachos en picking"
+                                        description="Los despachos en borrador, picking o listos apareceran como manifiestos vivos."
+                                    />
+                                )}
+                            </WmsFleetSection>
                         </div>
                     );
                 }}

@@ -53,6 +53,7 @@ export async function GET(request: NextRequest) {
         : { data: [] as any[] };
 
     const userIds = [...new Set((wallets || []).map((wallet) => wallet.user_id).filter(Boolean))];
+    const withdrawalIds = [...new Set((withdrawals || []).map((item) => item.id).filter(Boolean))];
 
     const { data: profiles } = userIds.length
         ? await supabaseAdmin
@@ -63,6 +64,13 @@ export async function GET(request: NextRequest) {
 
     const walletMap = new Map((wallets || []).map((wallet) => [wallet.id, wallet]));
     const profileMap = new Map((profiles || []).map((profile) => [profile.id, profile]));
+    const { data: payoutAttempts } = withdrawalIds.length
+        ? await supabaseAdmin
+            .from('payout_attempts')
+            .select('id, wallet_transaction_id, provider, method, amount_cop, status, provider_transfer_id, receipt_url, failure_reason, failure_message, attempts_count, next_retry_at, paid_at, failed_at, created_at, updated_at')
+            .in('wallet_transaction_id', withdrawalIds)
+        : { data: [] as any[] };
+    const payoutByTransactionId = new Map((payoutAttempts || []).map((attempt) => [attempt.wallet_transaction_id, attempt]));
 
     const data = ((withdrawals || []) as Array<Record<string, any>>).map((row) => normalizeWithdrawal(row)).map((withdrawal) => {
         const wallet = walletMap.get(withdrawal.wallet_id);
@@ -71,6 +79,7 @@ export async function GET(request: NextRequest) {
         return {
             ...withdrawal,
             requested_amount: Math.abs(Number(withdrawal.amount || 0)),
+            payout_attempt: payoutByTransactionId.get(withdrawal.id) || null,
             wallet,
             trucker: profile
                 ? {

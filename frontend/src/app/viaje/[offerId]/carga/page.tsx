@@ -55,8 +55,6 @@ import { generateStableManifestItemId } from '@/lib/picking/types';
 import { supabase } from '@/lib/supabase/client';
 import { useAuthStore } from '@/features/auth/store/authStore';
 
-const DEBUG_TRIP_FLOW = process.env.NODE_ENV !== 'production';
-
 // =============================================================================
 // TYPES
 // =============================================================================
@@ -91,9 +89,26 @@ interface CargoOfferQueryResult {
     pickup_verified_at: string | null;
     manifest_items: unknown;
     total_amount: number;
+    freight_payment_amount: number | null;
+    expense_allowance_amount: number | null;
+    compensation_mode: 'salary_no_trip_pay' | 'trip_pay' | 'expenses_only' | 'trip_pay_plus_expenses' | null;
+    expenses_release_policy: 'acceptance' | 'pickup_pin' | 'delivery_pod' | 'manual' | null;
     gps_tolerance_meters: number | null;
     assigned_trucker_id: string | null;
     private_fleet_trucker_id: string | null;
+    destination_warehouse_id: string | null;
+}
+
+function getFreightPaymentAmount(offer: CargoOfferQueryResult) {
+    const shouldUseLegacyFreight = offer.is_private_fleet && (
+        !offer.compensation_mode
+        || offer.compensation_mode === 'trip_pay'
+        || offer.compensation_mode === 'trip_pay_plus_expenses'
+    );
+
+    return offer.is_private_fleet
+        ? Number(offer.freight_payment_amount || (shouldUseLegacyFreight ? offer.total_amount : 0) || 0)
+        : Number(offer.freight_payment_amount || 0);
 }
 
 /**
@@ -114,13 +129,23 @@ interface OfferData {
     arrivedAtOriginAt?: string | null;
     loadingStartedAt?: string | null;
     pickupVerifiedAt?: string | null;
+    destinationWarehouseId?: string | null;
     manifestItems: ManifestItem[];
     totalAmount: number;
+    freightPaymentAmount: number;
+    expenseAllowanceAmount: number;
+    compensationMode: 'salary_no_trip_pay' | 'trip_pay' | 'expenses_only' | 'trip_pay_plus_expenses' | null;
+    expensesReleasePolicy: 'acceptance' | 'pickup_pin' | 'delivery_pod' | 'manual' | null;
     gpsTolerance: number;
 }
 
 function isLoadingItemResolved(item: ManifestItem) {
-    return Boolean(item.loadedAt || item.loadStatus === 'rejected');
+    return Boolean(
+        item.loadedAt
+        || item.loadStatus === 'loaded'
+        || item.loadStatus === 'issue'
+        || item.loadStatus === 'rejected'
+    );
 }
 
 // =============================================================================
@@ -355,7 +380,7 @@ export default function TripLoadingPage() {
     const [isPinVerifying, setIsPinVerifying] = useState(false);
     const [pinAttempts, setPinAttempts] = useState(0);
     const [originSignatureSavedAt, setOriginSignatureSavedAt] = useState<string | null>(null);
-    const [reportingEvent, setReportingEvent] = useState<'fleet_incident' | 'panic_alert' | null>(null);
+    const originSignatureRef = React.useRef<HTMLDivElement | null>(null);
 
     // ==========================================================================
     // DATA FETCHING
@@ -386,9 +411,14 @@ export default function TripLoadingPage() {
                         pickup_verified_at,
                         manifest_items,
                         total_amount,
+                        freight_payment_amount,
+                        expense_allowance_amount,
+                        compensation_mode,
+                        expenses_release_policy,
                         gps_tolerance_meters,
                         assigned_trucker_id,
-                        private_fleet_trucker_id
+                        private_fleet_trucker_id,
+                        destination_warehouse_id
                     `)
                     .eq('id', offerId)
                     .single();
@@ -461,8 +491,13 @@ export default function TripLoadingPage() {
                     arrivedAtOriginAt: offer.arrived_at_origin_at,
                     loadingStartedAt: offer.loading_started_at,
                     pickupVerifiedAt: offer.pickup_verified_at,
+                    destinationWarehouseId: offer.destination_warehouse_id,
                     manifestItems: items,
                     totalAmount: offer.total_amount,
+                    freightPaymentAmount: getFreightPaymentAmount(offer),
+                    expenseAllowanceAmount: Number(offer.expense_allowance_amount || 0),
+                    compensationMode: offer.compensation_mode,
+                    expensesReleasePolicy: offer.expenses_release_policy,
                     gpsTolerance: offer.gps_tolerance_meters || 500,
                 });
 
@@ -472,7 +507,7 @@ export default function TripLoadingPage() {
                     .from('trip_signature_evidences')
                     .select('created_at')
                     .eq('offer_id', offer.id)
-                    .eq('signature_stage', 'origin_dispatch')
+                    .eq('signature_stage', offer.destination_warehouse_id ? 'origin_driver_acceptance' : 'origin_dispatch')
                     .order('created_at', { ascending: false })
                     .limit(1);
 
@@ -523,9 +558,14 @@ export default function TripLoadingPage() {
                 pickup_verified_at,
                 manifest_items,
                 total_amount,
+                freight_payment_amount,
+                expense_allowance_amount,
+                compensation_mode,
+                expenses_release_policy,
                 gps_tolerance_meters,
                 assigned_trucker_id,
-                private_fleet_trucker_id
+                private_fleet_trucker_id,
+                destination_warehouse_id
             `)
             .eq('id', offerId)
             .single();
@@ -563,8 +603,13 @@ export default function TripLoadingPage() {
             arrivedAtOriginAt: offerRow.arrived_at_origin_at,
             loadingStartedAt: offerRow.loading_started_at,
             pickupVerifiedAt: offerRow.pickup_verified_at,
+            destinationWarehouseId: offerRow.destination_warehouse_id,
             manifestItems: normalizedItems,
             totalAmount: offerRow.total_amount,
+            freightPaymentAmount: getFreightPaymentAmount(offerRow),
+            expenseAllowanceAmount: Number(offerRow.expense_allowance_amount || 0),
+            compensationMode: offerRow.compensation_mode,
+            expensesReleasePolicy: offerRow.expenses_release_policy,
             gpsTolerance: offerRow.gps_tolerance_meters || 500,
         });
         setManifestItems(normalizedItems);
@@ -573,7 +618,7 @@ export default function TripLoadingPage() {
             .from('trip_signature_evidences')
             .select('created_at')
             .eq('offer_id', offerRow.id)
-            .eq('signature_stage', 'origin_dispatch')
+            .eq('signature_stage', offerRow.destination_warehouse_id ? 'origin_driver_acceptance' : 'origin_dispatch')
             .order('created_at', { ascending: false })
             .limit(1);
 
@@ -593,6 +638,12 @@ export default function TripLoadingPage() {
     const handleBack = useCallback(() => {
         router.push(offer?.isPrivateFleet ? '/viajes-asignados' : '/ofertas-aceptadas');
     }, [offer?.isPrivateFleet, router]);
+
+    const scrollToOriginSignature = useCallback(() => {
+        window.setTimeout(() => {
+            originSignatureRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 50);
+    }, []);
 
     /**
      * Manejar verificaciÃ³n de GPS completada
@@ -636,45 +687,6 @@ export default function TripLoadingPage() {
             setIsProcessing(false);
         }
     }, [offer]);
-
-    /**
-     * GPS bypass â€” only available in development mode.
-     * Uses the RPC register_arrival with fallback coordinates.
-     */
-    const handleGPSBypass = useCallback(async () => {
-        if (!offer) return;
-
-        setIsProcessing(true);
-
-        try {
-            const response = await pickingApi.registerArrival({
-                offerId: offer.id,
-                locationType: 'origin',
-                latitude: 0,
-                longitude: 0,
-                accuracyMeters: 10,
-            });
-
-            if (!response.success) {
-                alert(`Error: ${response.message}`);
-                return;
-            }
-
-            setOffer(prev => prev ? {
-                ...prev,
-                arrivedAtOriginAt: new Date().toISOString(),
-                loadingStartedAt: new Date().toISOString(),
-            } : null);
-
-            setStage('loading_items');
-        } catch (err) {
-            console.error('GPS bypass error:', err);
-            alert('Error al verificar ubicacion');
-        } finally {
-            setIsProcessing(false);
-        }
-    }, [offer]);
-
 
     const handleItemLoadedStable = useCallback(async (
         item: ManifestItem,
@@ -725,7 +737,6 @@ export default function TripLoadingPage() {
             const refreshed = await refreshOfferState();
             if (refreshed?.items.length && refreshed.items.every(isLoadingItemResolved)) {
                 if (offer.isPrivateFleet && !originSignatureSavedAt) {
-                    toast.warning('Firma requerida', 'Captura la firma del responsable antes de pedir el PIN.');
                     return;
                 }
 
@@ -748,6 +759,8 @@ export default function TripLoadingPage() {
 
         if (offer.isPrivateFleet && !originSignatureSavedAt) {
             setPinError('Antes del PIN debes capturar la firma del responsable de origen.');
+            setStage('loading_items');
+            scrollToOriginSignature();
             return;
         }
 
@@ -784,62 +797,11 @@ export default function TripLoadingPage() {
         } finally {
             setIsPinVerifying(false);
         }
-    }, [offer, originSignatureSavedAt, user?.id]);
+    }, [offer, originSignatureSavedAt, scrollToOriginSignature, user?.id]);
 
     const handleContinue = useCallback(() => {
         router.push(offer?.isPrivateFleet && offer?.id ? `/viaje/${offer.id}` : '/ofertas-aceptadas');
     }, [offer?.id, offer?.isPrivateFleet, router]);
-
-    const handleReportRouteEvent = useCallback(async (eventType: 'fleet_incident' | 'panic_alert') => {
-        if (!offer) return;
-
-        const notes = eventType === 'panic_alert'
-            ? 'Boton de panico activado durante salida de flota privada.'
-            : window.prompt('Describe la novedad operativa que quieres reportar.')?.trim();
-
-        if (eventType === 'fleet_incident' && !notes) {
-            return;
-        }
-
-        try {
-            setReportingEvent(eventType);
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session?.access_token) {
-                throw new Error('No hay sesion activa');
-            }
-
-            const response = await fetch('/api/business/fleet/events', {
-                method: 'POST',
-                headers: {
-                    Authorization: `Bearer ${session.access_token}`,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    offerId: offer.id,
-                    eventType,
-                    notes,
-                    metadata: {
-                        phase: 'origin_loading',
-                        source: 'manual_driver_report',
-                    },
-                }),
-            });
-
-            const payload = await response.json().catch(() => null);
-            if (!response.ok) {
-                throw new Error(payload?.error || 'No se pudo registrar el evento');
-            }
-
-            toast.success(
-                eventType === 'panic_alert' ? 'Panico reportado' : 'Novedad reportada',
-                'La empresa ya recibio el evento operativo.'
-            );
-        } catch (error) {
-            toast.error('Evento no registrado', error instanceof Error ? error.message : 'Intenta de nuevo.');
-        } finally {
-            setReportingEvent(null);
-        }
-    }, [offer]);
 
     const handleSaveOriginSignature = useCallback(async (payload: {
         signerName: string;
@@ -856,7 +818,7 @@ export default function TripLoadingPage() {
 
         const formData = new FormData();
         formData.append('offerId', offer.id);
-        formData.append('signatureStage', 'origin_dispatch');
+        formData.append('signatureStage', offer.destinationWarehouseId ? 'origin_driver_acceptance' : 'origin_dispatch');
         formData.append('signerName', payload.signerName);
         formData.append('signerDocumentId', payload.signerDocumentId || '');
         formData.append('signerRole', payload.signerRole);
@@ -877,7 +839,11 @@ export default function TripLoadingPage() {
 
         setOriginSignatureSavedAt(result?.data?.createdAt || new Date().toISOString());
         toast.success('Firma guardada', 'La evidencia digital de salida quedo registrada.');
-    }, [offer]);
+
+        if (manifestItems.length > 0 && manifestItems.every(isLoadingItemResolved)) {
+            setStage('entering_pin');
+        }
+    }, [manifestItems, offer]);
 
     // ==========================================================================
     // RENDER
@@ -928,38 +894,18 @@ export default function TripLoadingPage() {
             {/* Main content */}
             <main className="px-3 pb-8 min-[380px]:px-4">
                 {offer.isPrivateFleet ? (
-                    <div className="kx-trip-container mb-6 grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(18rem,0.9fr)]">
-                        <Card className="border-zinc-200 bg-white p-4 min-[380px]:p-5">
+                    <div className="kx-trip-container mb-6">
+                        <Card className="border-zinc-950 bg-zinc-950 p-4 text-white min-[380px]:p-5">
                             <div className="flex items-start gap-3">
-                                <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-2.5">
-                                    <Camera className="h-5 w-5 text-zinc-800" />
+                                <div className="rounded-lg border border-white/15 bg-white/10 p-2.5">
+                                    <Camera className="h-5 w-5 text-white" />
                                 </div>
                                 <div>
-                                    <h3 className="font-semibold text-slate-900">Checklist estricto de salida</h3>
-                                    <p className="mt-1 text-sm text-slate-600">
+                                    <h3 className="font-semibold text-white">Checklist estricto de salida</h3>
+                                    <p className="mt-1 text-sm text-white/70">
                                         Captura evidencia en vivo de placas, llantas, carga acomodada y firma del responsable de bodega antes del PIN.
                                     </p>
                                 </div>
-                            </div>
-                        </Card>
-
-                        <Card className="p-4 min-[380px]:p-5">
-                            <h3 className="font-semibold text-slate-900">Ruta segura</h3>
-                            <div className="mt-4 grid gap-3">
-                                <Button
-                                    variant="outline"
-                                    isLoading={reportingEvent === 'fleet_incident'}
-                                    onClick={() => void handleReportRouteEvent('fleet_incident')}
-                                >
-                                    Reportar novedad
-                                </Button>
-                                <Button
-                                    variant="outline"
-                                    isLoading={reportingEvent === 'panic_alert'}
-                                    onClick={() => void handleReportRouteEvent('panic_alert')}
-                                >
-                                    Boton de panico
-                                </Button>
                             </div>
                         </Card>
                     </div>
@@ -984,8 +930,6 @@ export default function TripLoadingPage() {
                                 isVerified={Boolean(offer.arrivedAtOriginAt)}
                                 verifiedAt={offer.arrivedAtOriginAt}
                                 onVerified={handleGPSVerified}
-                                allowBypass={process.env.NODE_ENV === 'development'}
-                                onBypass={handleGPSBypass}
                             />
                         </motion.div>
                     )}
@@ -1006,11 +950,13 @@ export default function TripLoadingPage() {
                                 draftNamespace={offer ? `${offer.id}:loading` : undefined}
                             />
                             {offer.isPrivateFleet ? (
-                                <div className="mt-6">
+                                <div ref={originSignatureRef} className="mt-6">
                                     <TripSignatureCapture
-                                        title="Firma del responsable de origen"
-                                        subtitle="El responsable de bodega u origen firma en el celular para validar el despacho privado."
-                                        signerRole="warehouse_manager"
+                                        title={offer.destinationWarehouseId ? 'Firma del conductor en origen' : 'Firma del responsable de origen'}
+                                        subtitle={offer.destinationWarehouseId
+                                            ? 'El conductor firma que recibe la carga bajo custodia antes del PIN de salida.'
+                                            : 'El responsable de bodega u origen firma en el celular para validar el despacho privado.'}
+                                        signerRole={offer.destinationWarehouseId ? 'other' : 'warehouse_manager'}
                                         requireDocumentId
                                         savedAt={originSignatureSavedAt}
                                         onSave={handleSaveOriginSignature}
@@ -1021,11 +967,19 @@ export default function TripLoadingPage() {
                             {/* BotÃ³n para forzar avance a PIN si todos cargados */}
                             {manifestItems.length > 0 && manifestItems.every(isLoadingItemResolved) && (
                                 <Button
-                                    onClick={() => setStage('entering_pin')}
+                                    onClick={() => {
+                                        if (offer.isPrivateFleet && !originSignatureSavedAt) {
+                                            toast.warning('Firma requerida', 'Captura la firma del responsable antes de pedir el PIN.');
+                                            scrollToOriginSignature();
+                                            return;
+                                        }
+
+                                        setStage('entering_pin');
+                                    }}
                                     className="w-full mt-6"
                                     variant="primary"
                                     size="lg"
-                                    disabled={offer.isPrivateFleet && !originSignatureSavedAt}
+                                    disabled={isProcessing}
                                 >
                                     <Shield className="w-5 h-5" />
                                     Continuar al PIN de Salida

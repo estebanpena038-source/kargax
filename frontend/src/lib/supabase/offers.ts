@@ -125,9 +125,13 @@ export interface CreateOfferData {
     originDepartment: string;
     originCity: string;
     originAddress: string;
+    originLatitude?: number | null;
+    originLongitude?: number | null;
     destinationDepartment: string;
     destinationCity: string;
     destinationAddress: string;
+    destinationLatitude?: number | null;
+    destinationLongitude?: number | null;
     pickupDate: string;
     pickupTimeStart: string;
     pickupTimeEnd: string;
@@ -282,9 +286,13 @@ function toSnakeCase(data: CreateOfferData): Record<string, unknown> {
         origin_department: data.originDepartment,
         origin_city: data.originCity,
         origin_address: data.originAddress,
+        origin_latitude: data.originLatitude,
+        origin_longitude: data.originLongitude,
         destination_department: data.destinationDepartment,
         destination_city: data.destinationCity,
         destination_address: data.destinationAddress,
+        destination_latitude: data.destinationLatitude,
+        destination_longitude: data.destinationLongitude,
         pickup_date: data.pickupDate,
         pickup_time_start: data.pickupTimeStart,
         pickup_time_end: data.pickupTimeEnd,

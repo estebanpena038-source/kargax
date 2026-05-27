@@ -46,7 +46,7 @@ export function PlanLimitPaywallDialog({
                         <DialogHeader className="mb-0 space-y-1">
                             <DialogTitle className="text-white">{copy.title}</DialogTitle>
                             <DialogDescription className="text-emerald-50/75">
-                                Launch Pilot y Free conservan tus datos; para crear mas capacidad necesitas plan pago.
+                                Acceso Operativo y Free conservan tus datos; para crear mas capacidad necesitas plan pago.
                             </DialogDescription>
                         </DialogHeader>
                     </div>

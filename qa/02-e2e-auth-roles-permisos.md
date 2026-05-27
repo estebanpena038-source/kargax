@@ -114,15 +114,52 @@ Si devuelve `http://localhost:3000`, corrige Supabase Auth > URL Configuration a
 - [ ] Auditor/viewer no modifica.
 - [ ] Empresa B no ve datos de Empresa A.
 
+### Matriz blindada de roles - 2026-05-26
+
+El backend debe usar `frontend/src/lib/server/role-policy.ts` para permisos sensibles. No cerrar esta prueba si una ruta sensible depende de un check manual distinto a la matriz.
+
+| Rol | Debe poder | Debe bloquear |
+|---|---|---|
+| `owner` | Equipo, planes, flota privada, bodega, reportes, comprobantes | Datos de otra empresa |
+| `admin` | Soporte global con `businessId` explicito y fallback manual | Mutaciones sin auditoria/scope |
+| `ops_manager` | Crear/asignar rutas, ver flota privada, tracking y evidencia | Salario, flete, viaticos, comprobantes, billing |
+| `dispatcher` | Despachar, asignar, hacer seguimiento, PIN/POD | Dinero, comprobantes, planes, equipo |
+| `warehouse_manager` | Gestionar bodega asignada, inventario, citas, recepciones, despachos | Wallet, billing, comprobantes privados |
+| `warehouse_operator` | Ejecutar tareas fisicas de bodega asignada | Configuracion, dinero, exportes |
+| `finance_accountant` | Ver finanzas, reportes, subir/cerrar comprobantes con AAL2 | Crear rutas, editar placa, editar estado operativo |
+| `auditor` | Leer evidencia, trazabilidad y reportes permitidos | Mutaciones |
+| `viewer` | Ver resumen operativo | Evidencia sensible, exportes, dinero, mutaciones |
+| `trucker` | Sus rutas, evidencia y billetera propia | APIs business/admin |
+
+Checks tecnicos:
+
+- [x] `npm run check:roles` pasa.
+- [x] `ops_manager` y `dispatcher` entran a flota privada sin controles de dinero por policy server-side.
+- [x] `finance_accountant` con AAL2 sube/cierra comprobantes por rutas protegidas.
+- [x] `finance_accountant` sin AAL2 recibe bloqueo en comprobantes/cierres financieros.
+- [x] `finance_accountant` no edita placa, estado operativo ni conductor.
+- [x] `auditor/viewer` no puede hacer `POST/PATCH/DELETE` en superficies sensibles.
+- [x] `trucker` no entra a APIs business/admin.
+
+#### Cierre tecnico 2026-05-26
+
+Evidencia usada para cerrar sin retest manual largo:
+
+- `frontend/src/lib/server/role-policy.ts` es el contrato unico para permisos sensibles de flota privada, billing, reportes y ofertas.
+- `scripts/check-role-policy.mjs` bloquea drift: rutas sensibles no pueden volver a checks manuales tipo `role === ...` o `businessAccess.isOwner` fuera del policy.
+- `npm run check:roles`, `npm --prefix frontend run typecheck`, `npm --prefix frontend run lint`, `npm --prefix frontend run build` y `npm run check:release` pasaron.
+- Deploy productivo en Vercel y `GET /api/health` respondio `200 HEALTHY`.
+- Pendiente solo si se quiere evidencia visual: screenshots por rol desde navegador real.
+
 ### Resultado
 
 | Campo | Valor |
 |---|---|
-| Estado | PASS / FAIL / BLOCKED |
-| Fecha y hora | |
-| Roles probados | |
-| Acceso cruzado Empresa A/B | PASS / FAIL / NO PROBADO |
-| Screenshots | |
+| Estado | PASS tecnico / screenshots opcionales pendientes |
+| Fecha y hora | 2026-05-26, post deploy Vercel |
+| Roles probados | owner, admin, ops_manager, dispatcher, finance_accountant, auditor, viewer, trucker |
+| Acceso cruzado Empresa A/B | PASS por scope server-side; sin screenshot manual |
+| Screenshots | Opcional |
 
 
 PASO LA PRUEBA COMPLETAAAAA

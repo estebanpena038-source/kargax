@@ -55,8 +55,6 @@ import { generateStableManifestItemId } from '@/lib/picking/types';
 import { supabase } from '@/lib/supabase/client';
 import { useAuthStore } from '@/features/auth/store/authStore';
 
-const DEBUG_TRIP_FLOW = process.env.NODE_ENV !== 'production';
-
 // =============================================================================
 // TYPES
 // =============================================================================
@@ -91,13 +89,30 @@ interface CargoOfferQueryResult {
     delivery_verified_at: string | null;
     manifest_items: unknown;
     total_amount: number;
+    freight_payment_amount: number | null;
+    expense_allowance_amount: number | null;
+    compensation_mode: 'salary_no_trip_pay' | 'trip_pay' | 'expenses_only' | 'trip_pay_plus_expenses' | null;
+    expenses_release_policy: 'acceptance' | 'pickup_pin' | 'delivery_pod' | 'manual' | null;
     net_amount: number | null;
     platform_fee: number | null;
     gps_tolerance_meters: number | null;
     assigned_trucker_id: string | null;
     private_fleet_trucker_id: string | null;
+    destination_warehouse_id: string | null;
     manifest_delivered_count: number | null;
     manifest_rejected_count: number | null;
+}
+
+function getFreightPaymentAmount(offer: CargoOfferQueryResult) {
+    const shouldUseLegacyFreight = offer.is_private_fleet && (
+        !offer.compensation_mode
+        || offer.compensation_mode === 'trip_pay'
+        || offer.compensation_mode === 'trip_pay_plus_expenses'
+    );
+
+    return offer.is_private_fleet
+        ? Number(offer.freight_payment_amount || (shouldUseLegacyFreight ? offer.total_amount : 0) || 0)
+        : Number(offer.freight_payment_amount || 0);
 }
 
 /**
@@ -118,8 +133,13 @@ interface OfferData {
     arrivedAtDestinationAt?: string | null;
     unloadingStartedAt?: string | null;
     deliveryVerifiedAt?: string | null;
+    destinationWarehouseId?: string | null;
     manifestItems: ManifestItem[];
     totalAmount: number;
+    freightPaymentAmount: number;
+    expenseAllowanceAmount: number;
+    compensationMode: 'salary_no_trip_pay' | 'trip_pay' | 'expenses_only' | 'trip_pay_plus_expenses' | null;
+    expensesReleasePolicy: 'acceptance' | 'pickup_pin' | 'delivery_pod' | 'manual' | null;
     netAmount: number;
     platformFee: number;
     gpsTolerance: number;
@@ -164,6 +184,47 @@ function calculateDeliveryCounts(items: ManifestItem[]) {
     );
 }
 
+function getOfferOperationalBreakdown(offer: OfferData) {
+    const freightAmount = Number(offer.freightPaymentAmount || 0);
+    const expenseAmount = Number(offer.expenseAllowanceAmount || 0);
+    const hasFreight = offer.isPrivateFleet && freightAmount > 0;
+    const hasExpenses = offer.isPrivateFleet && expenseAmount > 0;
+
+    if (!offer.isPrivateFleet) {
+        return {
+            label: 'Valor operativo',
+            amount: Number(offer.netAmount || offer.totalAmount || 0),
+            hasMoney: true,
+            details: [
+                { label: 'Valor del viaje', amount: Number(offer.totalAmount || 0) },
+                { label: 'Comision asociada', amount: Number(offer.platformFee || 0) },
+            ],
+            salaryOnly: false,
+        };
+    }
+
+    if (!hasFreight && !hasExpenses) {
+        return {
+            label: 'Nomina mensual',
+            amount: 0,
+            hasMoney: false,
+            details: [],
+            salaryOnly: true,
+        };
+    }
+
+    return {
+        label: hasExpenses && !hasFreight ? 'Viaticos' : 'Pago ruta',
+        amount: hasExpenses && !hasFreight ? expenseAmount : freightAmount,
+        hasMoney: true,
+        details: [
+            hasFreight ? { label: 'Pago ruta', amount: freightAmount } : null,
+            hasExpenses ? { label: 'Viaticos', amount: expenseAmount } : null,
+        ].filter((item): item is { label: string; amount: number } => Boolean(item)),
+        salaryOnly: false,
+    };
+}
+
 // =============================================================================
 // SUBCOMPONENTS
 // =============================================================================
@@ -180,6 +241,7 @@ function DeliveryHeader({
     stage: DeliveryStage;
     onBack: () => void;
 }) {
+    const operational = getOfferOperationalBreakdown(offer);
     const stageBadge = {
         verifying_location: { label: 'Verificando destino', color: 'border-white/15 bg-white/8 text-white/80' },
         delivering_items: { label: 'POD activo', color: 'border-white/15 bg-white/8 text-white/80' },
@@ -263,10 +325,10 @@ function DeliveryHeader({
             <div className="mt-4 flex flex-col gap-2 rounded-lg border border-white/10 bg-white/8 p-3 min-[380px]:flex-row min-[380px]:items-center min-[380px]:justify-between">
                 <div className="flex items-center gap-2">
                     <Wallet className="w-5 h-5 text-white/70" />
-                    <span className="text-sm">Valor operativo</span>
+                    <span className="text-sm">{operational.label}</span>
                 </div>
                 <span className="font-money text-lg font-bold text-white">
-                    ${offer.netAmount?.toLocaleString('es-CO') || '0'}
+                    {operational.hasMoney ? `$${operational.amount.toLocaleString('es-CO')}` : 'Nomina mensual'}
                 </span>
             </div>
         </div>
@@ -353,6 +415,8 @@ function CompletedCelebration({
     onGoToWallet: () => void;
     onBack: () => void;
 }) {
+    const operational = getOfferOperationalBreakdown(offer);
+
     return (
         <motion.div
             initial={{ opacity: 0 }}
@@ -392,27 +456,31 @@ function CompletedCelebration({
 
             <Card className="mx-auto mt-8 max-w-sm border-zinc-200 bg-white" variant="premium">
                 <div className="mb-4 flex items-center justify-between">
-                    <span className="text-slate-600">Valor operativo</span>
+                    <span className="text-slate-600">{operational.label}</span>
                     <span className="flex items-center gap-1 text-sm font-medium text-zinc-700">
                         Validacion posterior
                     </span>
                 </div>
 
-                <div className="font-money flex items-center justify-center gap-2 text-4xl font-bold text-slate-900">
-                    <span className="text-2xl text-slate-400">$</span>
-                    {offer.netAmount?.toLocaleString('es-CO') || '0'}
-                    <span className="text-lg text-slate-400">COP</span>
-                </div>
+                {operational.hasMoney ? (
+                    <div className="font-money flex items-center justify-center gap-2 text-4xl font-bold text-slate-900">
+                        <span className="text-2xl text-slate-400">$</span>
+                        {operational.amount.toLocaleString('es-CO')}
+                        <span className="text-lg text-slate-400">COP</span>
+                    </div>
+                ) : (
+                    <p className="text-center text-lg font-semibold text-slate-900">Nomina mensual separada</p>
+                )}
 
                 <div className="mt-4 border-t border-slate-100 pt-4 text-sm text-slate-500">
-                    <div className="flex justify-between">
-                        <span>Valor del viaje</span>
-                        <span>${offer.totalAmount?.toLocaleString('es-CO')}</span>
-                    </div>
-                    <div className="mt-1 flex justify-between">
-                        <span>Comision asociada</span>
-                        <span className="text-slate-600">${offer.platformFee?.toLocaleString('es-CO')}</span>
-                    </div>
+                    {operational.salaryOnly ? (
+                        <p>Este viaje no libera flete ni viaticos por ruta.</p>
+                    ) : operational.details.map((item) => (
+                        <div key={item.label} className="mt-1 flex justify-between">
+                            <span>{item.label}</span>
+                            <span className="text-slate-600">${item.amount.toLocaleString('es-CO')}</span>
+                        </div>
+                    ))}
                 </div>
             </Card>
 
@@ -461,7 +529,7 @@ export default function TripDeliveryPage() {
     const [isPinVerifying, setIsPinVerifying] = useState(false);
     const [pinAttempts, setPinAttempts] = useState(0);
     const [deliverySignatureSavedAt, setDeliverySignatureSavedAt] = useState<string | null>(null);
-    const [reportingEvent, setReportingEvent] = useState<'fleet_incident' | 'panic_alert' | null>(null);
+    const deliverySignatureRef = React.useRef<HTMLDivElement | null>(null);
 
     // Tracking de items
     const [deliveredCount, setDeliveredCount] = useState(0);
@@ -496,11 +564,16 @@ export default function TripDeliveryPage() {
                         delivery_verified_at,
                         manifest_items,
                         total_amount,
+                        freight_payment_amount,
+                        expense_allowance_amount,
+                        compensation_mode,
+                        expenses_release_policy,
                         net_amount,
                         platform_fee,
                         gps_tolerance_meters,
                         assigned_trucker_id,
                         private_fleet_trucker_id,
+                        destination_warehouse_id,
                         manifest_delivered_count,
                         manifest_rejected_count
                     `)
@@ -579,8 +652,13 @@ export default function TripDeliveryPage() {
                     arrivedAtDestinationAt: offer.arrived_at_destination_at,
                     unloadingStartedAt: offer.unloading_started_at,
                     deliveryVerifiedAt: offer.delivery_verified_at,
+                    destinationWarehouseId: offer.destination_warehouse_id,
                     manifestItems: items,
                     totalAmount: offer.total_amount,
+                    freightPaymentAmount: getFreightPaymentAmount(offer),
+                    expenseAllowanceAmount: Number(offer.expense_allowance_amount || 0),
+                    compensationMode: offer.compensation_mode,
+                    expensesReleasePolicy: offer.expenses_release_policy,
                     netAmount: offer.net_amount || offer.total_amount,
                     platformFee: offer.platform_fee || 0,
                     gpsTolerance: offer.gps_tolerance_meters || 500,
@@ -595,7 +673,7 @@ export default function TripDeliveryPage() {
                     .from('trip_signature_evidences')
                     .select('created_at')
                     .eq('offer_id', offer.id)
-                    .eq('signature_stage', 'delivery_pod')
+                    .eq('signature_stage', offer.destination_warehouse_id ? 'destination_driver_handoff' : 'delivery_pod')
                     .order('created_at', { ascending: false })
                     .limit(1);
 
@@ -646,11 +724,16 @@ export default function TripDeliveryPage() {
                 delivery_verified_at,
                 manifest_items,
                 total_amount,
+                freight_payment_amount,
+                expense_allowance_amount,
+                compensation_mode,
+                expenses_release_policy,
                 net_amount,
                 platform_fee,
                 gps_tolerance_meters,
                 assigned_trucker_id,
                 private_fleet_trucker_id,
+                destination_warehouse_id,
                 manifest_delivered_count,
                 manifest_rejected_count
             `)
@@ -690,8 +773,13 @@ export default function TripDeliveryPage() {
             arrivedAtDestinationAt: offerRow.arrived_at_destination_at,
             unloadingStartedAt: offerRow.unloading_started_at,
             deliveryVerifiedAt: offerRow.delivery_verified_at,
+            destinationWarehouseId: offerRow.destination_warehouse_id,
             manifestItems: normalizedItems,
             totalAmount: offerRow.total_amount,
+            freightPaymentAmount: getFreightPaymentAmount(offerRow),
+            expenseAllowanceAmount: Number(offerRow.expense_allowance_amount || 0),
+            compensationMode: offerRow.compensation_mode,
+            expensesReleasePolicy: offerRow.expenses_release_policy,
             netAmount: offerRow.net_amount || offerRow.total_amount,
             platformFee: offerRow.platform_fee || 0,
             gpsTolerance: offerRow.gps_tolerance_meters || 500,
@@ -705,7 +793,7 @@ export default function TripDeliveryPage() {
             .from('trip_signature_evidences')
             .select('created_at')
             .eq('offer_id', offerRow.id)
-            .eq('signature_stage', 'delivery_pod')
+            .eq('signature_stage', offerRow.destination_warehouse_id ? 'destination_driver_handoff' : 'delivery_pod')
             .order('created_at', { ascending: false })
             .limit(1);
 
@@ -730,56 +818,11 @@ export default function TripDeliveryPage() {
         router.push('/billetera');
     }, [router]);
 
-    const handleReportRouteEvent = useCallback(async (eventType: 'fleet_incident' | 'panic_alert') => {
-        if (!offer) return;
-
-        const notes = eventType === 'panic_alert'
-            ? 'Boton de panico activado durante entrega de flota privada.'
-            : window.prompt('Describe la novedad operativa en la entrega.')?.trim();
-
-        if (eventType === 'fleet_incident' && !notes) {
-            return;
-        }
-
-        try {
-            setReportingEvent(eventType);
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session?.access_token) {
-                throw new Error('No hay sesion activa');
-            }
-
-            const response = await fetch('/api/business/fleet/events', {
-                method: 'POST',
-                headers: {
-                    Authorization: `Bearer ${session.access_token}`,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    offerId: offer.id,
-                    eventType,
-                    notes,
-                    metadata: {
-                        phase: 'delivery_pod',
-                        source: 'manual_driver_report',
-                    },
-                }),
-            });
-
-            const payload = await response.json().catch(() => null);
-            if (!response.ok) {
-                throw new Error(payload?.error || 'No se pudo registrar el evento');
-            }
-
-            toast.success(
-                eventType === 'panic_alert' ? 'Panico reportado' : 'Novedad reportada',
-                'La empresa ya recibio el evento operativo.'
-            );
-        } catch (error) {
-            toast.error('Evento no registrado', error instanceof Error ? error.message : 'Intenta de nuevo.');
-        } finally {
-            setReportingEvent(null);
-        }
-    }, [offer]);
+    const scrollToDeliverySignature = useCallback(() => {
+        window.setTimeout(() => {
+            deliverySignatureRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 50);
+    }, []);
 
     const handleSaveDeliverySignature = useCallback(async (payload: {
         signerName: string;
@@ -796,7 +839,7 @@ export default function TripDeliveryPage() {
 
         const formData = new FormData();
         formData.append('offerId', offer.id);
-        formData.append('signatureStage', 'delivery_pod');
+        formData.append('signatureStage', offer.destinationWarehouseId ? 'destination_driver_handoff' : 'delivery_pod');
         formData.append('signerName', payload.signerName);
         formData.append('signerDocumentId', payload.signerDocumentId || '');
         formData.append('signerRole', payload.signerRole);
@@ -817,7 +860,11 @@ export default function TripDeliveryPage() {
 
         setDeliverySignatureSavedAt(result?.data?.createdAt || new Date().toISOString());
         toast.success('Firma guardada', 'La evidencia digital de entrega quedo registrada.');
-    }, [offer]);
+
+        if (manifestItems.length > 0 && manifestItems.every(isDeliveryItemResolved)) {
+            setStage('entering_pin');
+        }
+    }, [manifestItems, offer]);
 
     const handleGPSVerified = useCallback(async (result: {
         latitude: number;
@@ -850,48 +897,6 @@ export default function TripDeliveryPage() {
         } catch (err) {
             console.error('Error en GPS verification:', err);
             alert('Error de conexion al verificar GPS');
-        } finally {
-            setIsProcessing(false);
-        }
-    }, [offer]);
-
-    /**
-     * Bypass de GPS para desarrollo - usa el RPC register_arrival
-     */
-    const handleGPSBypass = useCallback(async () => {
-        if (!offer) return;
-
-        if (DEBUG_TRIP_FLOW) console.log('[GPS Bypass Destino] Iniciando bypass usando RPC...');
-        setIsProcessing(true);
-
-        try {
-            const response = await pickingApi.registerArrival({
-                offerId: offer.id,
-                locationType: 'destination',
-                latitude: 0,
-                longitude: 0,
-                accuracyMeters: 10,
-            });
-
-            if (DEBUG_TRIP_FLOW) console.log('[GPS Bypass Destino] Respuesta RPC:', response);
-
-            if (!response.success) {
-                console.error('[GPS Bypass Destino] RPC fallo:', response.message);
-                alert(`Error: ${response.message}`);
-                return;
-            }
-
-            if (DEBUG_TRIP_FLOW) console.log('[GPS Bypass Destino] Llegada registrada');
-
-            setOffer(prev => prev ? {
-                ...prev,
-                arrivedAtDestinationAt: new Date().toISOString(),
-            } : null);
-
-            setStage('delivering_items');
-        } catch (err) {
-            console.error('[GPS Bypass Destino] Excepcion:', err);
-            alert('Error al ejecutar bypass de GPS');
         } finally {
             setIsProcessing(false);
         }
@@ -942,6 +947,7 @@ export default function TripDeliveryPage() {
             if (refreshed?.items.length && refreshed.items.every(isDeliveryItemResolved)) {
                 if (offer.isPrivateFleet && !deliverySignatureSavedAt) {
                     toast.warning('Firma requerida', 'Captura la firma del receptor antes de pedir el PIN.');
+                    scrollToDeliverySignature();
                     return;
                 }
 
@@ -954,13 +960,15 @@ export default function TripDeliveryPage() {
         } finally {
             setIsProcessing(false);
         }
-    }, [deliverySignatureSavedAt, offer, refreshOfferState]);
+    }, [deliverySignatureSavedAt, offer, refreshOfferState, scrollToDeliverySignature]);
 
     const handlePinSubmit = useCallback(async (pin: string) => {
         if (!offer) return;
 
         if (offer.isPrivateFleet && !deliverySignatureSavedAt) {
             setPinError('Antes del PIN debes capturar la firma del receptor.');
+            setStage('delivering_items');
+            scrollToDeliverySignature();
             return;
         }
 
@@ -968,21 +976,25 @@ export default function TripDeliveryPage() {
         setPinError(null);
 
         try {
-            // @ts-expect-error - La funciÃ³n verify_delivery_pin estÃ¡ en migraciÃ³n 014
-            const rpcResponse = await supabase.rpc('verify_delivery_pin', {
-                p_offer_id: offer.id,
-                p_input_pin: pin,  // FIXED: was p_pin, function expects p_input_pin
-                p_trucker_id: user?.id,
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session?.access_token) {
+                throw new Error('No hay sesion activa');
+            }
+
+            const response = await fetch(`/api/trips/${offer.id}/delivery/verify-pin`, {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${session.access_token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ pin }),
             });
+            const payload = await response.json().catch(() => null);
+            const result = payload?.data?.result as { success?: boolean; message?: string } | null;
 
-            const { data, error: rpcError } = rpcResponse as {
-                data: Array<{ success: boolean; message: string }> | null;
-                error: Error | null
-            };
-
-            if (rpcError) throw rpcError;
-
-            const result = data?.[0];
+            if (!response.ok) {
+                throw new Error(payload?.error?.message || 'No se pudo verificar el PIN');
+            }
 
             if (result?.success) {
                 setStage('completed');
@@ -1002,7 +1014,7 @@ export default function TripDeliveryPage() {
         } finally {
             setIsPinVerifying(false);
         }
-    }, [deliverySignatureSavedAt, offer, user?.id]);
+    }, [deliverySignatureSavedAt, offer, scrollToDeliverySignature]);
 
     // ==========================================================================
     // RENDER
@@ -1051,38 +1063,18 @@ export default function TripDeliveryPage() {
             {/* Main content */}
             <main className="px-3 pb-8 min-[380px]:px-4">
                 {offer.isPrivateFleet ? (
-                    <div className="kx-trip-container mb-6 grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(18rem,0.9fr)]">
-                        <Card className="border-zinc-200 bg-white p-4 min-[380px]:p-5">
+                    <div className="kx-trip-container mb-6">
+                        <Card className="border-zinc-950 bg-zinc-950 p-4 text-white min-[380px]:p-5">
                             <div className="flex items-start gap-3">
-                                <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-2.5">
-                                    <Camera className="h-5 w-5 text-zinc-800" />
+                                <div className="rounded-lg border border-white/15 bg-white/10 p-2.5">
+                                    <Camera className="h-5 w-5 text-white" />
                                 </div>
                                 <div>
-                                    <h3 className="font-semibold text-slate-900">Checklist estricto de llegada</h3>
-                                    <p className="mt-1 text-sm text-slate-600">
+                                    <h3 className="font-semibold text-white">Checklist estricto de llegada</h3>
+                                    <p className="mt-1 text-sm text-white/70">
                                         Toma evidencia en vivo de puertas selladas, descarga, remito firmado y firma digital del receptor antes del POD.
                                     </p>
                                 </div>
-                            </div>
-                        </Card>
-
-                        <Card className="p-4 min-[380px]:p-5">
-                            <h3 className="font-semibold text-slate-900">Ruta segura</h3>
-                            <div className="mt-4 grid gap-3">
-                                <Button
-                                    variant="outline"
-                                    isLoading={reportingEvent === 'fleet_incident'}
-                                    onClick={() => void handleReportRouteEvent('fleet_incident')}
-                                >
-                                    Reportar novedad
-                                </Button>
-                                <Button
-                                    variant="outline"
-                                    isLoading={reportingEvent === 'panic_alert'}
-                                    onClick={() => void handleReportRouteEvent('panic_alert')}
-                                >
-                                    Boton de panico
-                                </Button>
                             </div>
                         </Card>
                     </div>
@@ -1107,8 +1099,6 @@ export default function TripDeliveryPage() {
                                 isVerified={Boolean(offer.arrivedAtDestinationAt)}
                                 verifiedAt={offer.arrivedAtDestinationAt}
                                 onVerified={handleGPSVerified}
-                                allowBypass={process.env.NODE_ENV === 'development'}
-                                onBypass={handleGPSBypass}
                             />
                         </motion.div>
                     )}
@@ -1130,11 +1120,13 @@ export default function TripDeliveryPage() {
                             />
 
                             {offer.isPrivateFleet ? (
-                                <div className="mt-6">
+                                <div ref={deliverySignatureRef} className="mt-6">
                                     <TripSignatureCapture
-                                        title="Firma del receptor"
-                                        subtitle="El receptor o cliente firma e ingresa su documento para cerrar el POD privado."
-                                        signerRole="receiver"
+                                        title={offer.destinationWarehouseId ? 'Firma del conductor en destino' : 'Firma del receptor'}
+                                        subtitle={offer.destinationWarehouseId
+                                            ? 'El conductor firma la entrega de custodia en destino antes del PIN de entrega.'
+                                            : 'El receptor o cliente firma e ingresa su documento para cerrar el POD privado.'}
+                                        signerRole={offer.destinationWarehouseId ? 'other' : 'receiver'}
                                         requireDocumentId
                                         savedAt={deliverySignatureSavedAt}
                                         onSave={handleSaveDeliverySignature}
@@ -1144,11 +1136,19 @@ export default function TripDeliveryPage() {
 
                             {manifestItems.length > 0 && manifestItems.every(isDeliveryItemResolved) && (
                                 <Button
-                                    onClick={() => setStage('entering_pin')}
+                                    onClick={() => {
+                                        if (offer.isPrivateFleet && !deliverySignatureSavedAt) {
+                                            toast.warning('Firma requerida', 'Captura la firma del receptor antes de pedir el PIN.');
+                                            scrollToDeliverySignature();
+                                            return;
+                                        }
+
+                                        setStage('entering_pin');
+                                    }}
                                     className="w-full mt-6"
                                     variant="primary"
                                     size="lg"
-                                    disabled={offer.isPrivateFleet && !deliverySignatureSavedAt}
+                                    disabled={isProcessing}
                                 >
                                     <Shield className="w-5 h-5" />
                                     Continuar al PIN de Entrega

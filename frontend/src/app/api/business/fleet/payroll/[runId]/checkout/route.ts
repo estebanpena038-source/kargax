@@ -111,6 +111,14 @@ export async function POST(
         });
     }
 
+    if (String(run.payment_mode || 'external_proof') !== 'mercadopago_funded') {
+        return apiError('Esta liquidacion es de comprobante externo. Registra el comprobante de pago en vez de fondear por Mercado Pago.', {
+            requestId,
+            status: 409,
+            code: 'PRIVATE_FLEET_PAYROLL_EXTERNAL_PROOF_MODE',
+        });
+    }
+
     const totalAmount = Math.round(Number(run.total_amount || 0));
     if (totalAmount <= 0) {
         return apiError('La nomina no tiene monto para fondear.', {
