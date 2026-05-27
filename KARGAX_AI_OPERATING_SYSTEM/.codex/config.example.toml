@@ -1,0 +1,42 @@
+# .codex/config.example.toml
+# Copia este archivo como .codex/config.toml si quieres defaults del proyecto.
+# Ajusta segun tu entorno local y las opciones disponibles en tu cliente Codex.
+
+# Objetivo: trabajar seguro en KargaX, con aprobaciones para acciones riesgosas.
+
+[workspace]
+name = "kargax"
+root_hint = "."
+
+[behavior]
+# Mantener cambios pequeños y verificables.
+planning_first = true
+summarize_changes = true
+
+[review]
+require_tests_summary = true
+require_risk_summary = true
+
+[project]
+important_paths = [
+  "AGENTS.md",
+  "frontend/AGENTS.md",
+  "supabase/AGENTS.md",
+  "README.md",
+  "frontend/src/app/planes/page.tsx",
+  "frontend/src/lib/billing/pricing.ts",
+  "frontend/src/lib/billing/plan-limits.ts",
+  "supabase/migrations",
+  "COMMERCIAL",
+  "SPTRINTS"
+]
+
+[commands]
+frontend_check = "cd frontend && npm run check"
+frontend_build = "cd frontend && npm run build"
+frontend_lint = "cd frontend && npm run lint"
+root_audit = "npm run repo:audit"
+
+# Nota:
+# Este archivo es ejemplo de intencion del proyecto. Si tu Codex client usa otra sintaxis exacta,
+# pide a Codex que lo adapte a tu version con: "Lee .codex/config.example.toml y crea config.toml valido para mi version".

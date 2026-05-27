@@ -351,6 +351,23 @@ export default function TripHubPage() {
     const originStop = formatRouteStop(country, trip.offer.originAddress, trip.offer.originCity, trip.offer.originDepartment);
     const destinationStop = formatRouteStop(country, trip.offer.destinationAddress, trip.offer.destinationCity, trip.offer.destinationDepartment);
     const value = trip.offer.netAmount || trip.offer.totalAmount || 0;
+    const freightAmount = Number(trip.offer.freightPaymentAmount || 0);
+    const expenseAmount = Number(trip.offer.expenseAllowanceAmount || 0);
+    const hasPrivateFreight = trip.offer.isPrivateFleet && freightAmount > 0;
+    const hasPrivateExpenses = trip.offer.isPrivateFleet && expenseAmount > 0;
+    const privatePrimaryAmount = hasPrivateExpenses && !hasPrivateFreight
+        ? expenseAmount
+        : hasPrivateFreight
+            ? freightAmount
+            : expenseAmount;
+    const primaryOperationalAmount = trip.offer.isPrivateFleet ? privatePrimaryAmount : value;
+    const primaryOperationalLabel = trip.offer.isPrivateFleet
+        ? hasPrivateExpenses && !hasPrivateFreight
+            ? 'Viaticos'
+            : hasPrivateFreight
+                ? 'Pago ruta'
+                : 'Nomina mensual'
+        : 'Valor operativo';
     const nextStage = nextStep?.stage;
     const NextStepIcon = nextStep?.icon;
     const isBlocked = !trip.canOpenTrip || !nextStep;
@@ -432,10 +449,20 @@ export default function TripHubPage() {
                             </div>
 
                             <div className="rounded-lg border border-white/15 bg-white/8 p-4 text-left lg:min-w-64">
-                                <p className="text-xs uppercase tracking-[0.18em] text-white/52">Valor operativo</p>
-                                <p className="mt-2 font-money text-2xl font-semibold text-white">{formatMoney(value)}</p>
+                                <p className="text-xs uppercase tracking-[0.18em] text-white/52">{primaryOperationalLabel}</p>
+                                {trip.offer.isPrivateFleet && !hasPrivateFreight && !hasPrivateExpenses ? (
+                                    <p className="mt-2 text-lg font-semibold text-white">Nomina mensual separada</p>
+                                ) : (
+                                    <p className="mt-2 font-money text-2xl font-semibold text-white">{formatMoney(primaryOperationalAmount)}</p>
+                                )}
+                                {trip.offer.isPrivateFleet && (hasPrivateFreight || hasPrivateExpenses) ? (
+                                    <div className="mt-3 grid gap-1 text-xs leading-5 text-white/62">
+                                        {hasPrivateFreight ? <span>Pago ruta: {formatMoney(freightAmount)}</span> : null}
+                                        {hasPrivateExpenses ? <span>Viaticos: {formatMoney(expenseAmount)}</span> : null}
+                                    </div>
+                                ) : null}
                                 <p className="mt-2 text-xs leading-5 text-white/55">
-                                    Los movimientos de billetera se validan aparte.
+                                    Flota privada se soporta con comprobante externo; no genera saldo retirable en wallet.
                                 </p>
                             </div>
                         </div>

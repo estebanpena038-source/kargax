@@ -113,6 +113,10 @@ export async function GET(
             delivery_verified_at,
             manifest_items,
             total_amount,
+            freight_payment_amount,
+            expense_allowance_amount,
+            compensation_mode,
+            expenses_release_policy,
             net_amount,
             platform_fee,
             gps_tolerance_meters,
@@ -160,6 +164,10 @@ export async function GET(
                 delivery_verified_at,
                 manifest_items,
                 total_amount,
+                freight_payment_amount,
+                expense_allowance_amount,
+                compensation_mode,
+                expenses_release_policy,
                 net_amount,
                 platform_fee,
                 gps_tolerance_meters,
@@ -299,6 +307,16 @@ export async function GET(
                 ? 'pickup'
                 : 'awaiting';
 
+    const shouldUseLegacyFreight = isPrivateFleet && (
+        !offer.compensation_mode
+        || offer.compensation_mode === 'trip_pay'
+        || offer.compensation_mode === 'trip_pay_plus_expenses'
+    );
+    const freightPaymentAmount = isPrivateFleet
+        ? Number(offer.freight_payment_amount || (shouldUseLegacyFreight ? offer.total_amount : 0) || 0)
+        : Number(offer.freight_payment_amount || 0);
+    const expenseAllowanceAmount = Number(offer.expense_allowance_amount || 0);
+
     return apiSuccess({
         offer: {
             id: offer.id,
@@ -330,6 +348,10 @@ export async function GET(
             deliveryVerifiedAt: offer.delivery_verified_at,
             manifestItems: offer.manifest_items,
             totalAmount: offer.total_amount,
+            freightPaymentAmount,
+            expenseAllowanceAmount,
+            compensationMode: offer.compensation_mode,
+            expensesReleasePolicy: offer.expenses_release_policy,
             netAmount: offer.net_amount,
             platformFee: offer.platform_fee,
             gpsToleranceMeters: offer.gps_tolerance_meters,

@@ -73,26 +73,26 @@ const planOptions = [
     {
         value: 'free',
         label: 'Free',
-        description: '1 bodega, 3 usuarios, 3 conductores privados y 25 viajes al mes',
+        description: '1 bodega, 2 usuarios, 3 conductores privados y 50 viajes al mes',
         priceCop: 0,
     },
     {
         value: 'growth',
-        label: 'Pro',
-        description: '5 bodegas, 20 usuarios, 20 conductores privados y 500 viajes al mes',
-        priceCop: 149000,
+        label: 'Growth',
+        description: '3 bodegas, 10 usuarios, 15 conductores privados y 500 viajes al mes',
+        priceCop: 299000,
     },
     {
         value: 'scale',
         label: 'Scale',
-        description: '25 bodegas, 100 usuarios, flota privada ilimitada y 5.000 viajes al mes',
-        priceCop: 399000,
+        description: '10 bodegas, 30 usuarios, 50 conductores privados y 2.000 viajes al mes',
+        priceCop: 799000,
     },
     {
         value: 'enterprise',
         label: 'Enterprise',
-        description: 'Holding multiempresa y capacidad sin limite',
-        priceCop: 1200000,
+        description: 'Volumen personalizado, holding multiempresa, API y control tower',
+        priceCop: 2500000,
     },
 ];
 

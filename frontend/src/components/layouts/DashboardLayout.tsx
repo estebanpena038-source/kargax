@@ -265,13 +265,13 @@ const getNavigationItems = (
             href: '/corporativo',
             allowedUserTypes: ['business', 'admin'],
         },
-        // Inspection Reports (for business)
+        // Marketplace digital evidence reports (for business)
         {
-            id: 'inspections',
-            labelKey: 'nav.inspections',
-            fallbackLabel: 'Inspecciones',
+            id: 'pod-marketplace',
+            labelKey: 'nav.podMarketplace',
+            fallbackLabel: 'Evidencia Digital MK',
             icon: ClipboardCheck,
-            href: '/inspecciones',
+            href: '/pod-marketplace',
             allowedUserTypes: ['business', 'admin'],
         },
         // Received Applications (for business) - WITH BADGE
@@ -1078,7 +1078,7 @@ export function DashboardLayout({
                 return user.userType === 'admin' || (businessAccess ? businessAccess.canCreateMarketplaceOffers : true);
             }
 
-            if (item.id === 'my-offers' || item.id === 'received-applications' || item.id === 'inspections') {
+            if (item.id === 'my-offers' || item.id === 'received-applications' || item.id === 'pod-marketplace') {
                 return user.userType === 'admin' || (businessAccess ? businessAccess.canViewOperations : true);
             }
 
@@ -1177,12 +1177,12 @@ export function DashboardLayout({
 
         if (entitlementState === 'pilot_active') {
             return typeof pilotDaysRemaining === 'number'
-                ? `Launch Pilot · ${pilotDaysRemaining} dias`
-                : 'Launch Pilot';
+                ? `Acceso Operativo · ${pilotDaysRemaining} dias`
+                : 'Acceso Operativo';
         }
 
         if (entitlementState === 'pilot_expired' && !businessAccess?.subscription?.plan_code) {
-            return 'Free · piloto vencido';
+            return 'Free · Acceso Operativo finalizado';
         }
 
         return businessAccess?.subscription?.plan?.name

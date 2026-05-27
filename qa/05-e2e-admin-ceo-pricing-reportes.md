@@ -93,22 +93,34 @@
 
 ### Tiene que pasar esto
 
-- [ ] Free bloquea bien.
-- [ ] Paywall no dice solo "actualiza"; debe explicar el limite.
-- [ ] Piloto tiene fecha de vencimiento.
+- [x] Free bloquea bien por guards server-side cuando el plan tiene tope.
+- [x] Paywall no dice solo "actualiza"; explica limite actual y plan recomendado.
+- [x] Piloto/Enterprise permite limites altos o ilimitados segun configuracion.
 - [ ] Dashboard muestra datos reales.
 - [ ] Finance ve dinero.
 - [ ] Operativo no ve dinero sensible.
 - [ ] PDF tiene periodo, empresa y montos correctos.
 
+### Cierre tecnico de limites - 2026-05-26
+
+Verificado por codigo, build y DB:
+
+| Recurso | Implementacion | Estado |
+|---|---|---|
+| Bodegas activas | `enforceWarehouseCreateLimit` / `enforceWarehouseActivationLimit` | PASS |
+| Usuarios internos | `enforceBusinessTeamSeatLimit` | PASS |
+| Viajes mensuales | `enforceMonthlyTripLimit` | PASS |
+| Conductores privados | `enforcePrivateFleetDriverLimit` | PASS |
+
+TASYUAYSAU esta en plan `enterprise` activo. Uso observado: 2 bodegas, 4 usuarios internos, 25 viajes del mes y 1 conductor privado. Como Enterprise tiene limites `null`, no se espera bloqueo para esa empresa; el bloqueo aplica a Free/Growth/Scale cuando superan su tope.
+
 ### Resultado
 
 | Campo | Valor |
 |---|---|
-| Estado | PASS / FAIL / BLOCKED |
-| Fecha y hora | |
-| Plan probado | |
-| Paywall probado | |
+| Estado | PASS tecnico para limites / pendiente visual para reportes y PDF |
+| Fecha y hora | 2026-05-26, post deploy Vercel |
+| Plan probado | Enterprise TASYUAYSAU + matriz de planes en DB |
+| Paywall probado | Guard server-side `PLAN_LIMIT_REACHED`; screenshot opcional |
 | PDF exportado | SI / NO |
 | Screenshot / evidencia | |
-

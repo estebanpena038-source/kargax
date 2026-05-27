@@ -2,6 +2,10 @@ import { NextRequest } from 'next/server';
 import { apiError, apiSuccess, getRequestId } from '@/lib/server/api-response';
 import { requireAal2Route } from '@/lib/server/route-auth';
 import { resolveBusinessAccessContext } from '@/lib/server/warehouses';
+import {
+    getBusinessPolicyCapabilities,
+    resolveEffectiveBusinessRole,
+} from '@/lib/server/role-policy';
 
 export async function PATCH(
     request: NextRequest,
@@ -17,8 +21,10 @@ export async function PATCH(
     const { supabaseAdmin, authUser, profile } = auth.context;
     const businessAccess = await resolveBusinessAccessContext(supabaseAdmin, authUser.id, profile);
     const { memberId } = await params;
-    const canManageFleet = profile?.user_type === 'admin' || Boolean(businessAccess.businessId && businessAccess.isOwner);
-    const canManagePayroll = canManageFleet || businessAccess.teamMember?.role === 'finance_accountant';
+    const effectiveRole = resolveEffectiveBusinessRole(profile, businessAccess);
+    const roleCapabilities = getBusinessPolicyCapabilities(effectiveRole);
+    const canManageFleet = roleCapabilities.canManagePrivateFleetOperationalProfile;
+    const canManagePayroll = roleCapabilities.canManagePrivateFleetMoney;
 
     if (!canManageFleet && !canManagePayroll) {
         return apiError('Solo owner/admin/contabilidad puede editar datos sensibles de flota privada', {

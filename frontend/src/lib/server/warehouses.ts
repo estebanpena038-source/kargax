@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { BillingPlan, WarehouseCapabilities, WarehouseRole } from '@/lib/warehouses/types';
+import type { BillingPlan, CommercialActivationSnapshot, WarehouseCapabilities, WarehouseRole } from '@/lib/warehouses/types';
 import { createAdminNotification } from '@/lib/server/route-auth';
 import type { BusinessTeamRole } from '@/lib/business-roles';
 
@@ -180,6 +180,9 @@ export interface WarehouseAccessContext {
         department: string;
         city: string;
         address: string;
+        latitude: number | null;
+        longitude: number | null;
+        gps_tolerance_meters: number | null;
         description: string | null;
         notes: string | null;
         timezone: string;
@@ -881,6 +884,172 @@ export async function getBusinessPlanSnapshot(
     };
 }
 
+export async function getBusinessCommercialActivationSnapshot(
+    supabaseAdmin: AdminClient,
+    businessId: string
+): Promise<CommercialActivationSnapshot> {
+    const activationTarget = 3;
+
+    const [
+        warehousesResponse,
+        fleetResponse,
+        offersResponse,
+        completedOffersResponse,
+        teamResponse,
+        reportsResponse,
+    ] = await Promise.all([
+        supabaseAdmin
+            .from('warehouses')
+            .select('id', { count: 'exact', head: true })
+            .eq('business_id', businessId)
+            .eq('status', 'active'),
+        supabaseAdmin
+            .from('business_fleet_members')
+            .select('id', { count: 'exact', head: true })
+            .eq('business_id', businessId)
+            .eq('status', 'active'),
+        supabaseAdmin
+            .from('cargo_offers')
+            .select('id', { count: 'exact', head: true })
+            .eq('business_id', businessId),
+        supabaseAdmin
+            .from('cargo_offers')
+            .select('id, status, delivery_verified_at')
+            .eq('business_id', businessId),
+        supabaseAdmin
+            .from('business_team_members')
+            .select('id', { count: 'exact', head: true })
+            .eq('business_id', businessId)
+            .eq('status', 'active'),
+        supabaseAdmin
+            .from('report_exports')
+            .select('id', { count: 'exact', head: true })
+            .eq('business_id', businessId)
+            .eq('status', 'generated'),
+    ]);
+
+    if (warehousesResponse.error && !isWarehousesTableMissing(warehousesResponse.error)) {
+        throw new Error(warehousesResponse.error.message || 'Could not load warehouse activation usage.');
+    }
+
+    if (offersResponse.error) {
+        throw new Error(offersResponse.error.message || 'Could not load trip activation usage.');
+    }
+
+    if (completedOffersResponse.error) {
+        throw new Error(completedOffersResponse.error.message || 'Could not load completed trip activation usage.');
+    }
+
+    const completedOfferIds = ((completedOffersResponse.data || []) as Array<{ id?: string | null; status?: string | null; delivery_verified_at?: string | null }>)
+        .filter((row) => Boolean(row.delivery_verified_at) || row.status === 'completed')
+        .map((row) => row.id)
+        .filter((id): id is string => Boolean(id));
+    let completedDeliveriesWithEvidence = 0;
+
+    if (completedOfferIds.length) {
+        const signaturesResponse = await supabaseAdmin
+            .from('trip_signature_evidences')
+            .select('offer_id')
+            .in('offer_id', completedOfferIds);
+
+        if (signaturesResponse.error) {
+            if (!isMissingSupabaseTable(signaturesResponse.error, 'trip_signature_evidences')) {
+                throw new Error(signaturesResponse.error.message || 'Could not load trip evidence activation usage.');
+            }
+        } else {
+            completedDeliveriesWithEvidence = new Set(
+                ((signaturesResponse.data || []) as Array<{ offer_id?: string | null }>)
+                    .map((row) => row.offer_id)
+                    .filter((offerId): offerId is string => Boolean(offerId))
+            ).size;
+        }
+    }
+
+    const activeWarehouses = warehousesResponse.error ? 0 : warehousesResponse.count || 0;
+    const activeFleetDrivers = fleetResponse.error && isBusinessFleetMembersTableMissing(fleetResponse.error)
+        ? 0
+        : fleetResponse.count || 0;
+    const activeInternalUsers = teamResponse.error && isBusinessTeamMembersTableMissing(teamResponse.error)
+        ? 0
+        : teamResponse.count || 0;
+    const reportExports = reportsResponse.error && isMissingSupabaseTable(reportsResponse.error, 'report_exports')
+        ? 0
+        : reportsResponse.count || 0;
+    const totalTrips = offersResponse.count || 0;
+
+    if (fleetResponse.error && !isBusinessFleetMembersTableMissing(fleetResponse.error)) {
+        throw new Error(fleetResponse.error.message || 'Could not load private fleet activation usage.');
+    }
+
+    if (teamResponse.error && !isBusinessTeamMembersTableMissing(teamResponse.error)) {
+        throw new Error(teamResponse.error.message || 'Could not load team activation usage.');
+    }
+
+    if (reportsResponse.error && !isMissingSupabaseTable(reportsResponse.error, 'report_exports')) {
+        throw new Error(reportsResponse.error.message || 'Could not load report activation usage.');
+    }
+
+    const checklist = [
+        {
+            key: 'create_warehouse',
+            label: 'Crear bodega',
+            completed: activeWarehouses > 0,
+            href: '/bodegas',
+        },
+        {
+            key: 'create_driver',
+            label: 'Crear conductor',
+            completed: activeFleetDrivers > 0,
+            href: '/dashboard/flota',
+        },
+        {
+            key: 'create_first_trip',
+            label: 'Crear primer viaje',
+            completed: totalTrips > 0,
+            href: '/ofertas/publicar',
+        },
+        {
+            key: 'close_trip_with_evidence',
+            label: 'Cerrar viaje con evidencia',
+            completed: completedDeliveriesWithEvidence > 0,
+            href: '/ofertas/mis-ofertas',
+        },
+        {
+            key: 'download_support',
+            label: 'Descargar soporte',
+            completed: completedDeliveriesWithEvidence > 0,
+            href: '/bodegas',
+        },
+        {
+            key: 'invite_internal_user',
+            label: 'Invitar usuario interno',
+            completed: activeInternalUsers > 1,
+            href: '/equipo',
+        },
+        {
+            key: 'view_report',
+            label: 'Ver reporte',
+            completed: reportExports > 0,
+            href: '/dashboard/inteligencia',
+        },
+    ];
+    const nextItem = checklist.find((item) => !item.completed);
+    const status = completedDeliveriesWithEvidence >= activationTarget
+        ? 'activated'
+        : completedDeliveriesWithEvidence > 0
+            ? 'first_value'
+            : 'setup';
+
+    return {
+        status,
+        completedDeliveriesWithEvidence,
+        activationTarget,
+        checklist,
+        nextActionLabel: nextItem?.label || 'Revisar reporte',
+        nextActionHref: nextItem?.href || '/dashboard/inteligencia',
+    };
+}
+
 export async function resolveBusinessAccessContext(
     supabaseAdmin: AdminClient,
     authUserId: string,
@@ -1224,14 +1393,35 @@ export async function getOrCreateWarehouseSku(
         description?: string;
     }
 ) {
-    const { data: existingSku } = await supabaseAdmin
+    const skuCode = payload.skuCode.trim().toUpperCase();
+    const skuName = payload.skuName.trim();
+
+    const { data: exactSku } = await supabaseAdmin
         .from('warehouse_skus')
         .select('*')
         .eq('business_id', businessId)
-        .eq('sku_code', payload.skuCode)
+        .eq('sku_code', skuCode)
         .maybeSingle();
 
+    const existingSku = exactSku || (await supabaseAdmin
+        .from('warehouse_skus')
+        .select('*')
+        .eq('business_id', businessId)
+        .limit(500)
+    ).data?.find((sku) => String(sku.sku_code || '').trim().toUpperCase() === skuCode);
+
     if (existingSku) {
+        if (existingSku.sku_code !== skuCode) {
+            const { data: normalizedSku } = await supabaseAdmin
+                .from('warehouse_skus')
+                .update({ sku_code: skuCode })
+                .eq('id', existingSku.id)
+                .select('*')
+                .single();
+
+            return normalizedSku || existingSku;
+        }
+
         return existingSku;
     }
 
@@ -1239,8 +1429,8 @@ export async function getOrCreateWarehouseSku(
         .from('warehouse_skus')
         .insert({
             business_id: businessId,
-            sku_code: payload.skuCode,
-            name: payload.skuName,
+            sku_code: skuCode,
+            name: skuName,
             unit: payload.unit || 'unidad',
             description: payload.description || null,
         })
@@ -1248,6 +1438,19 @@ export async function getOrCreateWarehouseSku(
         .single();
 
     if (error || !sku) {
+        if (error?.code === '23505') {
+            const { data: conflictedSku } = await supabaseAdmin
+                .from('warehouse_skus')
+                .select('*')
+                .eq('business_id', businessId)
+                .eq('sku_code', skuCode)
+                .maybeSingle();
+
+            if (conflictedSku) {
+                return conflictedSku;
+            }
+        }
+
         throw new Error(error?.message || 'Could not create SKU');
     }
 

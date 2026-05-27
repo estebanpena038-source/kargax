@@ -8,7 +8,12 @@ import { Button, Input, Select, toast } from '@/components/ui';
 import { SectionCard, WarehouseWorkspace } from '@/components/warehouses/WarehouseWorkspace';
 import {
     WmsEmptyState,
-    WmsCardGrid,
+    WmsFleetCard,
+    WmsFleetDarkPanel,
+    WmsFleetIdentity,
+    WmsFleetInfoGrid,
+    WmsFleetInfoItem,
+    WmsFleetSection,
     WmsImageThumb,
     WmsMetric,
     WmsMetricGrid,
@@ -31,12 +36,6 @@ import type { WarehouseIncident } from '@/lib/warehouses/types';
 
 const INCIDENT_TYPES: WarehouseIncident['incident_type'][] = ['damage', 'shortage', 'delay', 'security', 'documentation', 'payment_hold', 'other'];
 const INCIDENT_SEVERITIES: WarehouseIncident['severity'][] = ['low', 'medium', 'high', 'critical'];
-
-function incidentTone(status: WarehouseIncident['status'], severity: WarehouseIncident['severity']) {
-    if (severity === 'critical' && status !== 'closed' && status !== 'resolved') return 'critical' as const;
-    if (status === 'resolved' || status === 'closed') return 'strong' as const;
-    return 'neutral' as const;
-}
 
 function severityTone(severity: WarehouseIncident['severity']) {
     return severity === 'critical' ? 'critical' as const : severity === 'high' ? 'strong' as const : 'neutral' as const;
@@ -156,7 +155,7 @@ export default function WarehouseIncidentsPage() {
                     };
 
                     return (
-                        <div className="space-y-6">
+                        <div className="space-y-4 sm:space-y-5">
                             <WmsMetricGrid>
                                 <WmsMetric label="Incidentes" value={incidents.length} detail="Historial operativo" />
                                 <WmsMetric label="Abiertos" value={openIncidents.length} detail="Requieren seguimiento" />
@@ -173,9 +172,9 @@ export default function WarehouseIncidentsPage() {
                             ) : null}
 
                             <WmsPanelGrid aside="wide">
-                                <SectionCard title="Registrar incidente" description="Tipo, severidad textual, evidencia y estado inicial sin ruido visual.">
+                                <SectionCard title="Registrar incidente" description="Tipo, severidad, evidencia y contexto para decidir rapido.">
                                     <div className="space-y-4">
-                                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                                        <div className="grid gap-3">
                                             <Select
                                                 label="Tipo"
                                                 value={form.incidentType}
@@ -199,10 +198,10 @@ export default function WarehouseIncidentsPage() {
                                             minHeight={132}
                                         />
 
-                                        <div className="min-w-0 rounded-lg border border-zinc-200 bg-zinc-50 p-4">
+                                        <div className="min-w-0 rounded-lg border border-zinc-200 bg-zinc-50 p-3.5">
                                             <p className="text-sm font-semibold text-zinc-950">Evidencia</p>
                                             <p className="mt-1 text-xs text-zinc-500">Agrega URLs de foto, documento o soporte. Quedan asociadas al incidente.</p>
-                                                <div className="mt-3 flex min-w-0 flex-col gap-3 sm:flex-row">
+                                                <div className="mt-3 flex min-w-0 flex-col gap-3">
                                                 <Input
                                                     label=""
                                                     value={evidenceDraft}
@@ -282,8 +281,9 @@ export default function WarehouseIncidentsPage() {
                                     </div>
                                 </SectionCard>
 
-                                <SectionCard title="Revision de incidentes" description="Severidad, evidencia, estado y accion siguiente para soporte/admin.">
-                                    <div className="space-y-4">
+                                <WmsFleetSection icon={ShieldAlert} title="Revision de incidentes" description="Severidad, evidencia, estado y accion siguiente para soporte/admin.">
+                                    {sortedIncidents.length ? (
+                                    <>
                                         {sortedIncidents.map((incident) => {
                                             const nextStatuses = incident.status === 'open' ? ['investigating', 'resolved', 'closed']
                                                 : incident.status === 'investigating' ? ['resolved', 'closed']
@@ -294,58 +294,40 @@ export default function WarehouseIncidentsPage() {
                                                 : '';
 
                                             return (
-                                                <div key={incident.id} className={`min-w-0 rounded-lg border bg-white p-4 ${incident.severity === 'critical' && incident.status !== 'closed' && incident.status !== 'resolved' ? 'border-zinc-950 shadow-[inset_4px_0_0_#09090b]' : 'border-zinc-200'}`}>
-                                                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                                                        <div className="min-w-0">
-                                                            <div className="flex flex-wrap items-center gap-2">
-                                                                <ShieldAlert className="h-4 w-4 text-zinc-950" aria-hidden="true" />
-                                                                <p className="font-semibold text-zinc-950">{incident.title}</p>
-                                                                <WmsStatusBadge label={getIncidentSeverityLabel(incident.severity)} tone={severityTone(incident.severity)} />
-                                                                <WmsStatusBadge label={getIncidentStatusLabel(incident.status)} tone={incidentTone(incident.status, incident.severity)} />
-                                                            </div>
-                                                            <p className="mt-2 text-sm text-zinc-500">
-                                                                {getIncidentTypeLabel(incident.incident_type)} / {formatWarehouseDateTime(incident.created_at)}
-                                                            </p>
-                                                        </div>
-                                                        <p className="min-w-0 font-money text-sm text-zinc-500">{incident.offer_id ? `Viaje ${incident.offer_id.slice(0, 8)}` : 'Sin viaje'}</p>
-                                                    </div>
-
-                                                    <p className="mt-4 text-sm leading-6 text-zinc-700">{incident.description}</p>
-
-                                                    {supportReview ? (
-                                                        <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
-                                                            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">Revision soporte/admin</p>
-                                                            <p className="mt-2 text-sm text-zinc-700">{supportReview}</p>
-                                                        </div>
-                                                    ) : null}
-
-                                                    {incident.evidence_urls?.length ? (
-                                                        <WmsCardGrid compact className="mt-4">
-                                                            {incident.evidence_urls.map((url, index) => (
-                                                                isImageUrl(url) ? (
-                                                                    <WmsImageThumb key={url} src={url} alt={`Evidencia ${index + 1} de ${incident.title}`} caption={`Evidencia ${index + 1}`} />
-                                                                ) : (
-                                                                    <a
-                                                                        key={url}
-                                                                        href={url}
-                                                                        target="_blank"
-                                                                        rel="noreferrer"
-                                                                        className="flex min-h-24 items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-zinc-50 p-4 text-sm font-medium text-zinc-700 transition hover:border-zinc-950 hover:text-zinc-950"
-                                                                    >
-                                                                        <span className="line-clamp-2 break-all">{url}</span>
-                                                                        <ExternalLink className="h-4 w-4 shrink-0" aria-hidden="true" />
-                                                                    </a>
-                                                                )
-                                                            ))}
-                                                        </WmsCardGrid>
-                                                    ) : (
-                                                        <div className="mt-4 rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-4 text-sm text-zinc-500">
-                                                            Sin evidencia asociada. El riesgo sigue visible.
-                                                        </div>
+                                                <WmsFleetCard
+                                                    key={incident.id}
+                                                    identity={(
+                                                        <WmsFleetIdentity
+                                                            title={incident.title}
+                                                            subtitle={<span className="line-clamp-3">{incident.description}</span>}
+                                                            status={<WmsStatusBadge label={getIncidentSeverityLabel(incident.severity)} tone={severityTone(incident.severity)} />}
+                                                            activity={formatWarehouseDateTime(incident.created_at)}
+                                                        />
                                                     )}
-
-                                                    {capabilities?.manageIncidents && nextStatuses.length ? (
-                                                        <div className="mt-4 space-y-3">
+                                                    info={(
+                                                        <WmsFleetInfoGrid>
+                                                            <WmsFleetInfoItem label="Tipo" value={getIncidentTypeLabel(incident.incident_type)} />
+                                                            <WmsFleetInfoItem label="Estado" value={getIncidentStatusLabel(incident.status)} />
+                                                            <WmsFleetInfoItem label="Viaje" value={incident.offer_id ? incident.offer_id.slice(0, 8) : 'Sin viaje'} />
+                                                            <WmsFleetInfoItem label="Evidencia" value={incident.evidence_urls?.length || 0} />
+                                                            {supportReview ? (
+                                                                <WmsFleetInfoItem
+                                                                    label="Revision soporte/admin"
+                                                                    value={<span className="line-clamp-3 text-sm font-normal">{supportReview}</span>}
+                                                                    className="min-[520px]:col-span-2 xl:col-span-1 2xl:col-span-2"
+                                                                />
+                                                            ) : null}
+                                                        </WmsFleetInfoGrid>
+                                                    )}
+                                                    darkPanel={(
+                                                        <WmsFleetDarkPanel
+                                                            label="Riesgo"
+                                                            value={getIncidentStatusLabel(incident.status)}
+                                                            detail={getIncidentSeverityLabel(incident.severity)}
+                                                        />
+                                                    )}
+                                                    actions={capabilities?.manageIncidents && nextStatuses.length ? (
+                                                        <div className="space-y-3">
                                                             <WmsTextArea
                                                                 label="Nota de revision"
                                                                 value={reviewNoteByIncident[incident.id] || ''}
@@ -368,17 +350,48 @@ export default function WarehouseIncidentsPage() {
                                                             </WmsActionRow>
                                                         </div>
                                                     ) : null}
-                                                </div>
+                                                />
                                             );
                                         })}
-                                        {incidents.length === 0 ? (
-                                            <WmsEmptyState
-                                                title="No hay incidentes abiertos"
-                                                description="Cuando aparezca un dano, faltante, demora o riesgo, quedara aqui con evidencia y estado."
-                                            />
+                                        {sortedIncidents.some((incident) => incident.evidence_urls?.length) ? (
+                                            <div className="grid gap-3">
+                                                {sortedIncidents.map((incident) => (
+                                                    incident.evidence_urls?.length ? (
+                                                        <div key={`evidence-${incident.id}`} className="rounded-lg border border-zinc-200 bg-white p-3.5">
+                                                            <p className="text-sm font-semibold text-zinc-950">{incident.title}</p>
+                                                            <div className="mt-3 flex min-w-0 gap-3 overflow-x-auto pb-1 [scrollbar-width:none]">
+                                                                {incident.evidence_urls.map((url, index) => (
+                                                                    isImageUrl(url) ? (
+                                                                        <div key={url} className="w-24 shrink-0">
+                                                                            <WmsImageThumb src={url} alt={`Evidencia ${index + 1} de ${incident.title}`} caption={`Evidencia ${index + 1}`} />
+                                                                        </div>
+                                                                    ) : (
+                                                                        <a
+                                                                            key={url}
+                                                                            href={url}
+                                                                            target="_blank"
+                                                                            rel="noreferrer"
+                                                                            className="flex min-h-24 w-56 shrink-0 items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3.5 text-sm font-medium text-zinc-700 transition hover:border-zinc-950 hover:text-zinc-950"
+                                                                        >
+                                                                            <span className="line-clamp-2 break-all">{url}</span>
+                                                                            <ExternalLink className="h-4 w-4 shrink-0" aria-hidden="true" />
+                                                                        </a>
+                                                                    )
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    ) : null
+                                                ))}
+                                            </div>
                                         ) : null}
-                                    </div>
-                                </SectionCard>
+                                    </>
+                                    ) : (
+                                        <WmsEmptyState
+                                            title="No hay incidentes abiertos"
+                                            description="Cuando aparezca un dano, faltante, demora o riesgo, quedara aqui con evidencia y estado."
+                                        />
+                                    )}
+                                </WmsFleetSection>
                             </WmsPanelGrid>
                         </div>
                     );

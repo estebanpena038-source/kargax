@@ -38,6 +38,7 @@ import { PlanLimitPaywallDialog } from '@/components/billing/PlanLimitPaywallDia
 import { getCountryConfig, type CountryConfig } from '@/constants/countries';
 import { useAuthStore } from '@/features/auth/store/authStore';
 import warehouseClient from '@/lib/warehouses/client';
+import { CoordinatePicker } from '@/components/maps/CoordinatePicker';
 import { isPlanLimitReachedError, type PlanLimitErrorDetails } from '@/lib/billing/plan-limits';
 import {
     getCityDisplayName,
@@ -55,6 +56,9 @@ type WarehouseFormState = {
     department: string;
     city: string;
     address: string;
+    latitude: number | null;
+    longitude: number | null;
+    gpsToleranceMeters: string;
     description: string;
     flowMode: 'warehouse_managed' | 'manual' | '3pl';
     status: 'active' | 'inactive' | 'maintenance';
@@ -75,6 +79,9 @@ const EMPTY_CREATE_FORM: WarehouseFormState = {
     department: '',
     city: '',
     address: '',
+    latitude: null,
+    longitude: null,
+    gpsToleranceMeters: '500',
     description: '',
     flowMode: 'warehouse_managed',
     status: 'active',
@@ -120,6 +127,9 @@ function toWarehouseFormState(warehouse: WarehouseType): WarehouseFormState {
         department: warehouse.department,
         city: warehouse.city,
         address: warehouse.address,
+        latitude: warehouse.latitude,
+        longitude: warehouse.longitude,
+        gpsToleranceMeters: String(warehouse.gps_tolerance_meters || 500),
         description: warehouse.description || '',
         flowMode: warehouse.flow_mode,
         status: warehouse.status,
@@ -136,7 +146,7 @@ function WarehouseFormFields({
 }: WarehouseFormFieldsProps) {
     return (
         <div className="space-y-5">
-            <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+            <div className="grid min-w-0 gap-4">
                 <Input label="Pais" value={countryConfig.name} disabled />
                 <Input
                     label="Codigo"
@@ -153,7 +163,7 @@ function WarehouseFormFields({
                 <Select
                     label={countryConfig.subdivisionLabel}
                     value={form.department}
-                    onChange={(value) => onChange({ department: value, city: '' })}
+                    onChange={(value) => onChange({ department: value, city: '', latitude: null, longitude: null })}
                     options={subdivisionOptions}
                     searchable
                     placeholder={`Selecciona ${countryConfig.subdivisionLabel.toLowerCase()}`}
@@ -161,7 +171,7 @@ function WarehouseFormFields({
                 <Select
                     label={countryConfig.cityLabel}
                     value={form.city}
-                    onChange={(value) => onChange({ city: value })}
+                    onChange={(value) => onChange({ city: value, latitude: null, longitude: null })}
                     options={cityOptions}
                     searchable
                     disabled={!form.department}
@@ -170,8 +180,15 @@ function WarehouseFormFields({
                 <Input
                     label="Direccion"
                     value={form.address}
-                    onChange={(event) => onChange({ address: event.target.value })}
+                    onChange={(event) => onChange({ address: event.target.value, latitude: null, longitude: null })}
                     placeholder="Direccion operativa"
+                />
+                <Input
+                    label="Radio GPS permitido (m)"
+                    inputMode="numeric"
+                    value={form.gpsToleranceMeters}
+                    onChange={(event) => onChange({ gpsToleranceMeters: event.target.value.replace(/\D/g, '') })}
+                    placeholder="500"
                 />
                 <Select
                     label="Modo operativo"
@@ -188,6 +205,23 @@ function WarehouseFormFields({
                     />
                 ) : null}
             </div>
+            <CoordinatePicker
+                label="Coordenadas GPS de la bodega"
+                address={form.address}
+                city={form.city}
+                department={form.department}
+                countryCode={countryConfig.code}
+                value={{
+                    latitude: form.latitude,
+                    longitude: form.longitude,
+                }}
+                onChange={(coords) => onChange({
+                    latitude: coords.latitude ?? null,
+                    longitude: coords.longitude ?? null,
+                })}
+                helperText="Este punto se usa para bloquear la carga hasta que el conductor llegue realmente a la bodega."
+                required
+            />
             <div>
                 <label className="mb-2 block text-sm font-medium text-zinc-700" htmlFor="warehouse-description">
                     Descripcion operativa
@@ -255,13 +289,18 @@ export default function WarehousesPage() {
     let planDisplayName = subscription?.plan?.name || 'Free';
 
     if (limits.entitlementState === 'pilot_active') {
-        planDisplayName = `Launch Pilot (${limits.pilotDaysRemaining ?? 60} dias)`;
+        planDisplayName = `Acceso Operativo (${limits.pilotDaysRemaining ?? 14} dias)`;
     } else if (limits.entitlementState === 'pilot_expired') {
-        planDisplayName = 'Free - piloto vencido';
+        planDisplayName = 'Free - Acceso Operativo finalizado';
     }
 
     const handleCreateWarehouse = async () => {
         if (!canCreateWarehouse) return;
+
+        if (!Number.isFinite(Number(createForm.latitude)) || !Number.isFinite(Number(createForm.longitude))) {
+            toast.error('Coordenadas requeridas', 'Confirma el punto GPS de la bodega antes de crearla.');
+            return;
+        }
 
         setSubmitting(true);
         try {
@@ -271,6 +310,9 @@ export default function WarehousesPage() {
                 department: createForm.department,
                 city: createForm.city,
                 address: createForm.address,
+                latitude: createForm.latitude,
+                longitude: createForm.longitude,
+                gpsToleranceMeters: Number(createForm.gpsToleranceMeters || 500),
                 description: createForm.description,
                 flowMode: createForm.flowMode,
             });
@@ -300,6 +342,11 @@ export default function WarehousesPage() {
     const handleSaveEdit = async () => {
         if (!editingWarehouse) return;
 
+        if (!Number.isFinite(Number(editForm.latitude)) || !Number.isFinite(Number(editForm.longitude))) {
+            toast.error('Coordenadas requeridas', 'Confirma el punto GPS de la bodega antes de guardar.');
+            return;
+        }
+
         setEditing(true);
         try {
             await warehouseClient.update(editingWarehouse.id, {
@@ -308,6 +355,9 @@ export default function WarehousesPage() {
                 department: editForm.department,
                 city: editForm.city,
                 address: editForm.address,
+                latitude: editForm.latitude,
+                longitude: editForm.longitude,
+                gpsToleranceMeters: Number(editForm.gpsToleranceMeters || 500),
                 description: editForm.description,
                 flowMode: editForm.flowMode,
                 status: editForm.status,
@@ -363,7 +413,7 @@ export default function WarehousesPage() {
         <DashboardLayout pageTitle="Bodegas KargaX">
             <div className="min-w-0 space-y-4 sm:space-y-6">
                 <section className="min-w-0 rounded-lg border border-zinc-200 bg-white p-4 shadow-[0_24px_70px_-52px_rgba(10,10,10,.55)] sm:p-6 md:p-8">
-                    <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+                    <div className="flex flex-col gap-6">
                         <div className="min-w-0 max-w-3xl">
                             <div className="mb-5 inline-flex max-w-full flex-wrap items-center gap-2 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-600 sm:text-xs sm:tracking-[0.2em]">
                                 <span className="font-money text-zinc-950">KX</span>
@@ -376,7 +426,7 @@ export default function WarehousesPage() {
                                 Cada bodega vive como una unidad de mando: plan, ubicacion, flujo, permisos y siguiente accion claros desde el primer vistazo.
                             </p>
                         </div>
-                        <div className="grid min-w-0 gap-3 min-[520px]:grid-cols-3 lg:w-[min(100%,520px)] lg:shrink-0">
+                        <div className="grid min-w-0 gap-3">
                             <div className="min-w-0 rounded-lg border border-zinc-200 bg-zinc-50 p-4">
                                 <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500 sm:text-xs sm:tracking-[0.18em]">Plan</p>
                                 <p className="mt-3 break-words text-base font-semibold text-zinc-950 sm:text-lg">{planDisplayName}</p>
@@ -393,7 +443,7 @@ export default function WarehousesPage() {
                     </div>
                 </section>
 
-                <div className="grid gap-4 min-[520px]:grid-cols-3">
+                <div className="grid gap-4">
                     <Card className="min-w-0 p-4 sm:p-5">
                         <div className="flex items-start justify-between gap-4">
                             <div>
@@ -431,11 +481,11 @@ export default function WarehousesPage() {
 
                 {limits.entitlementState === 'pilot_active' ? (
                     <Card className="min-w-0 border-zinc-950 p-4 sm:p-5">
-                        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                        <div className="flex flex-col gap-3">
                             <div>
-                                <p className="font-semibold text-zinc-950">Launch Pilot activo</p>
+                                <p className="font-semibold text-zinc-950">Acceso Operativo activo</p>
                                 <p className="mt-1 text-sm text-zinc-500">
-                                    Quedan {limits.pilotDaysRemaining ?? 0} dias con capacidad piloto. Tus datos se conservan al vencer; solo se limita crear capacidad nueva fuera del plan.
+                                    Quedan {limits.pilotDaysRemaining ?? 0} dias con capacidad operativa temporal. Tus datos se conservan al vencer; solo se limita crear capacidad nueva fuera del plan.
                                 </p>
                             </div>
                             <ShieldCheck className="h-5 w-5 text-zinc-950" />
@@ -443,7 +493,7 @@ export default function WarehousesPage() {
                     </Card>
                 ) : null}
 
-                <div className="flex min-w-0 flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                <div className="flex min-w-0 flex-col gap-4">
                     <div className="min-w-0">
                         <h2 className="text-xl font-semibold text-zinc-950">Red operativa</h2>
                         <p className="mt-1 text-sm text-zinc-500">
@@ -470,7 +520,7 @@ export default function WarehousesPage() {
                 </div>
 
                 {loading ? (
-                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="grid gap-4">
                         {[1, 2, 3].map((item) => (
                             <div key={item} className="skeleton h-64 rounded-lg" />
                         ))}
@@ -489,7 +539,7 @@ export default function WarehousesPage() {
                         }
                     />
                 ) : (
-                    <div className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                    <div className="grid min-w-0 gap-4">
                         {warehouses.map((warehouse, index) => (
                             <motion.div
                                 key={warehouse.id}
@@ -519,7 +569,7 @@ export default function WarehousesPage() {
                                         </p>
                                     </div>
 
-                                    <div className="mt-5 grid gap-2 min-[420px]:grid-cols-2">
+                                    <div className="mt-5 grid gap-2">
                                         <div className="min-w-0 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
                                             <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500 sm:tracking-[0.16em]">Modo</p>
                                             <p className="mt-2 break-words text-sm font-semibold text-zinc-950">{getFlowModeLabel(warehouse.flow_mode)}</p>
@@ -610,7 +660,7 @@ export default function WarehousesPage() {
                         <DialogHeader>
                             <DialogTitle>Editar bodega</DialogTitle>
                             <DialogDescription>
-                                Ajusta datos operativos, estado y modo de trabajo sin romper el historial.
+                                Actualiza datos operativos, estado y modo de trabajo conservando la trazabilidad.
                             </DialogDescription>
                         </DialogHeader>
                         <WarehouseFormFields

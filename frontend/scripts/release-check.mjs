@@ -31,6 +31,16 @@ const requiredDbShapes = [
     columns: ['id', 'user_id', 'wallet_transaction_id', 'method', 'status', 'provider', 'idempotency_key', 'provider_reference'],
   },
   {
+    gate: 'db:wallet2-transaction-rails',
+    table: 'transactions',
+    columns: ['id', 'wallet_id', 'money_rail', 'source_system', 'payout_eligible', 'payout_attempt_id', 'locked_for_payout', 'external_proof_only', 'pending_balance_before', 'pending_balance_after'],
+  },
+  {
+    gate: 'db:wallet2-payout-attempts',
+    table: 'payout_attempts',
+    columns: ['id', 'source_kind', 'source_id', 'offer_id', 'payment_id', 'trucker_id', 'provider_transfer_id', 'destination_snapshot', 'attempts_count', 'next_retry_at', 'processing_started_at', 'manual_review_at'],
+  },
+  {
     gate: 'db:private-fleet-core',
     table: 'business_fleet_members',
     columns: ['id', 'business_id', 'trucker_id', 'status', 'internal_driver_id', 'vehicle_plate'],
@@ -39,6 +49,21 @@ const requiredDbShapes = [
     gate: 'db:private-fleet-finance',
     table: 'trip_financial_allocations',
     columns: ['id', 'offer_id', 'business_id', 'trucker_id', 'allocation_type', 'amount', 'status'],
+  },
+  {
+    gate: 'db:wallet2-private-fleet-allocations',
+    table: 'trip_financial_allocations',
+    columns: ['id', 'external_payment_status', 'external_paid_at', 'external_paid_by', 'external_payment_method', 'external_payment_reference', 'external_payment_proof_url', 'external_payment_proof_storage_path', 'external_payment_note'],
+  },
+  {
+    gate: 'db:wallet2-private-fleet-payroll-runs',
+    table: 'private_fleet_payroll_runs',
+    columns: ['id', 'payment_mode', 'external_payment_status', 'external_paid_at', 'external_paid_by', 'external_payment_method', 'external_payment_reference', 'external_payment_proof_url', 'external_payment_proof_storage_path', 'external_payment_note'],
+  },
+  {
+    gate: 'db:wallet2-private-fleet-payment-proofs',
+    table: 'private_fleet_payment_proofs',
+    columns: ['id', 'business_id', 'run_id', 'allocation_id', 'offer_id', 'uploaded_by', 'payment_method', 'amount_cop', 'status', 'created_at'],
   },
   {
     gate: 'db:cargo-offer-control-tower-columns',
@@ -112,6 +137,7 @@ const requiredStorageBuckets = [
   'trip-photos',
   'trip-signatures',
   'warehouse-sku-images',
+  'private-fleet-payment-proofs',
 ];
 const originalEnvKeys = new Set(Object.keys(process.env));
 const loadedEnvFiles = [];

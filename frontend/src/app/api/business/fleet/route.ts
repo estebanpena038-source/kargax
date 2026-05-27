@@ -2,7 +2,16 @@
 import { apiError, apiSuccess, getRequestId } from '@/lib/server/api-response';
 import { requireAal2Route, resolveScopedBusinessId } from '@/lib/server/route-auth';
 import { buildPublicAppUrl, isLocalAppUrl, shouldAllowLocalPublicAppUrl } from '@/lib/platform/public-app-url';
-import { getBusinessRoleCapabilities } from '@/lib/business-roles';
+import {
+    getBusinessPolicyCapabilities,
+    resolveEffectiveBusinessRole,
+} from '@/lib/server/role-policy';
+import {
+    createPrivateFleetProofSignedUrlMap,
+    getPrivateFleetProofDirectUrl,
+    getPrivateFleetProofStoragePath,
+    resolvePrivateFleetProofDisplayUrl,
+} from '@/lib/server/private-fleet-proofs';
 import {
     enforcePrivateFleetDriverLimit,
     getBusinessPlanSnapshot,
@@ -14,6 +23,32 @@ import {
 } from '@/lib/server/warehouses';
 
 const DEFAULT_INVITATION_HOURS = 48;
+const PRIVATE_SETTLEMENT_TYPES = ['expense_advance', 'company_expense', 'freight_payment', 'trip_pay'];
+
+function resolveTripSettlementStatus(allocations: Array<Record<string, any>>) {
+    if (!allocations.length) return 'not_applicable';
+
+    const statuses = allocations.map((allocation) => String(allocation.external_payment_status || allocation.status || 'pending_external_pay'));
+
+    if (statuses.every((status) => status === 'paid_external')) return 'paid_external';
+    if (statuses.some((status) => status === 'proof_uploaded')) return 'proof_uploaded';
+    if (statuses.every((status) => status === 'released_to_wallet')) return 'paid_external';
+    if (statuses.some((status) => status === 'rejected')) return 'rejected';
+    if (statuses.every((status) => status === 'cancelled')) return 'cancelled';
+    return 'pending_external_pay';
+}
+
+function deriveCompensationMode(offer: Record<string, any>, allocations: Array<Record<string, any>>) {
+    if (offer.compensation_mode) return offer.compensation_mode;
+
+    const hasFreight = allocations.some((allocation) => ['freight_payment', 'trip_pay'].includes(allocation.allocation_type));
+    const hasExpenses = allocations.some((allocation) => ['expense_advance', 'company_expense'].includes(allocation.allocation_type));
+
+    if (hasFreight && hasExpenses) return 'trip_pay_plus_expenses';
+    if (hasFreight) return 'trip_pay';
+    if (hasExpenses) return 'expenses_only';
+    return 'salary_no_trip_pay';
+}
 
 function isPrivateFleetPayrollSchemaMissing(error: unknown) {
     if (!error || typeof error !== 'object') {
@@ -82,18 +117,13 @@ export async function GET(request: NextRequest) {
     }
 
     const businessId = scopedBusiness.businessId;
-    const effectiveRole = profile?.user_type === 'admin'
-        ? 'admin'
-        : businessAccess.isOwner
-            ? 'owner'
-            : businessAccess.teamMember?.role || 'viewer';
-    const roleCapabilities = getBusinessRoleCapabilities(effectiveRole);
-    const canManagePayroll = profile?.user_type === 'admin'
-        || businessAccess.isOwner
-        || businessAccess.teamMember?.role === 'finance_accountant';
+    const effectiveRole = resolveEffectiveBusinessRole(profile, businessAccess);
+    const roleCapabilities = getBusinessPolicyCapabilities(effectiveRole);
+    const canManagePayroll = roleCapabilities.canManagePrivateFleetMoney;
+    const canViewPrivateFleet = roleCapabilities.canViewPrivateFleet;
 
-    if (!businessId || (!businessAccess.isOwner && profile?.user_type !== 'admin' && !canManagePayroll)) {
-        return apiError('Solo owner/admin/contabilidad puede ver esta flota privada', {
+    if (!businessId || !canViewPrivateFleet) {
+        return apiError('Solo owner/admin/contabilidad u operacion puede ver esta flota privada', {
             requestId,
             status: 403,
             code: 'BUSINESS_FLEET_FORBIDDEN',
@@ -104,7 +134,7 @@ export async function GET(request: NextRequest) {
     monthStart.setDate(1);
     monthStart.setHours(0, 0, 0, 0);
 
-    let [membersResponse, invitationsResponse, offersResponse, allocationsResponse, payrollItemsResponse, snapshot] = await Promise.all([
+    const [membersResponse, invitationsResponse, initialOffersResponse, allocationsResponse, payrollItemsResponse, snapshot] = await Promise.all([
         supabaseAdmin
             .from('business_fleet_members')
             .select(`
@@ -121,14 +151,15 @@ export async function GET(request: NextRequest) {
             .limit(25),
         supabaseAdmin
             .from('cargo_offers')
-            .select('id, assigned_trucker_id, status, is_private_fleet, private_fleet_assignment_status, created_at, freight_payment_amount, expense_allowance_amount')
+            .select('id, assigned_trucker_id, status, is_private_fleet, private_fleet_assignment_status, created_at, compensation_mode, freight_payment_amount, expense_allowance_amount, total_amount, cargo_description, origin_warehouse_id, destination_warehouse_id')
             .eq('business_id', businessId)
             .eq('is_private_fleet', true),
         supabaseAdmin
             .from('trip_financial_allocations')
-            .select('offer_id, trucker_id, allocation_type, amount, status, created_at, released_at')
+            .select('id, offer_id, trucker_id, allocation_type, amount, status, external_payment_status, external_paid_at, external_payment_method, external_payment_reference, external_payment_proof_url, external_payment_proof_storage_path, external_payment_note, created_at, released_at')
             .eq('business_id', businessId)
-            .gte('created_at', monthStart.toISOString()),
+            .gte('created_at', monthStart.toISOString())
+            .order('created_at', { ascending: false }),
         supabaseAdmin
             .from('private_fleet_payroll_items')
             .select('trucker_id, amount, status, created_at, released_at')
@@ -137,6 +168,7 @@ export async function GET(request: NextRequest) {
         getBusinessPlanSnapshot(supabaseAdmin, businessId),
     ]) as any;
 
+    let offersResponse = initialOffersResponse;
     if (offersResponse.error && isPrivateFleetAssignmentSchemaMissing(offersResponse.error)) {
         offersResponse = await supabaseAdmin
             .from('cargo_offers')
@@ -198,6 +230,31 @@ export async function GET(request: NextRequest) {
     const offers = offersResponse.data || [];
     const allocations = allocationsResponse.data || [];
     const payrollItems = payrollItemsResponse.error ? [] : payrollItemsResponse.data || [];
+    const allocationIds = allocations.map((allocation) => allocation.id).filter(Boolean);
+    const { data: allocationProofRows } = allocationIds.length
+        ? await supabaseAdmin
+            .from('private_fleet_payment_proofs')
+            .select('id, allocation_id, proof_url, storage_path, created_at')
+            .in('allocation_id', allocationIds)
+            .order('created_at', { ascending: false })
+        : { data: [] as Array<Record<string, any>> };
+    const visibleProofByAllocationId = new Map<string, Record<string, any>>();
+
+    (allocationProofRows || []).forEach((proof) => {
+        const allocationId = proof.allocation_id;
+        if (!allocationId || visibleProofByAllocationId.has(allocationId)) return;
+        if (getPrivateFleetProofDirectUrl(proof) || getPrivateFleetProofStoragePath(proof)) {
+            visibleProofByAllocationId.set(allocationId, proof);
+        }
+    });
+
+    const proofSignedUrlByPath = await createPrivateFleetProofSignedUrlMap(
+        supabaseAdmin,
+        [
+            ...allocations.map((allocation) => allocation.external_payment_proof_storage_path),
+            ...(allocationProofRows || []).map((proof) => proof.storage_path),
+        ]
+    );
 
     const activeTripsByTruckerId = new Map<string, number>();
     const completedTripsByTruckerId = new Map<string, number>();
@@ -219,26 +276,69 @@ export async function GET(request: NextRequest) {
         }
     });
 
-    const expenseByTruckerId = new Map<string, number>();
+    const expenseAssignedByTruckerId = new Map<string, number>();
+    const expenseReleasedByTruckerId = new Map<string, number>();
+    const expenseProofUploadedByTruckerId = new Map<string, number>();
+    const freightHeldByTruckerId = new Map<string, number>();
+    const freightReleasedByTruckerId = new Map<string, number>();
+    const freightProofUploadedByTruckerId = new Map<string, number>();
     const payrollByTruckerId = new Map<string, number>();
-    let expenseAdvancedThisMonthCop = 0;
-    let freightSettledThisMonthCop = 0;
+    let expenseAssignedThisMonthCop = 0;
+    let expenseReleasedThisMonthCop = 0;
+    let expenseProofUploadedThisMonthCop = 0;
+    let expensePaidExternalThisMonthCop = 0;
+    let freightHeldThisMonthCop = 0;
+    let freightReleasedThisMonthCop = 0;
+    let freightProofUploadedThisMonthCop = 0;
+    let freightPaidExternalThisMonthCop = 0;
     let payrollReleasedThisMonthCop = 0;
 
     allocations.forEach((allocation) => {
-        if (allocation.allocation_type === 'expense_advance' && allocation.status === 'released_to_wallet') {
-            const amount = Number(allocation.amount || 0);
-            expenseAdvancedThisMonthCop += amount;
-            expenseByTruckerId.set(allocation.trucker_id, (expenseByTruckerId.get(allocation.trucker_id) || 0) + amount);
+        const amount = Number(allocation.amount || 0);
+        const truckerId = allocation.trucker_id;
+        const status = String(allocation.status || '');
+
+        if (['expense_advance', 'company_expense'].includes(allocation.allocation_type)) {
+            if (!['refunded', 'cancelled', 'rejected'].includes(status)) {
+                expenseAssignedThisMonthCop += amount;
+                expenseAssignedByTruckerId.set(truckerId, (expenseAssignedByTruckerId.get(truckerId) || 0) + amount);
+            }
+
+            if (status === 'proof_uploaded') {
+                expenseProofUploadedThisMonthCop += amount;
+                expenseProofUploadedByTruckerId.set(truckerId, (expenseProofUploadedByTruckerId.get(truckerId) || 0) + amount);
+            }
+
+            if (status === 'paid_external' || status === 'released_to_wallet') {
+                if (status === 'paid_external') {
+                    expensePaidExternalThisMonthCop += amount;
+                }
+                expenseReleasedThisMonthCop += amount;
+                expenseReleasedByTruckerId.set(truckerId, (expenseReleasedByTruckerId.get(truckerId) || 0) + amount);
+            }
         }
 
-        if (['freight_payment', 'trip_pay'].includes(allocation.allocation_type) && allocation.status === 'released_to_wallet') {
-            freightSettledThisMonthCop += Number(allocation.amount || 0);
+        if (['freight_payment', 'trip_pay'].includes(allocation.allocation_type)) {
+            if (status === 'proof_uploaded') {
+                freightProofUploadedThisMonthCop += amount;
+                freightProofUploadedByTruckerId.set(truckerId, (freightProofUploadedByTruckerId.get(truckerId) || 0) + amount);
+            }
+
+            if (status === 'paid_external' || status === 'released_to_wallet') {
+                if (status === 'paid_external') {
+                    freightPaidExternalThisMonthCop += amount;
+                }
+                freightReleasedThisMonthCop += amount;
+                freightReleasedByTruckerId.set(truckerId, (freightReleasedByTruckerId.get(truckerId) || 0) + amount);
+            } else if (['held_in_custody', 'external_proof_pending', 'proof_uploaded'].includes(status)) {
+                freightHeldThisMonthCop += amount;
+                freightHeldByTruckerId.set(truckerId, (freightHeldByTruckerId.get(truckerId) || 0) + amount);
+            }
         }
     });
 
     payrollItems.forEach((item) => {
-        if (item.status !== 'released_to_wallet') {
+        if (!['released_to_wallet', 'paid_external'].includes(item.status)) {
             return;
         }
 
@@ -252,26 +352,122 @@ export async function GET(request: NextRequest) {
         monthly_salary_amount: canManagePayroll || roleCapabilities.canViewFinance ? Number(member.monthly_salary_amount || 0) : null,
         activeTrips: activeTripsByTruckerId.get(member.trucker_id) || 0,
         privateTripsCompleted: completedTripsByTruckerId.get(member.trucker_id) || 0,
-        totalExpenseAdvancedCop: expenseByTruckerId.get(member.trucker_id) || 0,
+        totalExpenseAdvancedCop: expenseReleasedByTruckerId.get(member.trucker_id) || 0,
+        totalExpenseAssignedCop: expenseAssignedByTruckerId.get(member.trucker_id) || 0,
+        totalExpenseReleasedCop: expenseReleasedByTruckerId.get(member.trucker_id) || 0,
+        totalExpenseProofUploadedCop: expenseProofUploadedByTruckerId.get(member.trucker_id) || 0,
+        totalFreightHeldCop: freightHeldByTruckerId.get(member.trucker_id) || 0,
+        totalFreightReleasedCop: freightReleasedByTruckerId.get(member.trucker_id) || 0,
+        totalFreightProofUploadedCop: freightProofUploadedByTruckerId.get(member.trucker_id) || 0,
         totalPayrollReleasedCop: payrollByTruckerId.get(member.trucker_id) || 0,
     }));
+    const memberByTruckerId = new Map(members.map((member) => [
+        member.trucker_id,
+        member as typeof member & {
+            user?: {
+                full_name?: string | null;
+                email?: string | null;
+            } | null;
+        },
+    ]));
+    const privateAllocations = allocations
+        .filter((allocation) => PRIVATE_SETTLEMENT_TYPES.includes(allocation.allocation_type))
+        .map((allocation) => {
+            const visibleProof = visibleProofByAllocationId.get(allocation.id) || null;
+            const proofPointer = {
+                external_payment_proof_url: allocation.external_payment_proof_url || visibleProof?.proof_url || null,
+                external_payment_proof_storage_path: allocation.external_payment_proof_storage_path || visibleProof?.storage_path || null,
+            };
+            const member = memberByTruckerId.get(allocation.trucker_id) as {
+                user?: {
+                    full_name?: string | null;
+                    email?: string | null;
+                } | null;
+            } | undefined;
+            return {
+                ...allocation,
+                ...proofPointer,
+                external_payment_proof_signed_url: resolvePrivateFleetProofDisplayUrl(proofPointer, proofSignedUrlByPath),
+                latest_proof_id: visibleProof?.id || null,
+                amount: Number(allocation.amount || 0),
+                truckerName: member?.user?.full_name || member?.user?.email || null,
+            };
+        });
+    const allocationsByOfferId = new Map<string, Array<Record<string, any>>>();
+    privateAllocations.forEach((allocation) => {
+        const current = allocationsByOfferId.get(allocation.offer_id) || [];
+        current.push(allocation);
+        allocationsByOfferId.set(allocation.offer_id, current);
+    });
+    const privateTripGroups = offers
+        .filter((offer) => {
+            const createdAt = offer.created_at ? new Date(offer.created_at).getTime() : 0;
+            return createdAt >= monthStart.getTime();
+        })
+        .map((offer) => {
+            const offerAllocations = allocationsByOfferId.get(offer.id) || [];
+            const payableAllocations = offerAllocations.filter((allocation) => Number(allocation.amount || 0) > 0);
+            const truckerId = offer.assigned_trucker_id || offerAllocations[0]?.trucker_id || null;
+            const member = truckerId ? memberByTruckerId.get(truckerId) as {
+                user?: {
+                    full_name?: string | null;
+                    email?: string | null;
+                } | null;
+            } | undefined : undefined;
+            const freightCop = payableAllocations
+                .filter((allocation) => ['freight_payment', 'trip_pay'].includes(allocation.allocation_type))
+                .reduce((sum, allocation) => sum + Number(allocation.amount || 0), 0);
+            const expenseCop = payableAllocations
+                .filter((allocation) => ['expense_advance', 'company_expense'].includes(allocation.allocation_type))
+                .reduce((sum, allocation) => sum + Number(allocation.amount || 0), 0);
+
+            return {
+                id: offer.id,
+                offer_id: offer.id,
+                trucker_id: truckerId,
+                truckerName: member?.user?.full_name || member?.user?.email || null,
+                compensation_mode: deriveCompensationMode(offer, payableAllocations),
+                status: offer.status,
+                external_payment_status: resolveTripSettlementStatus(payableAllocations),
+                created_at: offer.created_at,
+                cargo_description: offer.cargo_description || null,
+                has_warehouse: Boolean(offer.origin_warehouse_id || offer.destination_warehouse_id),
+                freightCop,
+                expenseCop,
+                totalCop: freightCop + expenseCop,
+                allocations: payableAllocations,
+            };
+        })
+        .sort((a, b) => new Date(String(b.created_at || 0)).getTime() - new Date(String(a.created_at || 0)).getTime());
 
     return apiSuccess({
         data: members,
+        privateAllocations,
+        privateTripGroups,
         invitations: invitationsResponse.data || [],
         subscription: snapshot.subscription,
         plans: snapshot.plans,
         limits: snapshot.limits,
-        canManageFleet: businessAccess.isOwner || profile?.user_type === 'admin',
+        canManageFleet: roleCapabilities.canManagePrivateFleetDrivers,
         canManagePayroll,
+        role: effectiveRole,
+        roleCapabilities,
         payrollSchemaReady,
         invitationHours: DEFAULT_INVITATION_HOURS,
         stats: {
             activeDrivers: snapshot.limits.activePrivateFleetDrivers,
             activeTrips,
             privateTripsCompleted,
-            expenseAdvancedThisMonthCop,
-            freightSettledThisMonthCop,
+            expenseAdvancedThisMonthCop: expenseReleasedThisMonthCop,
+            expenseAssignedThisMonthCop,
+            expenseReleasedThisMonthCop,
+            expenseProofUploadedThisMonthCop,
+            expensePaidExternalThisMonthCop,
+            freightHeldThisMonthCop,
+            freightReleasedThisMonthCop,
+            freightProofUploadedThisMonthCop,
+            freightPaidExternalThisMonthCop,
+            freightSettledThisMonthCop: freightReleasedThisMonthCop,
             payrollReleasedThisMonthCop: canManagePayroll || roleCapabilities.canViewFinance ? payrollReleasedThisMonthCop : 0,
         },
     }, {
@@ -290,8 +486,18 @@ export async function POST(request: NextRequest) {
 
     const { supabaseAdmin, authUser, profile } = auth.context;
     const businessAccess = await resolveBusinessAccessContext(supabaseAdmin, authUser.id, profile);
+    const effectiveRole = resolveEffectiveBusinessRole(profile, businessAccess);
+    const roleCapabilities = getBusinessPolicyCapabilities(effectiveRole);
 
-    if (profile?.user_type !== 'admin' && (!businessAccess.businessId || !businessAccess.isOwner)) {
+    if (!businessAccess.businessId && profile?.user_type !== 'admin') {
+        return apiError('Business access required', {
+            requestId,
+            status: 403,
+            code: 'BUSINESS_FLEET_INVITE_BUSINESS_REQUIRED',
+        });
+    }
+
+    if (!roleCapabilities.canManagePrivateFleetDrivers) {
         return apiError('Solo owner/admin puede invitar conductores a la flota', {
             requestId,
             status: 403,

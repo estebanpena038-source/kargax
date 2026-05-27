@@ -78,6 +78,22 @@ export interface BusinessPlanSubscription {
     plan?: BillingPlan | null;
 }
 
+export interface CommercialActivationChecklistItem {
+    key: string;
+    label: string;
+    completed: boolean;
+    href: string;
+}
+
+export interface CommercialActivationSnapshot {
+    status: 'setup' | 'first_value' | 'activated';
+    completedDeliveriesWithEvidence: number;
+    activationTarget: number;
+    checklist: CommercialActivationChecklistItem[];
+    nextActionLabel: string;
+    nextActionHref: string;
+}
+
 export interface WarehouseSummary {
     appointments: number;
     docks: number;
@@ -98,6 +114,9 @@ export interface Warehouse {
     department: string;
     city: string;
     address: string;
+    latitude: number | null;
+    longitude: number | null;
+    gps_tolerance_meters: number | null;
     timezone: string;
     status: 'active' | 'inactive' | 'maintenance';
     flow_mode: WarehouseFlowMode;
@@ -267,6 +286,217 @@ export interface WarehouseDispatchOrder {
     lines?: WarehouseDispatchLine[];
 }
 
+export type WarehouseDigitalEvidenceStatus =
+    | 'dispatch_only'
+    | 'assigned'
+    | 'accepted'
+    | 'rejected'
+    | 'in_transit'
+    | 'completed'
+    | 'cancelled'
+    | 'blocked';
+
+export type WarehouseDigitalEvidenceStage =
+    | 'dispatch'
+    | 'assignment'
+    | 'origin'
+    | 'loading'
+    | 'pickup_pin'
+    | 'tracking'
+    | 'destination'
+    | 'delivery'
+    | 'delivery_pin'
+    | 'signature'
+    | 'financial'
+    | 'incident';
+
+export interface WarehouseDigitalEvidenceSignature {
+    id: string;
+    stage: 'origin_dispatch' | 'delivery_pod' | string;
+    signerName: string | null;
+    signerDocumentId: string | null;
+    signerRole: string | null;
+    publicUrl: string | null;
+    createdAt: string | null;
+}
+
+export interface WarehouseDigitalEvidenceSignatureRequirement {
+    stage: string;
+    label: string;
+    signerRole: 'warehouse_manager' | 'customer' | 'receiver' | 'other';
+    required: boolean;
+    completed: boolean;
+    captureSurface: 'warehouse_panel' | 'driver_app' | 'legacy';
+    signature: WarehouseDigitalEvidenceSignature | null;
+}
+
+export interface WarehouseDigitalEvidencePhoto {
+    id: string;
+    url: string;
+    stage: WarehouseDigitalEvidenceStage;
+    label: string;
+    itemName: string | null;
+    notes: string | null;
+    rejectionReason: string | null;
+    createdAt: string | null;
+}
+
+export interface WarehouseDigitalEvidenceTimelineEvent {
+    id: string;
+    stage: WarehouseDigitalEvidenceStage;
+    label: string;
+    status: 'complete' | 'pending' | 'rejected' | 'warning';
+    timestamp: string | null;
+    detail: string | null;
+    source: 'dispatch' | 'offer' | 'picking' | 'signature' | 'tracking' | 'payment';
+}
+
+export interface WarehouseDigitalEvidenceManifestItem {
+    id: string;
+    reference: string | null;
+    name: string;
+    expectedQty: number;
+    loadedQty: number;
+    deliveredQty: number;
+    rejectedQty: number;
+    rejectionReason: string | null;
+    status: string | null;
+}
+
+export interface WarehouseDigitalEvidenceTrackingPing {
+    id: string;
+    sessionId: string | null;
+    latitude: number | null;
+    longitude: number | null;
+    accuracyMeters: number | null;
+    capturedAt: string | null;
+}
+
+export interface WarehouseDigitalEvidenceTrackingSession {
+    id: string;
+    status: string;
+    source: string | null;
+    startedAt: string | null;
+    stoppedAt: string | null;
+    lastPingAt: string | null;
+    lastLatitude: number | null;
+    lastLongitude: number | null;
+    lastAccuracyMeters: number | null;
+}
+
+export interface WarehouseDigitalEvidenceRecord {
+    id: string;
+    destinationType: 'final_customer' | 'warehouse';
+    dispatch: {
+        id: string;
+        number: string;
+        status: WarehouseDispatchOrder['status'];
+        scheduledAt: string | null;
+        dispatchedAt: string | null;
+        confirmedAt: string | null;
+        createdAt: string;
+        notes: string | null;
+        tripCreationStatus: string | null;
+        tripCreationError: string | null;
+        dispatchTripMode: string | null;
+        lines: WarehouseDispatchLine[];
+    };
+    offer: {
+        id: string;
+        status: string | null;
+        isPrivateFleet: boolean;
+        sourceDispatchId: string | null;
+        cargoDescription: string | null;
+        createdAt: string | null;
+        pickupVerified: boolean;
+        deliveryVerified: boolean;
+    } | null;
+    driver: {
+        id: string | null;
+        name: string | null;
+        email: string | null;
+        phone: string | null;
+        vehiclePlate: string | null;
+        internalDriverId: string | null;
+        assignmentStatus: 'pending' | 'accepted' | 'rejected' | null;
+        acceptedAt: string | null;
+        rejectedAt: string | null;
+        rejectionReason: string | null;
+    };
+    route: {
+        originAddress: string | null;
+        originCity: string | null;
+        originDepartment: string | null;
+        destinationAddress: string | null;
+        destinationCity: string | null;
+        destinationDepartment: string | null;
+    };
+    originWarehouse: Pick<Warehouse, 'id' | 'code' | 'name' | 'city' | 'department' | 'address'> | null;
+    destinationWarehouse: Pick<Warehouse, 'id' | 'code' | 'name' | 'city' | 'department' | 'address'> | null;
+    transferReceipt: {
+        id: string;
+        number: string;
+        status: WarehouseReceipt['status'];
+        warehouseId: string;
+        createdAt: string | null;
+        receivedAt: string | null;
+    } | null;
+    status: WarehouseDigitalEvidenceStatus;
+    timestamps: {
+        createdAt: string | null;
+        scheduledAt: string | null;
+        dispatchedAt: string | null;
+        acceptedAt: string | null;
+        rejectedAt: string | null;
+        arrivedOriginAt: string | null;
+        loadingStartedAt: string | null;
+        pickupVerifiedAt: string | null;
+        arrivedDestinationAt: string | null;
+        unloadingStartedAt: string | null;
+        deliveryVerifiedAt: string | null;
+        closedAt: string | null;
+    };
+    manifestSummary: {
+        expected: number;
+        loaded: number;
+        delivered: number;
+        rejected: number;
+        lineCount: number;
+        photoCount: number;
+        signatureCount: number;
+        hasMissingEvidence: boolean;
+        items: WarehouseDigitalEvidenceManifestItem[];
+    };
+    signatures: WarehouseDigitalEvidenceSignature[];
+    signatureRequirements: WarehouseDigitalEvidenceSignatureRequirement[];
+    photos: WarehouseDigitalEvidencePhoto[];
+    timeline: WarehouseDigitalEvidenceTimelineEvent[];
+    tracking: {
+        sessionCount: number;
+        active: boolean;
+        sessions: WarehouseDigitalEvidenceTrackingSession[];
+        latestPing: WarehouseDigitalEvidenceTrackingPing | null;
+        pings: WarehouseDigitalEvidenceTrackingPing[];
+    };
+    financial: {
+        paymentStatus: string | null;
+        freightAmount: number;
+        expenseAmount: number;
+        releasedAt: string | null;
+        allocationStatus: string | null;
+    };
+    rejection: {
+        rejected: boolean;
+        rejectedAt: string | null;
+        reason: string | null;
+        rejectedBy: string | null;
+    };
+}
+
+export interface WarehouseDigitalEvidenceResponse {
+    data: WarehouseDigitalEvidenceRecord[];
+}
+
 export interface WarehouseTask {
     id: string;
     warehouse_id: string;
@@ -359,8 +589,17 @@ export interface WarehouseAccessResponse {
     canViewOperations?: boolean;
     canCreateMarketplaceOffers?: boolean;
     canManagePrivateFleet?: boolean;
+    canViewPrivateFleet?: boolean;
+    canOperatePrivateFleet?: boolean;
+    canManagePrivateFleetDrivers?: boolean;
+    canManagePrivateFleetMoney?: boolean;
+    canViewPrivateFleetMoney?: boolean;
+    canUploadPrivateFleetProofs?: boolean;
+    canClosePrivateFleetProofs?: boolean;
     canViewTracking?: boolean;
     canViewIntelligence?: boolean;
+    rolePolicyCapabilities?: Record<string, unknown>;
+    commercialActivation?: CommercialActivationSnapshot | null;
     teamSchemaReady?: boolean;
     teamSchemaMessage?: string | null;
     holdingReady?: boolean;
@@ -726,6 +965,21 @@ export interface BusinessFleetInvitation {
     revoked_at?: string | null;
 }
 
+export type PrivateFleetCompensationMode =
+    | 'salary_no_trip_pay'
+    | 'trip_pay'
+    | 'expenses_only'
+    | 'trip_pay_plus_expenses';
+
+export interface PrivateFleetTripCompensation {
+    mode: PrivateFleetCompensationMode;
+    freightAmount: number;
+    expenseAmount: number;
+    visiblePrimaryAmount: number;
+    primaryLabel: string;
+    summaryLabel: string;
+}
+
 export interface BusinessFleetMember {
     id: string;
     business_id: string;
@@ -734,7 +988,7 @@ export interface BusinessFleetMember {
     internal_driver_id: string | null;
     vehicle_plate: string | null;
     notes: string | null;
-    default_compensation_mode?: 'salary_no_trip_pay' | 'trip_pay' | 'expenses_only' | 'trip_pay_plus_expenses';
+    default_compensation_mode?: PrivateFleetCompensationMode;
     monthly_salary_amount?: number | null;
     monthly_salary_currency?: 'COP' | 'USD' | 'PEN' | 'BRL' | null;
     payroll_day?: number | null;
@@ -751,6 +1005,10 @@ export interface BusinessFleetMember {
     activeTrips?: number;
     privateTripsCompleted?: number;
     totalExpenseAdvancedCop?: number;
+    totalExpenseAssignedCop?: number;
+    totalExpenseReleasedCop?: number;
+    totalFreightHeldCop?: number;
+    totalFreightReleasedCop?: number;
     totalPayrollReleasedCop?: number;
 }
 
@@ -761,7 +1019,7 @@ export interface PrivateFleetPayrollItem {
     fleet_member_id: string;
     trucker_id: string;
     amount: number;
-    status: 'pending' | 'funded' | 'released_to_wallet' | 'cancelled' | 'failed';
+    status: 'pending' | 'funded' | 'released_to_wallet' | 'cancelled' | 'failed' | 'proof_uploaded' | 'paid_external' | 'rejected';
     wallet_transaction_id: string | null;
     released_at: string | null;
     metadata: Record<string, unknown> | null;
@@ -775,7 +1033,16 @@ export interface PrivateFleetPayrollRun {
     period_start: string;
     period_end: string;
     currency_code: 'COP' | 'USD' | 'PEN' | 'BRL';
-    status: 'draft' | 'approved' | 'checkout_pending' | 'funded' | 'released' | 'cancelled' | 'failed';
+    status: 'draft' | 'approved' | 'checkout_pending' | 'funded' | 'released' | 'cancelled' | 'failed' | 'pending_external_pay' | 'proof_uploaded' | 'paid_external' | 'rejected';
+    payment_mode?: 'external_proof' | 'mercadopago_funded';
+    external_payment_status?: 'pending_external_pay' | 'proof_uploaded' | 'paid_external' | 'rejected' | 'cancelled';
+    external_paid_at?: string | null;
+    external_paid_by?: string | null;
+    external_payment_method?: string | null;
+    external_payment_reference?: string | null;
+    external_payment_proof_url?: string | null;
+    external_payment_proof_storage_path?: string | null;
+    external_payment_note?: string | null;
     gross_amount: number;
     processing_fee_amount: number;
     total_amount: number;
@@ -802,18 +1069,63 @@ export interface PrivateFleetPayrollResponse {
     summary: {
         configuredDrivers: number;
         releasedThisMonthCop: number;
+        externalPaidThisMonthCop?: number;
+        externalProofUploadedCop?: number;
         pendingRuns: number;
     };
 }
 
+export interface PrivateFleetAllocation {
+    id: string;
+    offer_id: string;
+    business_id: string;
+    trucker_id: string;
+    allocation_type: 'expense_advance' | 'freight_payment' | 'trip_pay' | 'company_expense';
+    amount: number;
+    status: 'held_in_custody' | 'released_to_wallet' | 'refunded' | 'external_proof_pending' | 'proof_uploaded' | 'paid_external' | 'rejected' | 'cancelled';
+    external_payment_status?: 'pending_external_pay' | 'proof_uploaded' | 'paid_external' | 'rejected' | 'cancelled' | null;
+    external_paid_at?: string | null;
+    external_payment_method?: string | null;
+    external_payment_reference?: string | null;
+    external_payment_proof_url?: string | null;
+    external_payment_proof_storage_path?: string | null;
+    external_payment_proof_signed_url?: string | null;
+    external_payment_note?: string | null;
+    latest_proof_id?: string | null;
+    created_at: string;
+    released_at?: string | null;
+    truckerName?: string | null;
+}
+
+export interface PrivateFleetTripSettlementGroup {
+    id: string;
+    offer_id: string;
+    trucker_id: string | null;
+    truckerName?: string | null;
+    compensation_mode: PrivateFleetCompensationMode;
+    status: string;
+    external_payment_status: 'pending_external_pay' | 'proof_uploaded' | 'paid_external' | 'rejected' | 'cancelled' | 'legacy_wallet_funded' | 'not_applicable';
+    created_at: string;
+    cargo_description?: string | null;
+    has_warehouse: boolean;
+    freightCop: number;
+    expenseCop: number;
+    totalCop: number;
+    allocations: PrivateFleetAllocation[];
+}
+
 export interface BusinessFleetResponse {
     data: BusinessFleetMember[];
+    privateAllocations?: PrivateFleetAllocation[];
+    privateTripGroups?: PrivateFleetTripSettlementGroup[];
     invitations: BusinessFleetInvitation[];
     subscription: BusinessPlanSubscription | null;
     plans: BillingPlan[];
     limits: WarehouseListResponse['limits'];
     canManageFleet: boolean;
     canManagePayroll?: boolean;
+    role?: BusinessRole | null;
+    roleCapabilities?: Record<string, unknown>;
     payrollSchemaReady?: boolean;
     invitationHours: number;
     stats: {
@@ -821,6 +1133,14 @@ export interface BusinessFleetResponse {
         activeTrips: number;
         privateTripsCompleted: number;
         expenseAdvancedThisMonthCop: number;
+        expenseAssignedThisMonthCop?: number;
+        expenseReleasedThisMonthCop?: number;
+        expenseProofUploadedThisMonthCop?: number;
+        expensePaidExternalThisMonthCop?: number;
+        freightHeldThisMonthCop?: number;
+        freightReleasedThisMonthCop?: number;
+        freightProofUploadedThisMonthCop?: number;
+        freightPaidExternalThisMonthCop?: number;
         freightSettledThisMonthCop: number;
         payrollReleasedThisMonthCop?: number;
     };
@@ -850,6 +1170,9 @@ export interface PrivateFleetDriverTrip {
     totalAmount: number;
     freightPaymentAmount?: number;
     expenseAllowanceAmount?: number;
+    compensationMode?: PrivateFleetCompensationMode;
+    expensesReleasePolicy?: 'acceptance' | 'pickup_pin' | 'delivery_pod' | 'manual' | null;
+    compensation?: PrivateFleetTripCompensation;
     privateFleetNotes?: string | null;
     rejectedAt?: string | null;
     rejectionReason?: string | null;

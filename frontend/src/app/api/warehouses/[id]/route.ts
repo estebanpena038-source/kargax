@@ -10,6 +10,18 @@ import {
     isPlanLimitError,
 } from '@/lib/server/warehouses';
 
+function hasValidCoordinates(latitude: unknown, longitude: unknown) {
+    const lat = Number(latitude);
+    const lng = Number(longitude);
+
+    return Number.isFinite(lat)
+        && Number.isFinite(lng)
+        && lat >= -90
+        && lat <= 90
+        && lng >= -180
+        && lng <= 180;
+}
+
 interface RouteContext {
     params: Promise<{ id: string }>;
 }
@@ -134,6 +146,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
             department?: string;
             city?: string;
             address?: string;
+            latitude?: number | null;
+            longitude?: number | null;
+            gpsToleranceMeters?: number;
             timezone?: string;
             status?: 'active' | 'inactive' | 'maintenance';
             flowMode?: 'manual' | 'warehouse_managed' | '3pl';
@@ -148,6 +163,19 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         if (body.department !== undefined) payload.department = body.department.trim();
         if (body.city !== undefined) payload.city = body.city.trim();
         if (body.address !== undefined) payload.address = body.address.trim();
+        if (body.latitude !== undefined || body.longitude !== undefined) {
+            if (!hasValidCoordinates(body.latitude, body.longitude)) {
+                return apiError('latitude and longitude are required for warehouse GPS verification', {
+                    status: 400,
+                    code: 'WAREHOUSE_COORDINATES_REQUIRED',
+                    requestId,
+                });
+            }
+
+            payload.latitude = Number(body.latitude);
+            payload.longitude = Number(body.longitude);
+        }
+        if (body.gpsToleranceMeters !== undefined) payload.gps_tolerance_meters = Math.max(50, Number(body.gpsToleranceMeters || 500));
         if (body.timezone !== undefined) payload.timezone = body.timezone.trim();
         if (body.status !== undefined) payload.status = body.status;
         if (body.flowMode !== undefined) payload.flow_mode = body.flowMode;

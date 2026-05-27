@@ -17,10 +17,10 @@ export async function PATCH(
     const { supabaseAdmin, authUser } = auth.context;
     const { id } = await context.params;
     const body = await request.json().catch(() => ({}));
-    const action = body?.action as 'approve' | 'reject' | 'cancel';
+    const action = body?.action as 'approve' | 'reject' | 'cancel' | 'retry_payout' | 'force_manual_review' | 'mark_paid_manual';
     const note = typeof body?.note === 'string' ? body.note.trim() : '';
 
-    if (!['approve', 'reject', 'cancel'].includes(action)) {
+    if (!['approve', 'reject', 'cancel', 'retry_payout', 'force_manual_review', 'mark_paid_manual'].includes(action)) {
         await recordCriticalOperation(auth.context.supabaseAdmin, {
             requestId,
             actorUserId: auth.context.authUser.id,
@@ -120,6 +120,107 @@ export async function PATCH(
             },
         });
         return NextResponse.json({ error: 'Wallet not found' }, { status: 404 });
+    }
+
+    if (['retry_payout', 'force_manual_review', 'mark_paid_manual'].includes(action)) {
+        const { data: payoutAttempt } = await supabaseAdmin
+            .from('payout_attempts')
+            .select('*')
+            .eq('wallet_transaction_id', transaction.id)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+        if (!payoutAttempt) {
+            return NextResponse.json({ error: 'Payout attempt not found' }, { status: 404 });
+        }
+
+        if (action === 'retry_payout') {
+            await supabaseAdmin
+                .from('payout_attempts')
+                .update({
+                    status: 'queued',
+                    next_retry_at: null,
+                    failure_reason: null,
+                    failure_message: null,
+                    updated_at: new Date().toISOString(),
+                })
+                .eq('id', payoutAttempt.id);
+        }
+
+        if (action === 'force_manual_review') {
+            await supabaseAdmin
+                .from('payout_attempts')
+                .update({
+                    status: 'manual_review',
+                    failure_reason: note || 'Revision manual solicitada por admin.',
+                    failure_message: note || 'Revision manual solicitada por admin.',
+                    updated_at: new Date().toISOString(),
+                })
+                .eq('id', payoutAttempt.id);
+        }
+
+        if (action === 'mark_paid_manual') {
+            const providerTransferId = typeof body?.providerTransferId === 'string' && body.providerTransferId.trim()
+                ? body.providerTransferId.trim()
+                : `manual:${transaction.id}`;
+            const receiptUrl = typeof body?.receiptUrl === 'string' && body.receiptUrl.trim()
+                ? body.receiptUrl.trim()
+                : null;
+
+            const { error: paidError } = await supabaseAdmin.rpc('mark_payout_paid', {
+                p_payout_attempt_id: payoutAttempt.id,
+                p_provider_transfer_id: providerTransferId,
+                p_receipt_url: receiptUrl,
+                p_provider_response: {
+                    provider: 'manual',
+                    marked_by: authUser.id,
+                    note: note || null,
+                },
+            });
+
+            if (paidError) {
+                return NextResponse.json({ error: paidError.message }, { status: 500 });
+            }
+        }
+
+        await createAdminNotification(supabaseAdmin, {
+            type: 'payout_admin_action',
+            title: 'Payout actualizado por admin',
+            message: `Payout ${payoutAttempt.id.slice(0, 8)} recibio accion ${action}.`,
+            data: {
+                request_id: transaction.id,
+                payout_attempt_id: payoutAttempt.id,
+                action,
+                note: note || null,
+                trucker_id: wallet.user_id,
+            },
+        });
+
+        await recordCriticalOperation(supabaseAdmin, {
+            requestId,
+            actorUserId: authUser.id,
+            actorType: 'admin',
+            domain: 'wallet',
+            action: 'admin_payout_action',
+            entityType: 'payout_attempt',
+            entityId: payoutAttempt.id,
+            status: 'success',
+            replayable: action === 'retry_payout',
+            sourceReference: transaction.id,
+            metadata: {
+                action,
+                amount,
+                note: note || null,
+            },
+        });
+
+        return NextResponse.json({
+            success: true,
+            action,
+            request_id: transaction.id,
+            payout_attempt_id: payoutAttempt.id,
+        });
     }
 
     const { data: processingResult, error: processingError } = await supabaseAdmin.rpc('process_withdrawal_request', {

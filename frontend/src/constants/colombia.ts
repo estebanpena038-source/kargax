@@ -132,6 +132,7 @@ export const MAJOR_CITIES: readonly City[] = [
     { code: 'NAR003', name: 'Tumaco', departmentCode: 'NAR', daneCode: '52835' },
     // Cauca
     { code: 'CAU001', name: 'Popayán', departmentCode: 'CAU', daneCode: '19001', isCapital: true },
+    { code: 'CAU002', name: 'Santander de Quilichao', departmentCode: 'CAU', daneCode: '19698' },
     // Cesar
     { code: 'CES001', name: 'Valledupar', departmentCode: 'CES', daneCode: '20001', isCapital: true },
     // La Guajira

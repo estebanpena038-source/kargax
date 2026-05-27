@@ -1,11 +1,11 @@
 import { NextRequest } from 'next/server';
-import { requireAal2Route, resolveScopedBusinessId } from '@/lib/server/route-auth';
+import { requireAal2Route } from '@/lib/server/route-auth';
 import { apiError, apiSuccess, getRequestId } from '@/lib/server/api-response';
 import {
     getBillingCheckoutInfrastructureStatus,
     getBusinessPlanSnapshot,
-    resolveBusinessAccessContext,
 } from '@/lib/server/warehouses';
+import { resolveBusinessRolePolicy } from '@/lib/server/role-policy';
 
 export async function GET(request: NextRequest) {
     const requestId = getRequestId(request);
@@ -17,7 +17,10 @@ export async function GET(request: NextRequest) {
 
     try {
         const { supabaseAdmin, authUser, profile } = auth.context;
-        const businessAccess = await resolveBusinessAccessContext(supabaseAdmin, authUser.id, profile);
+        const policy = await resolveBusinessRolePolicy(supabaseAdmin, authUser.id, profile, {
+            requestedBusinessId: request.nextUrl.searchParams.get('businessId'),
+            adminFallbackBusinessId: authUser.id,
+        });
 
         if (!profile || !['business', 'admin'].includes(profile.user_type)) {
             return apiError('Only business and admin users can manage plans', {
@@ -27,22 +30,24 @@ export async function GET(request: NextRequest) {
             });
         }
 
-        const scopedBusiness = resolveScopedBusinessId({
-            requestedBusinessId: request.nextUrl.searchParams.get('businessId'),
-            resolvedBusinessId: businessAccess.businessId,
-            profile,
-            adminFallbackBusinessId: authUser.id,
-        });
-
-        if ('error' in scopedBusiness) {
-            return apiError(scopedBusiness.error || 'Business scope error', {
-                status: scopedBusiness.status,
+        if (policy.scopeError) {
+            return apiError(policy.scopeError.error || 'Business scope error', {
+                status: policy.scopeError.status,
                 code: 'BUSINESS_SCOPE_ERROR',
                 requestId,
             });
         }
 
-        const businessId = scopedBusiness.businessId;
+        const businessId = policy.businessId;
+
+        if (!businessId) {
+            return apiError('businessId is required', {
+                status: 400,
+                code: 'BUSINESS_SCOPE_REQUIRED',
+                requestId,
+            });
+        }
+
         const [snapshot, billingCheckoutStatus] = await Promise.all([
             getBusinessPlanSnapshot(supabaseAdmin, businessId),
             getBillingCheckoutInfrastructureStatus(supabaseAdmin),
@@ -56,7 +61,7 @@ export async function GET(request: NextRequest) {
             teamSchemaMessage: snapshot.teamSchemaMessage,
             billingCheckoutReady: billingCheckoutStatus.ready,
             billingCheckoutMessage: billingCheckoutStatus.message,
-            canManageBilling: businessAccess.isOwner || profile.user_type === 'admin',
+            canManageBilling: policy.capabilities.canManageBilling,
         }, {
             code: 'BILLING_SUBSCRIPTION_LOADED',
             requestId,
@@ -84,7 +89,15 @@ export async function PATCH(request: NextRequest) {
 
     try {
         const { supabaseAdmin, authUser, profile } = auth.context;
-        const businessAccess = await resolveBusinessAccessContext(supabaseAdmin, authUser.id, profile);
+        const body = (await request.json()) as {
+            planCode?: string;
+            businessId?: string;
+            status?: 'active' | 'trialing' | 'paused' | 'cancelled';
+        };
+        const policy = await resolveBusinessRolePolicy(supabaseAdmin, authUser.id, profile, {
+            requestedBusinessId: body.businessId,
+            adminFallbackBusinessId: authUser.id,
+        });
 
         if (!profile || !['business', 'admin'].includes(profile.user_type)) {
             return apiError('Only business and admin users can manage plans', {
@@ -94,12 +107,6 @@ export async function PATCH(request: NextRequest) {
             });
         }
 
-        const body = (await request.json()) as {
-            planCode?: string;
-            businessId?: string;
-            status?: 'active' | 'trialing' | 'paused' | 'cancelled';
-        };
-
         if (!body.planCode) {
             return apiError('planCode is required', {
                 status: 400,
@@ -108,24 +115,17 @@ export async function PATCH(request: NextRequest) {
             });
         }
 
-        const scopedBusiness = resolveScopedBusinessId({
-            requestedBusinessId: body.businessId,
-            resolvedBusinessId: businessAccess.businessId,
-            profile,
-            adminFallbackBusinessId: authUser.id,
-        });
-
-        if ('error' in scopedBusiness) {
-            return apiError(scopedBusiness.error || 'Business scope error', {
-                status: scopedBusiness.status,
+        if (policy.scopeError) {
+            return apiError(policy.scopeError.error || 'Business scope error', {
+                status: policy.scopeError.status,
                 code: 'BUSINESS_SCOPE_ERROR',
                 requestId,
             });
         }
 
-        const businessId = scopedBusiness.businessId;
+        const businessId = policy.businessId;
 
-        if (!businessId || (!businessAccess.isOwner && profile.user_type !== 'admin')) {
+        if (!businessId || !policy.capabilities.canManageBilling) {
             return apiError('Only owners or admins can update plans directly', {
                 status: 403,
                 code: 'BILLING_OWNER_REQUIRED',
@@ -156,7 +156,7 @@ export async function PATCH(request: NextRequest) {
                 teamSchemaMessage: currentSnapshot.teamSchemaMessage,
                 billingCheckoutReady: billingCheckout.ready,
                 billingCheckoutMessage: billingCheckout.message,
-                canManageBilling: businessAccess.isOwner || profile.user_type === 'admin',
+                canManageBilling: policy.capabilities.canManageBilling,
             }, {
                 code: 'PLAN_ALREADY_ACTIVE',
                 requestId,
@@ -235,7 +235,7 @@ export async function PATCH(request: NextRequest) {
             teamSchemaMessage: snapshot.teamSchemaMessage,
             billingCheckoutReady: billingCheckoutAfterUpdate.ready,
             billingCheckoutMessage: billingCheckoutAfterUpdate.message,
-            canManageBilling: businessAccess.isOwner || profile.user_type === 'admin',
+            canManageBilling: policy.capabilities.canManageBilling,
         }, {
             code: 'PLAN_UPDATED',
             requestId,

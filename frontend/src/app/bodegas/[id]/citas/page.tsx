@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { useParams } from 'next/navigation';
-import { CalendarClock, Clock, Truck, UserRound, Warehouse } from 'lucide-react';
+import { CalendarClock } from 'lucide-react';
 import { DashboardLayout } from '@/components/layouts/DashboardLayout';
 import { AndeanPhoneInput, Button, Input, Select, toast } from '@/components/ui';
 import { useAuthStore } from '@/features/auth/store/authStore';
@@ -16,13 +16,21 @@ import {
     resolveWarehouseCountry,
 } from '@/lib/warehouses/localization';
 import { SectionCard, WarehouseWorkspace } from '@/components/warehouses/WarehouseWorkspace';
+import {
+    WmsActionRow,
+    WmsEmptyState,
+    WmsFleetCard,
+    WmsFleetDarkPanel,
+    WmsFleetIdentity,
+    WmsFleetInfoGrid,
+    WmsFleetSection,
+    WmsStatusBadge,
+} from '@/components/warehouses/WarehouseExecutionLuxury';
 
-function StatusText({ value }: { value: string }) {
-    return (
-        <span className="w-fit max-w-full break-words rounded-md border border-zinc-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-zinc-600 sm:tracking-[0.16em]">
-            {value}
-        </span>
-    );
+function appointmentTone(status: string) {
+    if (status === 'completed') return 'strong' as const;
+    if (status === 'cancelled') return 'muted' as const;
+    return 'neutral' as const;
 }
 
 export default function WarehouseAppointmentsPage() {
@@ -57,10 +65,10 @@ export default function WarehouseAppointmentsPage() {
                     const historicalAppointments = orderedAppointments.filter((appointment) => appointment.status === 'completed' || appointment.status === 'cancelled').slice(-5).reverse();
 
                     return (
-                        <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] sm:gap-6">
+                        <div className="grid min-w-0 gap-4 sm:gap-5">
                             <SectionCard title="Programar cita" description="Una ventana operativa debe quedar clara antes de tocar la bodega: tipo, muelle, horario y responsable.">
                                 <div className="space-y-5">
-                                    <div className="grid min-w-0 gap-4 md:grid-cols-2">
+                                    <div className="grid min-w-0 gap-4">
                                         <Select
                                             label="Tipo"
                                             value={form.appointmentType}
@@ -121,99 +129,98 @@ export default function WarehouseAppointmentsPage() {
                                 </div>
                             </SectionCard>
 
-                            <div className="min-w-0 space-y-4 sm:space-y-6">
-                                <SectionCard title="Agenda viva" description="Vista tipo calendario/lista para ejecutar el dia sin abrir detalles innecesarios.">
-                                    <div className="space-y-3">
+                            <div className="min-w-0 space-y-4 sm:space-y-5">
+                                <WmsFleetSection icon={CalendarClock} title="Agenda viva" description="Horario, muelle, placa y responsable listos para ejecutar el turno.">
+                                    {liveAppointments.length ? (
+                                    <>
                                         {liveAppointments.map((appointment) => (
-                                            <div key={appointment.id} className="min-w-0 rounded-lg border border-zinc-200 bg-white p-4">
-                                                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                                                    <div className="min-w-0">
-                                                        <div className="flex flex-wrap items-center gap-2">
-                                                            <p className="break-words font-semibold text-zinc-950">{getAppointmentTypeLabel(appointment.appointment_type)}</p>
-                                                            <StatusText value={getAppointmentStatusLabel(appointment.status)} />
-                                                        </div>
-                                                        <div className="mt-4 grid min-w-0 gap-3 text-sm text-zinc-600 sm:grid-cols-2">
-                                                            <p className="flex items-start gap-2">
-                                                                <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-zinc-400" />
-                                                                <span className="min-w-0 break-words">{formatWarehouseDateTime(appointment.scheduled_start, countryCode)}</span>
-                                                            </p>
-                                                            <p className="flex items-start gap-2">
-                                                                <Clock className="mt-0.5 h-4 w-4 shrink-0 text-zinc-400" />
-                                                                <span className="min-w-0 break-words">{formatWarehouseDateTime(appointment.scheduled_end, countryCode)}</span>
-                                                            </p>
-                                                            <p className="flex items-start gap-2">
-                                                                <Truck className="mt-0.5 h-4 w-4 shrink-0 text-zinc-400" />
-                                                                <span className="min-w-0 break-words">{appointment.vehicle_plate || 'Sin placa'}</span>
-                                                            </p>
-                                                            <p className="flex items-start gap-2">
-                                                                <Warehouse className="mt-0.5 h-4 w-4 shrink-0 text-zinc-400" />
-                                                                <span className="min-w-0 break-words">{appointment.dock?.name || 'Sin muelle'}</span>
-                                                            </p>
-                                                            <p className="flex items-start gap-2 sm:col-span-2">
-                                                                <UserRound className="mt-0.5 h-4 w-4 shrink-0 text-zinc-400" />
-                                                                <span className="min-w-0 break-words">{appointment.trucker_name || appointment.contact_name || 'Sin responsable asignado'}</span>
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                    {capabilities?.manageAppointments ? (
-                                                        <div className="flex min-w-0 flex-wrap gap-2 lg:shrink-0 lg:justify-end">
-                                                            {(appointment.status === 'scheduled' ? ['checked_in', 'cancelled']
-                                                                : appointment.status === 'checked_in' ? ['in_progress', 'completed', 'cancelled']
-                                                                    : appointment.status === 'in_progress' ? ['completed', 'cancelled']
-                                                                        : []
-                                                            ).map((nextStatus) => (
-                                                                <Button
-                                                                    key={nextStatus}
-                                                                    size="sm"
-                                                                    variant={nextStatus === 'cancelled' ? 'outline' : 'primary'}
-                                                                    disabled={processingId === appointment.id}
-                                                                    onClick={async () => {
-                                                                        try {
-                                                                            setProcessingId(appointment.id);
-                                                                            await warehouseClient.updateAppointment(warehouseId, appointment.id, { status: nextStatus });
-                                                                            toast.success('Cita actualizada');
-                                                                            await reload();
-                                                                        } catch (error) {
-                                                                            toast.error('Error', error instanceof Error ? mapWarehouseErrorMessage(error.message) : 'No se pudo actualizar la cita');
-                                                                        } finally {
-                                                                            setProcessingId(null);
-                                                                        }
-                                                                    }}
-                                                                >
-                                                                    {getWarehouseActionLabel(nextStatus)}
-                                                                </Button>
-                                                            ))}
-                                                        </div>
-                                                    ) : null}
-                                                </div>
-                                            </div>
+                                            <WmsFleetCard
+                                                key={appointment.id}
+                                                identity={(
+                                                    <WmsFleetIdentity
+                                                        title={getAppointmentTypeLabel(appointment.appointment_type)}
+                                                        subtitle={`${formatWarehouseDateTime(appointment.scheduled_start, countryCode)} - ${formatWarehouseDateTime(appointment.scheduled_end, countryCode)}`}
+                                                        status={<WmsStatusBadge label={getAppointmentStatusLabel(appointment.status)} tone={appointmentTone(appointment.status)} />}
+                                                        activity={`Placa: ${appointment.vehicle_plate || 'Sin placa'}`}
+                                                    />
+                                                )}
+                                                info={(
+                                                    <WmsFleetInfoGrid
+                                                        items={[
+                                                            { label: 'Inicio', value: formatWarehouseDateTime(appointment.scheduled_start, countryCode) },
+                                                            { label: 'Fin', value: formatWarehouseDateTime(appointment.scheduled_end, countryCode) },
+                                                            { label: 'Muelle', value: appointment.dock?.name || 'Sin muelle' },
+                                                            { label: 'Responsable', value: appointment.trucker_name || appointment.contact_name || 'Sin responsable asignado' },
+                                                        ]}
+                                                    />
+                                                )}
+                                                darkPanel={<WmsFleetDarkPanel label="Estado de cita" value={getAppointmentStatusLabel(appointment.status)} detail="Acciones disponibles segun etapa operativa." />}
+                                                actions={capabilities?.manageAppointments ? (
+                                                    <WmsActionRow>
+                                                        {(appointment.status === 'scheduled' ? ['checked_in', 'cancelled']
+                                                            : appointment.status === 'checked_in' ? ['in_progress', 'completed', 'cancelled']
+                                                                : appointment.status === 'in_progress' ? ['completed', 'cancelled']
+                                                                    : []
+                                                        ).map((nextStatus) => (
+                                                            <Button
+                                                                key={nextStatus}
+                                                                size="sm"
+                                                                variant={nextStatus === 'cancelled' ? 'outline' : 'primary'}
+                                                                disabled={processingId === appointment.id}
+                                                                onClick={async () => {
+                                                                    try {
+                                                                        setProcessingId(appointment.id);
+                                                                        await warehouseClient.updateAppointment(warehouseId, appointment.id, { status: nextStatus });
+                                                                        toast.success('Cita actualizada');
+                                                                        await reload();
+                                                                    } catch (error) {
+                                                                        toast.error('Error', error instanceof Error ? mapWarehouseErrorMessage(error.message) : 'No se pudo actualizar la cita');
+                                                                    } finally {
+                                                                        setProcessingId(null);
+                                                                    }
+                                                                }}
+                                                            >
+                                                                {getWarehouseActionLabel(nextStatus)}
+                                                            </Button>
+                                                        ))}
+                                                    </WmsActionRow>
+                                                ) : null}
+                                            />
                                         ))}
-                                        {liveAppointments.length === 0 ? (
-                                            <p className="rounded-lg border border-dashed border-zinc-300 p-5 text-sm text-zinc-500">
-                                                No hay citas vivas. La agenda esta limpia.
-                                            </p>
-                                        ) : null}
-                                    </div>
-                                </SectionCard>
+                                    </>
+                                    ) : (
+                                        <WmsEmptyState
+                                            title="Agenda limpia"
+                                            description="No hay citas vivas para operar en este momento."
+                                        />
+                                    )}
+                                </WmsFleetSection>
 
-                                <SectionCard title="Cerradas y canceladas">
-                                    <div className="space-y-3">
+                                <WmsFleetSection icon={CalendarClock} title="Cerradas y canceladas">
+                                    {historicalAppointments.length ? (
+                                    <>
                                         {historicalAppointments.map((appointment) => (
-                                            <div key={appointment.id} className="flex min-w-0 flex-col gap-3 rounded-lg border border-zinc-200 p-4 sm:flex-row sm:items-center sm:justify-between">
-                                                <div className="min-w-0">
-                                                    <p className="break-words font-semibold text-zinc-950">{getAppointmentTypeLabel(appointment.appointment_type)}</p>
-                                                    <p className="mt-1 text-sm text-zinc-500">{formatWarehouseDateTime(appointment.scheduled_start, countryCode)}</p>
-                                                </div>
-                                                <StatusText value={getAppointmentStatusLabel(appointment.status)} />
-                                            </div>
+                                            <WmsFleetCard
+                                                key={appointment.id}
+                                                columns={2}
+                                                identity={(
+                                                    <WmsFleetIdentity
+                                                        title={getAppointmentTypeLabel(appointment.appointment_type)}
+                                                        subtitle={formatWarehouseDateTime(appointment.scheduled_start, countryCode)}
+                                                        status={<WmsStatusBadge label={getAppointmentStatusLabel(appointment.status)} tone={appointmentTone(appointment.status)} />}
+                                                    />
+                                                )}
+                                                darkPanel={<WmsFleetDarkPanel label="Resultado" value={getAppointmentStatusLabel(appointment.status)} detail={appointment.dock?.name || 'Sin muelle'} />}
+                                            />
                                         ))}
-                                        {historicalAppointments.length === 0 ? (
-                                            <p className="rounded-lg border border-dashed border-zinc-300 p-5 text-sm text-zinc-500">
-                                                Aun no hay historial cerrado.
-                                            </p>
-                                        ) : null}
-                                    </div>
-                                </SectionCard>
+                                    </>
+                                    ) : (
+                                        <WmsEmptyState
+                                            title="Sin historial cerrado"
+                                            description="Las citas completadas o canceladas apareceran aqui."
+                                        />
+                                    )}
+                                </WmsFleetSection>
                             </div>
                         </div>
                     );

@@ -1,290 +1,189 @@
-﻿/**
- * =============================================================================
- * KARGAX - GPS VERIFICATION COMPONENT
- * /components/picking/GPSVerification.tsx
- * 
- * Componente premium para verificación de ubicación GPS antes de iniciar
- * carga o descarga. Usa geolocalización del navegador para confirmar
- * que el camionero está en la ubicación esperada.
- * 
- * FEATURES:
- * - Verificación de proximidad con tolerancia configurable
- * - Animaciones visuales de estado
- * - Indicador de precisión del GPS
- * - Mapa simplificado mostrando posición
- * - Retry automático y manual
- * - Soporte offline
- * 
- * UX PSYCHOLOGY:
- * - Verde = éxito, confianza
- * - Amber = procesando, atención
- * - Feedback inmediato con animaciones
- * - Textos claros y actionables
- * 
- * =============================================================================
- */
-
 'use client';
 
 import * as React from 'react';
-import { useState, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import {
-    MapPin,
-    Navigation,
-    Check,
-    X,
-    AlertTriangle,
-    Loader2,
-    RefreshCw,
-    Shield,
-    Wifi,
-    WifiOff,
-    Target,
-    Compass,
-} from 'lucide-react';
+import { AlertTriangle, Check, ExternalLink, Loader2, LocateFixed, MapPin, Navigation, RefreshCw, Shield, Target, Wifi, WifiOff, X } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui';
 import {
-    useGPSVerification,
-    formatDistance,
+    calculateDistance,
     formatAccuracy,
+    formatDistance,
     getAccuracyColor,
     isGeolocationSupported,
 } from '@/lib/geolocation';
 
-// =============================================================================
-// TYPES
-// =============================================================================
-
-/**
- * Tipo de ubicación a verificar
- */
 export type LocationType = 'origin' | 'destination';
 
-/**
- * Estado de la verificación
- */
 export type VerificationStatus =
-    | 'idle'        // No iniciado
-    | 'checking'    // Verificando GPS
-    | 'verified'    // Dentro de rango
-    | 'too_far'     // Fuera de rango
-    | 'error';      // Error de GPS
+    | 'idle'
+    | 'checking'
+    | 'verified'
+    | 'too_far'
+    | 'error';
 
-/**
- * Props del componente GPSVerification
- */
 export interface GPSVerificationProps {
-    /** Tipo de ubicación (origen o destino) */
     locationType: LocationType;
-
-    /** Nombre de la ubicación para mostrar */
     locationName: string;
-
-    /** Dirección de la ubicación */
     locationAddress?: string;
-
-    /** Latitud objetivo */
     targetLatitude?: number | null;
-
-    /** Longitud objetivo */
     targetLongitude?: number | null;
-
-    /** Tolerancia en metros (default: 500) */
     toleranceMeters?: number;
-
-    /** Si ya fue verificado previamente */
     isVerified?: boolean;
-
-    /** Timestamp de verificación previa */
     verifiedAt?: string | null;
-
-    /** Callback cuando se verifica exitosamente */
     onVerified?: (result: {
         latitude: number;
         longitude: number;
         accuracy: number;
         distanceMeters: number;
     }) => void;
-
-    /** Si permitir bypass (para desarrollo/testing) */
-    allowBypass?: boolean;
-
-    /** Callback para bypass */
-    onBypass?: () => void;
-
-    /** Clase CSS adicional */
     className?: string;
 }
 
-// =============================================================================
-// SUBCOMPONENTS
-// =============================================================================
+type CurrentPosition = {
+    latitude: number;
+    longitude: number;
+    accuracy: number;
+};
 
-/**
- * Animación de onda pulsante para indicar escaneo
- */
-function PulseRing({ tone = 'muted' }: { tone?: 'muted' | 'strong' | 'critical' }) {
-    const toneClasses = {
-        muted: 'border-zinc-400',
-        strong: 'border-zinc-500',
-        critical: 'border-zinc-500',
-    };
+const MAX_ACCEPTABLE_ACCURACY_METERS = 150;
 
-    return (
-        <div className="absolute inset-0 flex items-center justify-center">
-            {[0, 1, 2].map((i) => (
-                <motion.div
-                    key={i}
-                    className={cn(
-                        'absolute rounded-full border-2',
-                        toneClasses[tone]
-                    )}
-                    initial={{ width: 60, height: 60, opacity: 0.6 }}
-                    animate={{
-                        width: [60, 120, 180],
-                        height: [60, 120, 180],
-                        opacity: [0.6, 0.3, 0],
-                    }}
-                    transition={{
-                        duration: 2,
-                        repeat: Infinity,
-                        delay: i * 0.6,
-                        ease: 'easeOut',
-                    }}
-                />
-            ))}
-        </div>
-    );
-}
-
-/**
- * Icono central animado según estado
- */
-function StatusIcon({
-    status,
-    isChecking
-}: {
-    status: VerificationStatus;
-    isChecking: boolean;
-}) {
-    if (isChecking) {
-        return (
-            <motion.div
-                animate={{ rotate: 360 }}
-                transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
-            >
-                <Compass className="w-10 h-10 text-zinc-800" />
-            </motion.div>
-        );
+function hasTargetCoordinates(latitude?: number | null, longitude?: number | null) {
+    if (latitude === null || latitude === undefined || longitude === null || longitude === undefined) {
+        return false;
     }
 
-    switch (status) {
-        case 'verified':
-            return (
-                <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    transition={{ type: 'spring', stiffness: 200, damping: 10 }}
-                >
-                    <Check className="w-10 h-10 text-zinc-950" />
-                </motion.div>
-            );
-        case 'too_far':
-            return (
-                <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    transition={{ type: 'spring' }}
-                >
-                    <AlertTriangle className="w-10 h-10 text-zinc-800" />
-                </motion.div>
-            );
-        case 'error':
-            return (
-                <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    transition={{ type: 'spring' }}
-                >
-                    <X className="w-10 h-10 text-zinc-600" />
-                </motion.div>
-            );
-        default:
-            return <Navigation className="w-10 h-10 text-slate-400" />;
+    if (String(latitude).trim() === '' || String(longitude).trim() === '') {
+        return false;
     }
+
+    const lat = Number(latitude);
+    const lng = Number(longitude);
+
+    return Number.isFinite(lat)
+        && Number.isFinite(lng)
+        && !(lat === 0 && lng === 0);
 }
 
-/**
- * Indicador de distancia con barra visual
- */
-function DistanceIndicator({
+function getPermissionErrorMessage(error: GeolocationPositionError) {
+    if (error.code === error.PERMISSION_DENIED) {
+        return 'Permiso de GPS denegado. Activa la ubicacion en tu celular para continuar.';
+    }
+
+    if (error.code === error.TIMEOUT) {
+        return 'El GPS tardo demasiado. Sal a un punto con mejor senal y vuelve a intentar.';
+    }
+
+    return 'No se pudo obtener tu ubicacion. Verifica que el GPS del celular este activo.';
+}
+
+function mapsPointUrl(latitude: number, longitude: number) {
+    return `https://www.google.com/maps?q=${latitude},${longitude}`;
+}
+
+function mapsEmbedUrl(latitude: number, longitude: number) {
+    return `https://www.google.com/maps?q=${latitude},${longitude}&z=16&output=embed`;
+}
+
+function mapsDirectionsUrl(current: CurrentPosition | null, targetLatitude: number, targetLongitude: number) {
+    const url = new URL('https://www.google.com/maps/dir/');
+    url.searchParams.set('api', '1');
+    if (current) {
+        url.searchParams.set('origin', `${current.latitude},${current.longitude}`);
+    }
+    url.searchParams.set('destination', `${targetLatitude},${targetLongitude}`);
+    url.searchParams.set('travelmode', 'driving');
+    return url.toString();
+}
+
+function StatusIcon({ status }: { status: VerificationStatus }) {
+    if (status === 'checking') {
+        return <Loader2 className="h-8 w-8 animate-spin text-zinc-950" />;
+    }
+
+    if (status === 'verified') {
+        return <Check className="h-8 w-8 text-zinc-950" />;
+    }
+
+    if (status === 'too_far') {
+        return <Navigation className="h-8 w-8 text-zinc-950" />;
+    }
+
+    if (status === 'error') {
+        return <X className="h-8 w-8 text-zinc-700" />;
+    }
+
+    return <LocateFixed className="h-8 w-8 text-zinc-500" />;
+}
+
+function RouteMapPanel({
+    current,
+    targetLatitude,
+    targetLongitude,
+    targetLabel,
     distance,
-    tolerance
+    toleranceMeters,
 }: {
-    distance: number;
-    tolerance: number;
+    current: CurrentPosition | null;
+    targetLatitude: number;
+    targetLongitude: number;
+    targetLabel: string;
+    distance: number | null;
+    toleranceMeters: number;
 }) {
-    const percentage = Math.min((distance / tolerance) * 100, 100);
-    const isWithin = distance <= tolerance;
-
     return (
-        <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-                <span className="text-slate-600">Distancia</span>
-                <span className={cn(
-                    'font-semibold',
-                    isWithin ? 'text-zinc-950' : 'text-zinc-700'
-                )}>
-                    {formatDistance(distance)}
-                </span>
-            </div>
-
-            <div className="relative h-3 bg-slate-100 rounded-full overflow-hidden">
-                <motion.div
-                    className={cn(
-                        'absolute left-0 top-0 bottom-0 rounded-full',
-                        'bg-zinc-950'
+        <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white">
+            <div className="grid gap-px bg-zinc-200 md:grid-cols-2">
+                <div className="bg-zinc-50 p-4">
+                    <p className="text-xs font-semibold uppercase text-zinc-500">Tu ubicacion</p>
+                    {current ? (
+                        <>
+                            <p className="mt-2 font-money text-sm text-zinc-950">{current.latitude.toFixed(6)}, {current.longitude.toFixed(6)}</p>
+                            <p className={cn('mt-1 text-xs font-medium', getAccuracyColor(current.accuracy))}>
+                                Precision: {formatAccuracy(current.accuracy)} (+/- {Math.round(current.accuracy)}m)
+                            </p>
+                        </>
+                    ) : (
+                        <p className="mt-2 text-sm text-zinc-500">Toca Activar GPS para ver tu punto actual.</p>
                     )}
-                    initial={{ width: 0 }}
-                    animate={{ width: `${100 - percentage}%` }}
-                    transition={{ duration: 0.5 }}
-                />
-
-                {/* Línea de tolerancia */}
-                <div
-                    className="absolute top-0 bottom-0 w-0.5 bg-slate-400"
-                    style={{ right: 0 }}
-                />
+                </div>
+                <div className="bg-zinc-50 p-4">
+                    <p className="text-xs font-semibold uppercase text-zinc-500">{targetLabel}</p>
+                    <p className="mt-2 font-money text-sm text-zinc-950">{targetLatitude.toFixed(6)}, {targetLongitude.toFixed(6)}</p>
+                    <p className="mt-1 text-xs text-zinc-500">Radio permitido: {formatDistance(toleranceMeters)}</p>
+                </div>
             </div>
 
-            <div className="flex justify-between text-xs text-slate-400">
-                <span>0 m</span>
-                <span>Tolerancia: {formatDistance(tolerance)}</span>
+            <div className="relative h-60 bg-zinc-100">
+                <iframe
+                    title={`Mapa ${targetLabel}`}
+                    src={mapsEmbedUrl(targetLatitude, targetLongitude)}
+                    className="h-full w-full"
+                    loading="lazy"
+                    referrerPolicy="no-referrer-when-downgrade"
+                />
+                {distance !== null ? (
+                    <div className="absolute bottom-3 left-3 right-3 rounded-lg border border-white/70 bg-white/95 p-3 shadow-lg">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                                <p className="text-sm font-semibold text-zinc-950">
+                                    {distance <= toleranceMeters ? 'Llegaste al punto correcto' : `No has llegado al ${targetLabel.toLowerCase()}`}
+                                </p>
+                                <p className="text-xs text-zinc-500">Distancia actual: {formatDistance(distance)}</p>
+                            </div>
+                            <Button size="sm" variant="outline" asChild>
+                                <a href={mapsDirectionsUrl(current, targetLatitude, targetLongitude)} target="_blank" rel="noreferrer">
+                                    <ExternalLink className="h-4 w-4" />
+                                    Abrir ruta
+                                </a>
+                            </Button>
+                        </div>
+                    </div>
+                ) : null}
             </div>
         </div>
     );
 }
-
-/**
- * Indicador de precisión del GPS
- */
-function AccuracyIndicator({ accuracy }: { accuracy: number }) {
-    return (
-        <div className="flex items-center gap-2 text-sm">
-            <Target className={cn('w-4 h-4', getAccuracyColor(accuracy))} />
-            <span className="text-slate-600">Precisión:</span>
-            <span className={cn('font-medium', getAccuracyColor(accuracy))}>
-                {formatAccuracy(accuracy)} (±{Math.round(accuracy)}m)
-            </span>
-        </div>
-    );
-}
-
-// =============================================================================
-// MAIN COMPONENT
-// =============================================================================
 
 export function GPSVerification({
     locationType,
@@ -296,313 +195,233 @@ export function GPSVerification({
     isVerified = false,
     verifiedAt,
     onVerified,
-    allowBypass = false,
-    onBypass,
     className,
 }: GPSVerificationProps) {
-    // Estado local
-    const [status, setStatus] = useState<VerificationStatus>(
-        isVerified ? 'verified' : 'idle'
-    );
-    const [distance, setDistance] = useState<number | null>(null);
-    const [accuracy, setAccuracy] = useState<number | null>(null);
+    const [status, setStatus] = React.useState<VerificationStatus>(isVerified ? 'verified' : 'idle');
+    const [current, setCurrent] = React.useState<CurrentPosition | null>(null);
+    const [distance, setDistance] = React.useState<number | null>(null);
+    const [error, setError] = React.useState('');
+    const [permissionState, setPermissionState] = React.useState<PermissionState | 'unsupported'>('unsupported');
 
-    // Verificar si hay coordenadas objetivo configuradas
-    const hasTargetCoords = targetLatitude !== null &&
-        targetLatitude !== undefined &&
-        targetLongitude !== null &&
-        targetLongitude !== undefined;
-
-    // Hook de verificación GPS (solo si hay coords)
-    const {
-        verify,
-        isVerifying,
-        error: gpsError,
-        reset: resetGPS,
-    } = useGPSVerification({
-        targetLatitude: targetLatitude ?? 0,
-        targetLongitude: targetLongitude ?? 0,
-        toleranceMeters,
-        onVerified: (result) => {
-            setDistance(result.distanceMeters);
-            setAccuracy(result.accuracy);
-
-            if (result.isWithinRange) {
-                setStatus('verified');
-            } else {
-                setStatus('too_far');
-            }
-        },
-    });
-
-    // Verificar soporte de GPS
     const gpsSupported = isGeolocationSupported();
+    const hasTarget = hasTargetCoordinates(targetLatitude, targetLongitude);
+    const targetLabel = locationType === 'origin' ? 'Origen' : 'Destino';
+    const strictMessage = locationType === 'origin'
+        ? 'No has llegado al origen. Debes estar dentro del radio permitido para iniciar carga.'
+        : 'No has llegado al destino. Debes estar dentro del radio permitido para iniciar descarga.';
 
-    // Manejar verificación
-    const handleVerify = useCallback(async () => {
-        if (!gpsSupported) {
-            setStatus('error');
+    React.useEffect(() => {
+        let cancelled = false;
+
+        if (typeof navigator === 'undefined' || !navigator.permissions?.query) {
+            setPermissionState('unsupported');
             return;
         }
 
-        // Si no hay coordenadas configuradas, verificar automáticamente
-        if (!hasTargetCoords) {
-            setStatus('verified');
-            onVerified?.({
-                latitude: 0,
-                longitude: 0,
-                accuracy: 0,
-                distanceMeters: 0,
-            });
+        navigator.permissions.query({ name: 'geolocation' as PermissionName })
+            .then((permission) => {
+                if (!cancelled) {
+                    setPermissionState(permission.state);
+                }
+
+                permission.onchange = () => {
+                    setPermissionState(permission.state);
+                };
+            })
+            .catch(() => setPermissionState('unsupported'));
+
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    const handleVerify = React.useCallback(() => {
+        setError('');
+
+        if (!gpsSupported) {
+            setStatus('error');
+            setError('GPS no disponible en este dispositivo.');
+            return;
+        }
+
+        if (!hasTarget) {
+            setStatus('error');
+            setError('Esta ruta no tiene coordenadas configuradas. La empresa debe completarlas.');
             return;
         }
 
         setStatus('checking');
 
-        const result = await verify();
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                const nextCurrent = {
+                    latitude: position.coords.latitude,
+                    longitude: position.coords.longitude,
+                    accuracy: position.coords.accuracy,
+                };
+                const nextDistance = Math.round(calculateDistance(
+                    nextCurrent,
+                    { latitude: Number(targetLatitude), longitude: Number(targetLongitude) }
+                ));
 
-        if (result) {
-            const verificationData = {
-                latitude: result.latitude,
-                longitude: result.longitude,
-                accuracy: result.accuracy,
-                distanceMeters: result.distanceMeters,
-            };
+                setCurrent(nextCurrent);
+                setDistance(nextDistance);
 
-            if (result.isWithinRange) {
-                onVerified?.(verificationData);
+                if (nextCurrent.accuracy > MAX_ACCEPTABLE_ACCURACY_METERS) {
+                    setStatus('error');
+                    setError(`La senal GPS esta imprecisa (+/- ${Math.round(nextCurrent.accuracy)}m). Espera mejor senal y vuelve a intentar.`);
+                    return;
+                }
+
+                if (nextDistance > toleranceMeters) {
+                    setStatus('too_far');
+                    setError(strictMessage);
+                    return;
+                }
+
+                setStatus('verified');
+                onVerified?.({
+                    latitude: nextCurrent.latitude,
+                    longitude: nextCurrent.longitude,
+                    accuracy: nextCurrent.accuracy,
+                    distanceMeters: nextDistance,
+                });
+            },
+            (gpsError) => {
+                setStatus('error');
+                setError(getPermissionErrorMessage(gpsError));
+                if (gpsError.code === gpsError.PERMISSION_DENIED) {
+                    setPermissionState('denied');
+                }
+            },
+            {
+                enableHighAccuracy: true,
+                timeout: 20000,
+                maximumAge: 0,
             }
-        } else if (gpsError) {
-            setStatus('error');
-        }
-    }, [gpsSupported, hasTargetCoords, verify, gpsError, onVerified]);
+        );
+    }, [gpsSupported, hasTarget, onVerified, strictMessage, targetLatitude, targetLongitude, toleranceMeters]);
 
-    // Reintentar
-    const handleRetry = useCallback(() => {
+    const handleRetry = React.useCallback(() => {
         setStatus('idle');
         setDistance(null);
-        setAccuracy(null);
-        resetGPS();
-    }, [resetGPS]);
+        setError('');
+    }, []);
 
-    // Bypass para desarrollo
-    const handleBypass = useCallback(() => {
-        setStatus('verified');
-        onBypass?.();
-    }, [onBypass]);
-
-    const effectiveStatus: VerificationStatus =
-        gpsError && status === 'checking' ? 'error' : status;
-
-    // Determinar colores según estado
-    const statusColors = {
-        idle: 'from-slate-100 to-slate-50 border-slate-200',
-        checking: 'bg-white border-zinc-300',
-        verified: 'bg-white border-zinc-950',
-        too_far: 'bg-white border-zinc-300',
-        error: 'bg-white border-zinc-300',
-    };
+    const targetLat = Number(targetLatitude);
+    const targetLng = Number(targetLongitude);
+    const canShowMap = hasTargetCoordinates(targetLat, targetLng);
+    const showPermissionWarning = permissionState === 'denied' || status === 'error';
 
     return (
         <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className={cn(
-                'rounded-lg border p-6 transition-all duration-500',
-                statusColors[effectiveStatus],
-                className
-            )}
+            className={cn('rounded-lg border border-zinc-200 bg-white p-5 shadow-sm sm:p-6', className)}
         >
-            {/* Header */}
-            <div className="flex items-start justify-between mb-6">
-                <div>
-                    <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
-                        <MapPin className={cn(
-                            'w-5 h-5',
-                            'text-zinc-800'
-                        )} />
-                        {locationType === 'origin' ? 'Verificar Origen' : 'Verificar Destino'}
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                    <h3 className="flex items-center gap-2 text-lg font-semibold text-zinc-950">
+                        <MapPin className="h-5 w-5 text-zinc-800" />
+                        Verificar {targetLabel}
                     </h3>
-                    <p className="text-slate-600 mt-0.5">{locationName}</p>
-                    {locationAddress && (
-                        <p className="text-sm text-slate-400 mt-0.5">{locationAddress}</p>
-                    )}
+                    <p className="mt-1 text-sm text-zinc-600">{locationName}</p>
+                    {locationAddress ? <p className="mt-0.5 text-sm text-zinc-500">{locationAddress}</p> : null}
                 </div>
 
-                {/* Badge de estado */}
-                {effectiveStatus === 'verified' && (
-                    <motion.div
-                        initial={{ scale: 0 }}
-                        animate={{ scale: 1 }}
-                        className="flex items-center gap-1.5 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-1 text-sm font-medium text-zinc-800"
-                    >
-                        <Shield className="w-4 h-4" />
+                {status === 'verified' ? (
+                    <span className="inline-flex w-fit items-center gap-1.5 rounded-md border border-zinc-950 bg-zinc-950 px-3 py-1 text-sm font-medium text-white">
+                        <Shield className="h-4 w-4" />
                         Verificado
-                    </motion.div>
+                    </span>
+                ) : null}
+            </div>
+
+            <div className="mt-6 grid gap-5 lg:grid-cols-[minmax(0,.8fr)_minmax(0,1.2fr)]">
+                <div className="flex flex-col justify-between rounded-lg border border-zinc-200 bg-zinc-50 p-5">
+                    <div className="flex flex-col items-center text-center">
+                        <div className={cn(
+                            'flex h-20 w-20 items-center justify-center rounded-full border-4 bg-white shadow-sm',
+                            status === 'verified' ? 'border-zinc-950' : 'border-zinc-200'
+                        )}>
+                            <StatusIcon status={status} />
+                        </div>
+                        <p className="mt-4 font-semibold text-zinc-950">
+                            {status === 'idle' && 'Activa GPS para continuar'}
+                            {status === 'checking' && 'Leyendo GPS del celular...'}
+                            {status === 'verified' && 'Ubicacion registrada'}
+                            {status === 'too_far' && `No has llegado al ${targetLabel.toLowerCase()}`}
+                            {status === 'error' && 'GPS bloqueado'}
+                        </p>
+                        <p className="mt-2 text-sm leading-6 text-zinc-600">
+                            {status === 'idle' && 'El navegador pedira permiso de ubicacion en tu celular.'}
+                            {status === 'checking' && 'Mantente en esta pantalla hasta que termine la lectura.'}
+                            {status === 'verified' && (verifiedAt ? `Verificado a las ${new Date(verifiedAt).toLocaleTimeString()}` : 'Ya puedes continuar con el checklist.')}
+                            {status === 'too_far' && strictMessage}
+                            {status === 'error' && (error || 'No se pudo verificar tu ubicacion.')}
+                        </p>
+                    </div>
+
+                    <div className="mt-5 space-y-3">
+                        {(status === 'idle' || status === 'checking') ? (
+                            <Button
+                                onClick={handleVerify}
+                                disabled={status === 'checking' || !gpsSupported}
+                                className="w-full"
+                                variant="primary"
+                                size="lg"
+                            >
+                                {status === 'checking' ? <Loader2 className="h-5 w-5 animate-spin" /> : <LocateFixed className="h-5 w-5" />}
+                                Activar GPS
+                            </Button>
+                        ) : null}
+
+                        {(status === 'too_far' || status === 'error') ? (
+                            <Button onClick={handleRetry} className="w-full" variant="outline" size="lg">
+                                <RefreshCw className="h-5 w-5" />
+                                Intentar de nuevo
+                            </Button>
+                        ) : null}
+                    </div>
+                </div>
+
+                {canShowMap ? (
+                    <RouteMapPanel
+                        current={current}
+                        targetLatitude={targetLat}
+                        targetLongitude={targetLng}
+                        targetLabel={targetLabel}
+                        distance={distance}
+                        toleranceMeters={toleranceMeters}
+                    />
+                ) : (
+                    <div className="flex min-h-[18rem] flex-col items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 p-6 text-center">
+                        <AlertTriangle className="mb-3 h-8 w-8 text-zinc-700" />
+                        <p className="font-semibold text-zinc-950">Coordenadas faltantes</p>
+                        <p className="mt-2 max-w-md text-sm leading-6 text-zinc-600">
+                            Esta ruta no tiene coordenadas configuradas. La empresa debe completarlas antes de permitir carga o descarga.
+                        </p>
+                    </div>
                 )}
             </div>
 
-            {/* Área de animación central */}
-            <div className="relative flex flex-col items-center justify-center py-8">
-                {/* Ondas pulsantes */}
-                {(effectiveStatus === 'checking' || isVerifying) && (
-                    <PulseRing tone="muted" />
-                )}
-                {effectiveStatus === 'verified' && (
-                    <PulseRing tone="strong" />
-                )}
-
-                {/* Círculo central con icono */}
-                <motion.div
-                    className={cn(
-                        'relative z-10 w-24 h-24 rounded-full flex items-center justify-center',
-                        'border-4 shadow-lg transition-all duration-300',
-                        effectiveStatus === 'verified'
-                            ? 'bg-white border-zinc-950'
-                            : effectiveStatus === 'error'
-                                ? 'bg-white border-zinc-400'
-                                : effectiveStatus === 'too_far'
-                                    ? 'bg-white border-zinc-500'
-                                    : 'bg-white border-zinc-200'
-                    )}
-                    animate={isVerifying ? { scale: [1, 1.05, 1] } : {}}
-                    transition={{ duration: 1, repeat: Infinity }}
-                >
-                    <StatusIcon status={effectiveStatus} isChecking={isVerifying || effectiveStatus === 'checking'} />
-                </motion.div>
-
-                {/* Mensaje de estado */}
-                <motion.p
-                    key={effectiveStatus}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className={cn(
-                        'mt-6 text-center font-medium',
-                        effectiveStatus === 'verified' ? 'text-zinc-950' :
-                            effectiveStatus === 'error' ? 'text-zinc-700' :
-                                effectiveStatus === 'too_far' ? 'text-zinc-800' :
-                                    effectiveStatus === 'checking' ? 'text-zinc-800' :
-                                        'text-slate-600'
-                    )}
-                >
-                    {effectiveStatus === 'idle' && 'Verifica tu ubicacion para continuar'}
-                    {(effectiveStatus === 'checking' || isVerifying) && 'Obteniendo ubicacion GPS...'}
-                    {effectiveStatus === 'verified' && 'Ubicacion registrada'}
-                    {effectiveStatus === 'too_far' && 'Estas fuera del radio permitido'}
-                    {effectiveStatus === 'error' && (gpsError || 'Error al obtener ubicación')}
-                </motion.p>
-
-                {/* Submensaje */}
-                {effectiveStatus === 'verified' && verifiedAt && (
-                    <p className="mt-1 text-sm text-zinc-600">
-                        Verificado a las {new Date(verifiedAt).toLocaleTimeString()}
-                    </p>
-                )}
-            </div>
-
-            {/* Indicadores de distancia y precisión */}
-            <AnimatePresence>
-                {(distance !== null || accuracy !== null) && effectiveStatus !== 'idle' && (
-                    <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        exit={{ opacity: 0, height: 0 }}
-                        className="space-y-4 mb-6 overflow-hidden"
-                    >
-                        {distance !== null && (
-                            <DistanceIndicator
-                                distance={distance}
-                                tolerance={toleranceMeters}
-                            />
-                        )}
-
-                        {accuracy !== null && (
-                            <AccuracyIndicator accuracy={accuracy} />
-                        )}
-                    </motion.div>
-                )}
-            </AnimatePresence>
-
-            {/* Aviso si no hay GPS */}
-            {!gpsSupported && (
-                <div className="mb-4 flex items-center gap-3 rounded-lg border border-zinc-300 bg-zinc-50 p-4">
-                    <WifiOff className="w-5 h-5 flex-shrink-0 text-zinc-700" />
+            {showPermissionWarning ? (
+                <div className="mt-5 flex items-start gap-3 rounded-lg border border-zinc-300 bg-zinc-50 p-4">
+                    {permissionState === 'denied' ? <WifiOff className="mt-0.5 h-5 w-5 text-zinc-800" /> : <AlertTriangle className="mt-0.5 h-5 w-5 text-zinc-800" />}
                     <div>
-                        <p className="font-medium text-zinc-950">GPS no disponible</p>
-                        <p className="text-sm text-zinc-600">
-                            Tu dispositivo no soporta geolocalización o el permiso fue denegado.
+                        <p className="font-medium text-zinc-950">{permissionState === 'denied' ? 'Permiso de ubicacion bloqueado' : 'Verificacion pendiente'}</p>
+                        <p className="mt-1 text-sm leading-6 text-zinc-600">
+                            {permissionState === 'denied'
+                                ? 'Activa el permiso de ubicacion para esta web desde la configuracion del navegador o del celular.'
+                                : error || 'Debes estar dentro del radio permitido para continuar.'}
                         </p>
                     </div>
                 </div>
-            )}
+            ) : null}
 
-            {/* Aviso si no hay coordenadas configuradas */}
-            {!hasTargetCoords && effectiveStatus !== 'verified' && (
-                <div className="mb-4 flex items-center gap-3 rounded-lg border border-zinc-300 bg-zinc-50 p-4">
-                    <AlertTriangle className="w-5 h-5 flex-shrink-0 text-zinc-700" />
-                    <div>
-                        <p className="font-medium text-zinc-950">Sin coordenadas</p>
-                        <p className="text-sm text-zinc-600">
-                            Esta ubicación no tiene coordenadas GPS configuradas.
-                            La verificación se omitirá.
-                        </p>
-                    </div>
-                </div>
-            )}
-
-            {/* Botones de acción */}
-            <div className="space-y-3">
-                {effectiveStatus === 'idle' && (
-                    <Button
-                        onClick={handleVerify}
-                        disabled={isVerifying || !gpsSupported}
-                        className="w-full"
-                        variant="primary"
-                        size="lg"
-                    >
-                        {isVerifying ? (
-                            <>
-                                <Loader2 className="w-5 h-5 animate-spin" />
-                                Verificando...
-                            </>
-                        ) : (
-                            <>
-                                <Navigation className="w-5 h-5" />
-                                Verificar mi ubicacion
-                            </>
-                        )}
-                    </Button>
-                )}
-
-                {(effectiveStatus === 'too_far' || effectiveStatus === 'error') && (
-                    <Button
-                        onClick={handleRetry}
-                        className="w-full"
-                        variant="outline"
-                        size="lg"
-                    >
-                        <RefreshCw className="w-5 h-5" />
-                        Intentar de nuevo
-                    </Button>
-                )}
-
-                {/* Botón de bypass (solo en desarrollo) */}
-                {allowBypass && effectiveStatus !== 'verified' && (
-                    <Button
-                        onClick={handleBypass}
-                        className="w-full text-slate-500 hover:text-slate-700"
-                        variant="ghost"
-                        size="sm"
-                    >
-                        Omitir verificación (solo desarrollo)
-                    </Button>
-                )}
-            </div>
-
-            {/* Indicador de conexión */}
-            <div className="flex items-center justify-center gap-2 mt-4 text-xs text-slate-400">
-                <Wifi className="w-3.5 h-3.5" />
-                <span>Usando GPS del dispositivo</span>
+            <div className="mt-4 flex items-center justify-center gap-2 text-xs text-zinc-400">
+                <Wifi className="h-3.5 w-3.5" />
+                <span>Usando GPS real del dispositivo</span>
             </div>
         </motion.div>
     );

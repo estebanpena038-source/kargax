@@ -1,0 +1,388 @@
+{
+  "generated_at": "2026-05-26T20:32:41.797Z",
+  "status": "pass",
+  "mode": {
+    "static_only": true,
+    "browser_required": false,
+    "browser_status": "skipped"
+  },
+  "routes": {
+    "required": [
+      "/",
+      "/para-camioneros",
+      "/soporte",
+      "/terminos",
+      "/privacidad",
+      "/ayuda",
+      "/login",
+      "/registro",
+      "/recuperar-contrasena",
+      "/verificar-email",
+      "/auth/reset-password",
+      "/auth/mfa/setup",
+      "/auth/mfa/verify",
+      "/auth/invite/accept",
+      "/dashboard",
+      "/perfil",
+      "/configuracion",
+      "/notificaciones",
+      "/mensajes",
+      "/onboarding",
+      "/ofertas",
+      "/ofertas/[id]",
+      "/ofertas/publicar",
+      "/ofertas/editar/[id]",
+      "/ofertas/mis-ofertas",
+      "/postulaciones",
+      "/postulaciones-recibidas",
+      "/ofertas-aceptadas",
+      "/pagar/[offerId]",
+      "/pago/exitoso",
+      "/pago/fallido",
+      "/pago/pendiente",
+      "/billetera",
+      "/viaje/[offerId]",
+      "/viaje/[offerId]/carga",
+      "/viaje/[offerId]/entrega",
+      "/inspecciones",
+      "/inspecciones/[offerId]",
+      "/bodegas",
+      "/bodegas/[id]",
+      "/bodegas/[id]/analitica",
+      "/bodegas/[id]/citas",
+      "/bodegas/[id]/muelles",
+      "/bodegas/[id]/inventario",
+      "/bodegas/[id]/recepciones",
+      "/bodegas/[id]/picking",
+      "/bodegas/[id]/despachos",
+      "/bodegas/[id]/incidentes",
+      "/equipo",
+      "/dashboard/flota",
+      "/dashboard/inteligencia",
+      "/corporativo",
+      "/planes",
+      "/admin",
+      "/admin/ceo"
+    ],
+    "browser": [
+      "/",
+      "/login",
+      "/registro",
+      "/dashboard",
+      "/ofertas",
+      "/billetera",
+      "/bodegas",
+      "/planes",
+      "/admin/ceo"
+    ]
+  },
+  "checks": [
+    {
+      "key": "routes:mandatory-pages",
+      "status": "pass",
+      "blocking": true,
+      "evidence": {
+        "required": 55,
+        "missing": []
+      }
+    },
+    {
+      "key": "design:matte-monochrome-tokens",
+      "status": "pass",
+      "blocking": true,
+      "evidence": {
+        "file": "frontend/src/app/globals.css",
+        "expected": [
+          "#0a0a0a primary",
+          "#f7f7f5 background",
+          "#0a0a0a text"
+        ]
+      }
+    },
+    {
+      "key": "design:forbidden-color-clamp",
+      "status": "pass",
+      "blocking": true,
+      "evidence": {
+        "file": "frontend/src/app/globals.css",
+        "neutralized_families": 17,
+        "missing_families": []
+      }
+    },
+    {
+      "key": "a11y:focus-visible",
+      "status": "pass",
+      "blocking": true,
+      "evidence": {
+        "file": "frontend/src/app/globals.css"
+      }
+    },
+    {
+      "key": "layout:no-horizontal-body-overflow",
+      "status": "pass",
+      "blocking": true,
+      "evidence": {
+        "file": "frontend/src/app/globals.css"
+      }
+    },
+    {
+      "key": "brand:public-shell-logo",
+      "status": "pass",
+      "blocking": true,
+      "evidence": {
+        "file": "frontend/src/components/public/PublicLuxury.tsx"
+      }
+    },
+    {
+      "key": "brand:private-shell-logo",
+      "status": "pass",
+      "blocking": true,
+      "evidence": {
+        "file": "frontend/src/components/layouts/DashboardLayout.tsx"
+      }
+    }
+  ],
+  "warnings": [
+    {
+      "key": "source:legacy-color-utilities-neutralized-by-css",
+      "evidence": {
+        "files": 27,
+        "hits": 600,
+        "samples": [
+          {
+            "file": "frontend/src/app/bodegas/[id]/despachos/page.tsx",
+            "count": 6,
+            "samples": [
+              "border-amber-",
+              "bg-amber-",
+              "text-amber-"
+            ]
+          },
+          {
+            "file": "frontend/src/app/corporativo/page.tsx",
+            "count": 2,
+            "samples": [
+              "border-green-",
+              "ring-green-"
+            ]
+          },
+          {
+            "file": "frontend/src/app/globals.css",
+            "count": 255,
+            "samples": [
+              "text-green-",
+              "text-emerald-",
+              "text-orange-",
+              "text-amber-",
+              "text-blue-",
+              "text-violet-",
+              "text-purple-",
+              "text-yellow-"
+            ]
+          },
+          {
+            "file": "frontend/src/app/inspecciones/[offerId]/components.tsx",
+            "count": 4,
+            "samples": [
+              "border-red-",
+              "bg-red-",
+              "text-red-"
+            ]
+          },
+          {
+            "file": "frontend/src/app/not-found.tsx",
+            "count": 8,
+            "samples": [
+              "via-green-",
+              "bg-orange-",
+              "bg-green-",
+              "from-green-",
+              "to-green-",
+              "shadow-green-",
+              "to-orange-"
+            ]
+          },
+          {
+            "file": "frontend/src/app/ofertas/editar/[id]/page.tsx",
+            "count": 22,
+            "samples": [
+              "text-green-",
+              "text-red-",
+              "ring-green-",
+              "border-green-",
+              "text-emerald-",
+              "text-blue-",
+              "from-green-",
+              "to-green-"
+            ]
+          },
+          {
+            "file": "frontend/src/app/ofertas/mis-ofertas/page.tsx",
+            "count": 5,
+            "samples": [
+              "text-green-",
+              "border-green-",
+              "ring-green-",
+              "text-red-"
+            ]
+          },
+          {
+            "file": "frontend/src/app/ofertas/publicar/page.tsx",
+            "count": 93,
+            "samples": [
+              "border-red-",
+              "text-red-",
+              "border-green-",
+              "from-green-",
+              "to-green-",
+              "ring-green-",
+              "bg-blue-",
+              "border-blue-"
+            ]
+          },
+          {
+            "file": "frontend/src/app/pagar/[offerId]/page.tsx",
+            "count": 3,
+            "samples": [
+              "text-emerald-",
+              "bg-red-",
+              "text-red-"
+            ]
+          },
+          {
+            "file": "frontend/src/components/admin/AdvancesPanel.tsx",
+            "count": 49,
+            "samples": [
+              "text-emerald-",
+              "border-emerald-",
+              "bg-emerald-",
+              "border-blue-",
+              "bg-blue-",
+              "text-blue-",
+              "border-green-",
+              "bg-green-"
+            ]
+          },
+          {
+            "file": "frontend/src/components/applications/AcceptApplicationModal.tsx",
+            "count": 25,
+            "samples": [
+              "from-emerald-",
+              "to-teal-",
+              "border-emerald-",
+              "from-green-",
+              "to-green-",
+              "bg-emerald-",
+              "text-emerald-",
+              "text-green-"
+            ]
+          },
+          {
+            "file": "frontend/src/components/billing/PlanLimitPaywallDialog.tsx",
+            "count": 7,
+            "samples": [
+              "bg-emerald-",
+              "text-emerald-",
+              "border-emerald-"
+            ]
+          },
+          {
+            "file": "frontend/src/components/notifications/NotificationBell.tsx",
+            "count": 4,
+            "samples": [
+              "text-blue-",
+              "text-emerald-",
+              "text-red-",
+              "text-green-"
+            ]
+          },
+          {
+            "file": "frontend/src/components/picking/PickingChecklist.tsx",
+            "count": 6,
+            "samples": [
+              "border-red-",
+              "bg-red-",
+              "text-red-"
+            ]
+          },
+          {
+            "file": "frontend/src/components/tracking/LiveTripTracker.tsx",
+            "count": 1,
+            "samples": [
+              "text-amber-"
+            ]
+          },
+          {
+            "file": "frontend/src/components/trucker/TruckerScoreBadge.tsx",
+            "count": 13,
+            "samples": [
+              "text-orange-",
+              "bg-orange-",
+              "text-amber-",
+              "bg-amber-",
+              "text-blue-",
+              "bg-blue-",
+              "bg-emerald-",
+              "text-emerald-"
+            ]
+          },
+          {
+            "file": "frontend/src/components/ui/AndeanPhoneInput.tsx",
+            "count": 12,
+            "samples": [
+              "border-green-",
+              "ring-green-",
+              "text-red-",
+              "border-red-",
+              "ring-red-"
+            ]
+          },
+          {
+            "file": "frontend/src/components/ui/Avatar.tsx",
+            "count": 5,
+            "samples": [
+              "bg-emerald-",
+              "bg-green-",
+              "bg-red-",
+              "from-green-",
+              "to-emerald-"
+            ]
+          },
+          {
+            "file": "frontend/src/components/ui/Button.tsx",
+            "count": 4,
+            "samples": [
+              "bg-red-",
+              "border-red-"
+            ]
+          },
+          {
+            "file": "frontend/src/components/ui/CommandPalette.tsx",
+            "count": 2,
+            "samples": [
+              "bg-green-",
+              "text-green-"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "key": "source:hard-coded-non-neutral-colors-to-review",
+      "evidence": {
+        "files": 1,
+        "hits": 1,
+        "samples": [
+          {
+            "file": "frontend/src/app/bodegas/[id]/evidencia-digital/page.tsx",
+            "count": 1,
+            "samples": [
+              "#111827"
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "browser_results": []
+}

@@ -11,6 +11,18 @@ import {
     setActiveWarehousePreference,
 } from '@/lib/server/warehouses';
 
+function hasValidCoordinates(latitude: unknown, longitude: unknown) {
+    const lat = Number(latitude);
+    const lng = Number(longitude);
+
+    return Number.isFinite(lat)
+        && Number.isFinite(lng)
+        && lat >= -90
+        && lat <= 90
+        && lng >= -180
+        && lng <= 180;
+}
+
 export async function GET(request: NextRequest) {
     const requestId = getRequestId(request);
     const auth = await requireAuthenticatedRoute(request);
@@ -226,6 +238,9 @@ export async function POST(request: NextRequest) {
             department?: string;
             city?: string;
             address?: string;
+            latitude?: number | null;
+            longitude?: number | null;
+            gpsToleranceMeters?: number;
             timezone?: string;
             status?: 'active' | 'inactive' | 'maintenance';
             flowMode?: 'manual' | 'warehouse_managed' | '3pl';
@@ -237,6 +252,14 @@ export async function POST(request: NextRequest) {
             return apiError('code, name, department, city and address are required', {
                 status: 400,
                 code: 'WAREHOUSE_CREATE_VALIDATION_ERROR',
+                requestId,
+            });
+        }
+
+        if (!hasValidCoordinates(body.latitude, body.longitude)) {
+            return apiError('latitude and longitude are required for warehouse GPS verification', {
+                status: 400,
+                code: 'WAREHOUSE_COORDINATES_REQUIRED',
                 requestId,
             });
         }
@@ -276,6 +299,9 @@ export async function POST(request: NextRequest) {
                 department: body.department.trim(),
                 city: body.city.trim(),
                 address: body.address.trim(),
+                latitude: Number(body.latitude),
+                longitude: Number(body.longitude),
+                gps_tolerance_meters: Math.max(50, Number(body.gpsToleranceMeters || 500)),
                 timezone: body.timezone || 'America/Bogota',
                 status: body.status || 'active',
                 flow_mode: body.flowMode || 'warehouse_managed',

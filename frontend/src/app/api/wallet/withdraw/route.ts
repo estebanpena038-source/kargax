@@ -52,7 +52,7 @@ interface WithdrawalAdminNotification {
 }
 
 type CanonicalPayoutMethod = 'nequi' | 'bancolombia_savings' | 'bancolombia_checking' | 'other_bank';
-type PayoutProvider = 'nequi' | 'wompi' | 'manual';
+type PayoutProvider = 'cobre' | 'manual';
 
 function normalizeDigits(value: string | undefined | null) {
     return (value || '').replace(/\D/g, '');
@@ -60,6 +60,90 @@ function normalizeDigits(value: string | undefined | null) {
 
 function normalizeText(value: string | undefined | null) {
     return (value || '').trim();
+}
+
+function maskSensitiveDigits(value: string | undefined | null) {
+    const digits = normalizeDigits(value);
+    if (!digits) return '****';
+    return `****${digits.slice(-4)}`;
+}
+
+function isMarketplaceEligibleCredit(row: Record<string, any>) {
+    const metadata = row.metadata && typeof row.metadata === 'object' ? row.metadata : {};
+    const sourceKind = typeof metadata.source_kind === 'string' ? metadata.source_kind : '';
+    const moneyRail = String(row.money_rail || '');
+
+    if (row.external_proof_only === true) {
+        return false;
+    }
+
+    if (
+        row.type === 'private_fleet_salary'
+        || moneyRail.startsWith('private_fleet')
+        || sourceKind.startsWith('private_fleet')
+    ) {
+        return false;
+    }
+
+    if (row.payout_eligible === true) {
+        return moneyRail === 'marketplace_freelancer'
+            || sourceKind === 'trip_settlement'
+            || sourceKind === 'marketplace_freight_release';
+    }
+
+    return row.type === 'trip_deposit'
+        && row.status === 'completed'
+        && (
+            moneyRail === 'marketplace_freelancer'
+            || sourceKind === 'trip_settlement'
+            || sourceKind === 'marketplace_freight_release'
+        );
+}
+
+async function getMarketplaceWithdrawableBalance(
+    supabaseAdmin: any,
+    walletId: string,
+    walletAvailableBalance: number
+) {
+    const { data, error } = await supabaseAdmin
+        .from('transactions')
+        .select('type, status, amount, metadata, money_rail, payout_eligible, locked_for_payout, external_proof_only')
+        .eq('wallet_id', walletId)
+        .order('created_at', { ascending: true });
+
+    if (error) {
+        throw new Error(error.message || 'No se pudo validar saldo marketplace');
+    }
+
+    const rows = (data || []) as Array<Record<string, any>>;
+    const eligibleCredits = rows
+        .filter(isMarketplaceEligibleCredit)
+        .reduce((sum, row) => sum + Math.max(Number(row.amount || 0), 0), 0);
+    const marketplaceWithdrawals = rows
+        .filter((row) => row.type === 'withdrawal' && ['pending', 'approved', 'completed'].includes(String(row.status || '')))
+        .reduce((sum, row) => sum + Math.abs(Number(row.amount || 0)), 0);
+    const derivedBalance = Math.max(eligibleCredits - marketplaceWithdrawals, 0);
+    const legacyWalletAvailableCop = Number(walletAvailableBalance || 0);
+    const availableCop = Math.max(0, Math.min(legacyWalletAvailableCop, derivedBalance));
+
+    return {
+        availableCop,
+        derivedBalance,
+        legacyWalletAvailableCop,
+        balanceMismatchCop: legacyWalletAvailableCop - derivedBalance,
+        privateWithdrawableLeakCount: rows.filter((row) => {
+            const metadata = row.metadata && typeof row.metadata === 'object' ? row.metadata : {};
+            const sourceKind = typeof metadata.source_kind === 'string' ? metadata.source_kind : '';
+            const moneyRail = String(row.money_rail || '');
+
+            return (
+                row.type === 'private_fleet_salary'
+                || moneyRail.startsWith('private_fleet')
+                || sourceKind.startsWith('private_fleet')
+                || row.external_proof_only === true
+            ) && (row.payout_eligible === true || row.locked_for_payout === true);
+        }).length,
+    };
 }
 
 function validateWithdrawalInput(body: WithdrawalRequest) {
@@ -160,10 +244,9 @@ function toCanonicalPayoutMethod(
     return 'other_bank';
 }
 
-function resolvePayoutProvider(method: CanonicalPayoutMethod, automaticPayoutsEnabled: boolean): PayoutProvider {
+function resolvePayoutProvider(_method: CanonicalPayoutMethod, automaticPayoutsEnabled: boolean): PayoutProvider {
     if (!automaticPayoutsEnabled) return 'manual';
-    if (method === 'nequi') return 'nequi';
-    return 'wompi';
+    return 'cobre';
 }
 
 export async function POST(request: NextRequest) {
@@ -203,14 +286,35 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Billetera no encontrada' }, { status: 404 });
         }
 
+        let marketplaceWithdrawableBeforeSweep = {
+            availableCop: 0,
+            derivedBalance: 0,
+            legacyWalletAvailableCop: 0,
+            balanceMismatchCop: 0,
+            privateWithdrawableLeakCount: 0,
+        };
+        try {
+            marketplaceWithdrawableBeforeSweep = await getMarketplaceWithdrawableBalance(
+                supabaseAdmin,
+                wallet.id,
+                Number(wallet.available_balance || 0)
+            );
+        } catch (balanceError) {
+            return NextResponse.json({
+                error: balanceError instanceof Error
+                    ? balanceError.message
+                    : 'No se pudo validar saldo marketplace',
+            }, { status: 500 });
+        }
+
         if (lendingEnabled) {
             await supabaseAdmin.rpc('mark_overdue_fuel_advances');
 
-            if (Number(wallet.available_balance || 0) > 0) {
+            if (marketplaceWithdrawableBeforeSweep.availableCop > 0) {
                 const { error: sweepError } = await supabaseAdmin.rpc('apply_advance_repayments', {
                     p_wallet_id: wallet.id,
                     p_offer_id: null,
-                    p_max_amount: wallet.available_balance,
+                    p_max_amount: marketplaceWithdrawableBeforeSweep.availableCop,
                     p_source: 'wallet_sweep',
                 });
 
@@ -230,8 +334,39 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'No se pudo refrescar la billetera' }, { status: 500 });
         }
 
-        if (Number(amount) > Number(refreshedWallet.available_balance || 0)) {
-            return NextResponse.json({ error: 'Saldo insuficiente para crear el retiro' }, { status: 400 });
+        let marketplaceWithdrawableBalance = {
+            availableCop: 0,
+            derivedBalance: 0,
+            legacyWalletAvailableCop: 0,
+            balanceMismatchCop: 0,
+            privateWithdrawableLeakCount: 0,
+        };
+        try {
+            marketplaceWithdrawableBalance = await getMarketplaceWithdrawableBalance(
+                supabaseAdmin,
+                refreshedWallet.id,
+                Number(refreshedWallet.available_balance || 0)
+            );
+        } catch (balanceError) {
+            return NextResponse.json({
+                error: balanceError instanceof Error
+                    ? balanceError.message
+                    : 'No se pudo validar saldo marketplace',
+            }, { status: 500 });
+        }
+
+        if (marketplaceWithdrawableBalance.privateWithdrawableLeakCount > 0) {
+            console.warn('[Withdrawal] Private fleet rail leak detected before withdrawal', {
+                userId: authUser.id,
+                walletId: refreshedWallet.id,
+                privateWithdrawableLeakCount: marketplaceWithdrawableBalance.privateWithdrawableLeakCount,
+            });
+        }
+
+        if (Number(amount) > marketplaceWithdrawableBalance.availableCop) {
+            return NextResponse.json({
+                error: 'Solo puedes retirar saldo marketplace confirmado. Las liquidaciones privadas quedan como comprobante externo.',
+            }, { status: 400 });
         }
 
         const methodData = {
@@ -262,18 +397,18 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        const balanceBefore = Number(refreshedWallet.available_balance || 0);
-        const { data: withdrawalResult, error: withdrawalError } = await supabaseAdmin.rpc('create_withdrawal_request', {
+        const marketplaceBalanceBefore = marketplaceWithdrawableBalance.availableCop;
+        const { data: withdrawalResult, error: withdrawalError } = await supabaseAdmin.rpc('create_marketplace_withdrawal_request', {
             p_user_id: authUser.id,
             p_amount: Number(amount),
             p_payment_method: paymentMethod,
             p_payment_details: {
                 payment_method: paymentMethod,
                 bank_name: methodData.bank_name,
-                account_number: bankDetails.accountNumber,
+                account_number_last4: bankDetails.accountNumber.slice(-4),
                 account_holder_name: bankDetails.accountHolderName,
                 document_type: bankDetails.documentType,
-                document_number: bankDetails.documentNumber,
+                document_number_last4: bankDetails.documentNumber.slice(-4),
                 source_kind: 'withdrawal_request',
                 payout_method: canonicalPayoutMethod,
                 payout_provider: payoutProvider,
@@ -289,7 +424,7 @@ export async function POST(request: NextRequest) {
             }, { status: 500 });
         }
 
-        const balanceAfter = Number(withdrawalRequest.available_balance_after || 0);
+        const marketplaceBalanceAfter = Math.max(marketplaceBalanceBefore - Number(amount), 0);
         const idempotencyKey = `withdrawal:${withdrawalRequest.request_id}:${Number(amount).toFixed(2)}`;
         const payoutStatus = automaticPayoutsEnabled ? 'queued' : 'manual_review';
 
@@ -303,6 +438,17 @@ export async function POST(request: NextRequest) {
                 amount_cop: Number(amount),
                 status: payoutStatus,
                 idempotency_key: idempotencyKey,
+                source_kind: automaticPayoutsEnabled ? 'wallet_withdrawal_automatic' : 'wallet_withdrawal_manual',
+                source_id: withdrawalRequest.request_id,
+                trucker_id: authUser.id,
+                destination_snapshot: {
+                    method: canonicalPayoutMethod,
+                    bank_name: bankDetails.bankName,
+                    account_number: bankDetails.accountNumber,
+                    account_holder_name: bankDetails.accountHolderName,
+                    document_type: bankDetails.documentType,
+                    document_number: bankDetails.documentNumber,
+                },
                 provider_payload: {
                     bank_name: bankDetails.bankName,
                     account_holder_name: bankDetails.accountHolderName,
@@ -334,6 +480,12 @@ export async function POST(request: NextRequest) {
         await supabaseAdmin
             .from('transactions')
             .update({
+                money_rail: 'marketplace_freelancer',
+                source_system: payoutProvider,
+                payout_eligible: false,
+                locked_for_payout: automaticPayoutsEnabled,
+                external_proof_only: false,
+                payout_attempt_id: payoutAttempt?.id,
                 metadata: {
                     ...existingMetadata,
                     payment_method: paymentMethod,
@@ -357,9 +509,9 @@ export async function POST(request: NextRequest) {
                 phone: profile?.phone || 'Sin telefono',
             },
             wallet: {
-                total_balance: balanceBefore,
+                total_balance: marketplaceBalanceBefore,
                 amount_requested: Number(amount),
-                remaining_balance: balanceAfter,
+                remaining_balance: marketplaceBalanceAfter,
             },
             payment: {
                 method: paymentMethod === 'nequi'
@@ -368,10 +520,10 @@ export async function POST(request: NextRequest) {
                         ? 'Cuenta de Ahorros'
                         : 'Cuenta Corriente',
                 bank: methodData.bank_name,
-                account_number: bankDetails.accountNumber,
+                account_number: maskSensitiveDigits(bankDetails.accountNumber),
                 account_holder: bankDetails.accountHolderName,
                 document: bankDetails.documentNumber
-                    ? `${bankDetails.documentType}: ${bankDetails.documentNumber}`
+                    ? `${bankDetails.documentType}: ${maskSensitiveDigits(bankDetails.documentNumber)}`
                     : null,
             },
             created_at: new Date().toISOString(),
@@ -392,8 +544,12 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json({
             success: true,
-            message: 'Solicitud de retiro creada. Queda pendiente de aprobacion administrativa.',
+            message: automaticPayoutsEnabled
+                ? 'Retiro recibido. KargaX procesara el payout operativo automaticamente.'
+                : 'Solicitud de retiro creada. Queda pendiente de aprobacion administrativa.',
+            payoutMode: automaticPayoutsEnabled ? 'automatic' : 'manual',
             request_id: withdrawalRequest.request_id,
+            payoutAttemptId: payoutAttempt?.id || null,
             payout: payoutAttempt,
         });
     } catch (error) {

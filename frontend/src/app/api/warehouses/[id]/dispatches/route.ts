@@ -30,9 +30,13 @@ type PrivateTripDetails = {
     pickupContactPhone?: string;
     deliveryContactName?: string;
     deliveryContactPhone?: string;
+    destinationType?: 'final_customer' | 'warehouse';
+    destinationWarehouseId?: string;
     destinationAddress?: string;
     destinationCity?: string;
     destinationDepartment?: string;
+    destinationLatitude?: number | null;
+    destinationLongitude?: number | null;
     vehicleType?: string;
     deliveryAt?: string;
 };
@@ -92,6 +96,36 @@ function resolveProfileCountryCode(profile: unknown) {
     return 'CO';
 }
 
+function toOptionalCoordinate(value: unknown) {
+    if (value === null || value === undefined || String(value).trim() === '') {
+        return undefined;
+    }
+
+    const coordinate = Number(value);
+    return Number.isFinite(coordinate) && coordinate !== 0 ? coordinate : undefined;
+}
+
+function buildServerDispatchNumber() {
+    const stamp = new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 17);
+    const suffix = Math.random().toString(36).slice(2, 6).toUpperCase();
+    return `DSP-${stamp}-${suffix}`;
+}
+
+function normalizeDispatchNumber(value: string | undefined) {
+    return value?.trim().toUpperCase() || buildServerDispatchNumber();
+}
+
+function dispatchNumberForAttempt(base: string, attempt: number) {
+    if (attempt === 0) return base;
+    return `${base}-${attempt + 1}`;
+}
+
+function isDuplicateDispatchNumberError(error: unknown) {
+    const details = error as { code?: string; message?: string } | null;
+    return details?.code === '23505'
+        || /warehouse_dispatch_orders_warehouse_id_dispatch_number_key/i.test(details?.message || '');
+}
+
 async function createPrivateFleetOfferFromDispatch(
     request: NextRequest,
     payload: {
@@ -102,14 +136,15 @@ async function createPrivateFleetOfferFromDispatch(
         scheduledAt?: string;
         notes?: string;
         tripDetails: PrivateTripDetails;
-        lines: Array<{
+    lines: Array<{
             skuCode: string;
             skuName: string;
             requestedQty: number;
             pickedQty?: number;
             dispatchedQty?: number;
             rejectedQty?: number;
-        }>;
+    }>;
+    destinationWarehouse?: Record<string, unknown> | null;
     }
 ) {
     const pickupFallback = payload.scheduledAt ? new Date(payload.scheduledAt) : new Date();
@@ -147,9 +182,13 @@ async function createPrivateFleetOfferFromDispatch(
             originDepartment: String(payload.warehouse.department || ''),
             originCity: String(payload.warehouse.city || ''),
             originAddress: String(payload.warehouse.address || payload.warehouse.name || ''),
+            originLatitude: toOptionalCoordinate(payload.warehouse.latitude),
+            originLongitude: toOptionalCoordinate(payload.warehouse.longitude),
             destinationDepartment: payload.tripDetails.destinationDepartment || String(payload.warehouse.department || ''),
             destinationCity: payload.tripDetails.destinationCity || String(payload.warehouse.city || ''),
             destinationAddress: payload.tripDetails.destinationAddress || 'Destino operativo por confirmar',
+            destinationLatitude: payload.tripDetails.destinationLatitude,
+            destinationLongitude: payload.tripDetails.destinationLongitude,
             pickupDate: pickupStart.date,
             pickupTimeStart: pickupStart.time,
             pickupTimeEnd: pickupEnd.time,
@@ -175,6 +214,9 @@ async function createPrivateFleetOfferFromDispatch(
             deliveryContactPhone: payload.tripDetails.deliveryContactPhone,
             warehouseFlowMode: 'warehouse_managed',
             originWarehouseId: payload.warehouseId,
+            destinationWarehouseId: payload.tripDetails.destinationType === 'warehouse'
+                ? payload.tripDetails.destinationWarehouseId
+                : undefined,
             assignmentMode: 'private',
             privateFleetTruckerId: payload.tripDetails.privateFleetTruckerId,
             compensationMode: payload.tripDetails.compensationMode || 'salary_no_trip_pay',
@@ -184,6 +226,11 @@ async function createPrivateFleetOfferFromDispatch(
             privateFleetNotes: payload.notes || `Despacho ${payload.dispatchNumber}`,
             sourceDispatchId: payload.dispatchId,
             dispatchTripMode: 'private_fleet_trip',
+            metadata: {
+                destinationType: payload.tripDetails.destinationType || 'final_customer',
+                destinationWarehouseId: payload.tripDetails.destinationWarehouseId || null,
+                destinationWarehouseName: payload.destinationWarehouse?.name || null,
+            },
         }),
     });
 
@@ -194,6 +241,82 @@ async function createPrivateFleetOfferFromDispatch(
     }
 
     return json.data;
+}
+
+async function createPendingTransferReceipt(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    supabaseAdmin: any,
+    payload: {
+        destinationWarehouseId: string;
+        offerId: string;
+        dispatchId: string;
+        dispatchNumber: string;
+        notes?: string;
+        lines: DispatchLineRow[];
+    }
+) {
+    const receiptNumberBase = `TRF-${payload.dispatchNumber}`.slice(0, 80);
+    let receipt: Record<string, unknown> | null = null;
+    let receiptError: { code?: string; message?: string } | null = null;
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+        const receiptNumber = attempt === 0 ? receiptNumberBase : `${receiptNumberBase}-${attempt + 1}`;
+        const { data, error } = await supabaseAdmin
+            .from('warehouse_receipts')
+            .insert({
+                warehouse_id: payload.destinationWarehouseId,
+                offer_id: payload.offerId,
+                receipt_number: receiptNumber,
+                status: 'draft',
+                notes: [
+                    `Recepcion pendiente creada automaticamente desde despacho ${payload.dispatchNumber}`,
+                    payload.notes,
+                ].filter(Boolean).join('. '),
+                received_by: null,
+            })
+            .select('*')
+            .single();
+
+        if (!error && data) {
+            receipt = data as Record<string, unknown>;
+            receiptError = null;
+            break;
+        }
+
+        receiptError = error as { code?: string; message?: string } | null;
+        if (receiptError?.code !== '23505') break;
+    }
+
+    if (receiptError || !receipt?.id) {
+        throw new Error(receiptError?.message || 'No se pudo crear la recepcion pendiente en bodega destino');
+    }
+
+    const receiptLines = payload.lines.map((line) => ({
+        receipt_id: receipt.id,
+        sku_id: null,
+        location_id: null,
+        sku_code_snapshot: String(line.sku_code_snapshot || '').trim().toUpperCase(),
+        sku_name_snapshot: String(line.sku_name_snapshot || '').trim(),
+        expected_qty: Number(line.dispatched_qty || 0),
+        received_qty: 0,
+        damaged_qty: 0,
+        metadata: {
+            source: 'warehouse_transfer',
+            sourceDispatchId: payload.dispatchId,
+            sourceDispatchLineId: line.id || null,
+            pendingDestinationConfirmation: true,
+        },
+    }));
+
+    const { error: lineError } = await supabaseAdmin
+        .from('warehouse_receipt_lines')
+        .insert(receiptLines);
+
+    if (lineError) {
+        throw new Error(lineError.message || 'No se pudieron crear las lineas de recepcion pendiente');
+    }
+
+    return receipt;
 }
 
 export async function GET(request: NextRequest, context: RouteContext) {
@@ -311,8 +434,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
         }>;
     };
 
-    if (!body.dispatchNumber || !body.lines?.length) {
-        return apiError('dispatchNumber and at least one line are required', {
+    if (!body.lines?.length) {
+        return apiError('At least one line is required', {
             status: 400,
             code: 'WAREHOUSE_DISPATCH_VALIDATION_ERROR',
             requestId,
@@ -328,6 +451,17 @@ export async function POST(request: NextRequest, context: RouteContext) {
         });
     }
 
+    const destinationType = body.tripDetails?.destinationType || 'final_customer';
+    let destinationWarehouse: Record<string, unknown> | null = null;
+
+    if (!['final_customer', 'warehouse'].includes(destinationType)) {
+        return apiError('destinationType invalido', {
+            status: 400,
+            code: 'WAREHOUSE_DISPATCH_DESTINATION_TYPE_INVALID',
+            requestId,
+        });
+    }
+
     if (dispatchTripMode === 'private_fleet_trip' && !body.tripDetails?.privateFleetTruckerId && !body.offerId) {
         return apiError('private_fleet_trip requiere conductor privado o offerId preexistente', {
             status: 400,
@@ -337,6 +471,53 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     if (dispatchTripMode === 'private_fleet_trip' && !body.offerId) {
+        if (destinationType === 'warehouse') {
+            if (!body.tripDetails?.destinationWarehouseId) {
+                return apiError('Selecciona la bodega destino para crear el viaje bodega a bodega.', {
+                    status: 400,
+                    code: 'WAREHOUSE_DISPATCH_DESTINATION_WAREHOUSE_REQUIRED',
+                    requestId,
+                });
+            }
+
+            if (body.tripDetails.destinationWarehouseId === id) {
+                return apiError('La bodega destino no puede ser la misma bodega origen.', {
+                    status: 400,
+                    code: 'WAREHOUSE_DISPATCH_DESTINATION_SAME_AS_ORIGIN',
+                    requestId,
+                });
+            }
+
+            const { data: warehouseRow, error: warehouseError } = await supabaseAdmin
+                .from('warehouses')
+                .select('id, business_id, code, name, status, department, city, address, latitude, longitude')
+                .eq('id', body.tripDetails.destinationWarehouseId)
+                .maybeSingle();
+
+            if (warehouseError || !warehouseRow) {
+                return apiError('Bodega destino no encontrada.', {
+                    status: 404,
+                    code: 'WAREHOUSE_DISPATCH_DESTINATION_WAREHOUSE_NOT_FOUND',
+                    requestId,
+                });
+            }
+
+            if (warehouseRow.business_id !== access.warehouse.business_id || warehouseRow.status !== 'active') {
+                return apiError('La bodega destino debe pertenecer a la misma empresa y estar activa.', {
+                    status: 403,
+                    code: 'WAREHOUSE_DISPATCH_DESTINATION_WAREHOUSE_FORBIDDEN',
+                    requestId,
+                });
+            }
+
+            destinationWarehouse = warehouseRow as Record<string, unknown>;
+            body.tripDetails.destinationAddress = String(warehouseRow.address || warehouseRow.name || '');
+            body.tripDetails.destinationCity = String(warehouseRow.city || '');
+            body.tripDetails.destinationDepartment = String(warehouseRow.department || '');
+            body.tripDetails.destinationLatitude = typeof warehouseRow.latitude === 'number' ? warehouseRow.latitude : Number(warehouseRow.latitude || 0) || null;
+            body.tripDetails.destinationLongitude = typeof warehouseRow.longitude === 'number' ? warehouseRow.longitude : Number(warehouseRow.longitude || 0) || null;
+        }
+
         const countryCode = resolveProfileCountryCode(profile);
         const pickupContactName = body.tripDetails?.pickupContactName?.trim();
         const pickupContactPhone = normalizePhoneForNotification(body.tripDetails?.pickupContactPhone, countryCode);
@@ -377,10 +558,17 @@ export async function POST(request: NextRequest, context: RouteContext) {
         }
     }
 
+    const dispatchNumberBase = normalizeDispatchNumber(body.dispatchNumber);
+
     try {
-        const { data: dispatchOrder, error } = await supabaseAdmin
-            .from('warehouse_dispatch_orders')
-            .insert({
+        let dispatchOrder: Record<string, any> | null = null;
+        let dispatchCreateError: { code?: string; message?: string } | null = null;
+
+        for (let attempt = 0; attempt < 5; attempt += 1) {
+            const dispatchNumber = dispatchNumberForAttempt(dispatchNumberBase, attempt);
+            const { data, error } = await supabaseAdmin
+                .from('warehouse_dispatch_orders')
+                .insert({
                 warehouse_id: id,
                 offer_id: body.offerId || null,
                 dispatch_trip_mode: dispatchTripMode,
@@ -391,7 +579,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
                         : 'manual_review',
                 client_id: body.clientId || null,
                 appointment_id: body.appointmentId || null,
-                dispatch_number: body.dispatchNumber.trim().toUpperCase(),
+                dispatch_number: dispatchNumber,
                 status: 'dispatched',
                 notes: body.notes || null,
                 scheduled_at: body.scheduledAt || null,
@@ -401,14 +589,29 @@ export async function POST(request: NextRequest, context: RouteContext) {
                 metadata: {
                     dispatchTripMode,
                     tripDetails: body.tripDetails || null,
+                    destinationType,
+                    destinationWarehouseId: body.tripDetails?.destinationWarehouseId || null,
                     source: 'warehouse_dispatch_wizard',
                 },
             })
             .select('*')
             .single();
 
-        if (error || !dispatchOrder) {
-            return apiError(error?.message || 'Could not create dispatch', {
+            if (!error && data) {
+                dispatchOrder = data;
+                dispatchCreateError = null;
+                break;
+            }
+
+            dispatchCreateError = error as { code?: string; message?: string } | null;
+
+            if (!isDuplicateDispatchNumberError(error)) {
+                break;
+            }
+        }
+
+        if (dispatchCreateError || !dispatchOrder) {
+            return apiError(dispatchCreateError?.message || 'Could not create dispatch', {
                 status: 500,
                 code: 'WAREHOUSE_DISPATCH_CREATE_FAILED',
                 requestId,
@@ -487,20 +690,40 @@ export async function POST(request: NextRequest, context: RouteContext) {
                     notes: body.notes,
                     tripDetails: body.tripDetails,
                     lines: body.lines,
+                    destinationWarehouse,
                 });
+                const createdOfferId = createdOffer.id;
+
+                if (!createdOfferId) {
+                    throw new Error('El viaje privado fue creado sin identificador de oferta.');
+                }
+
+                const transferReceipt = destinationType === 'warehouse' && body.tripDetails.destinationWarehouseId
+                    ? await createPendingTransferReceipt(supabaseAdmin, {
+                        destinationWarehouseId: body.tripDetails.destinationWarehouseId,
+                        offerId: createdOfferId,
+                        dispatchId: dispatchOrder.id,
+                        dispatchNumber: dispatchOrder.dispatch_number,
+                        notes: body.notes,
+                        lines: createdLines,
+                    })
+                    : null;
 
                 const { data: updatedDispatchOrder, error: updateError } = await supabaseAdmin
                     .from('warehouse_dispatch_orders')
                     .update({
-                        offer_id: createdOffer.id,
+                        offer_id: createdOfferId,
                         trip_creation_status: 'created',
                         trip_created_at: new Date().toISOString(),
                         trip_creation_error: null,
                         metadata: {
                             dispatchTripMode,
                             tripDetails: body.tripDetails || null,
+                            destinationType,
+                            destinationWarehouseId: body.tripDetails.destinationWarehouseId || null,
+                            transferReceiptId: transferReceipt?.id || null,
                             source: 'warehouse_dispatch_wizard',
-                            createdOfferId: createdOffer.id,
+                            createdOfferId,
                         },
                     })
                     .eq('id', dispatchOrder.id)
@@ -523,6 +746,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
                         metadata: {
                             dispatchTripMode,
                             tripDetails: body.tripDetails || null,
+                            destinationType,
+                            destinationWarehouseId: body.tripDetails?.destinationWarehouseId || null,
                             source: 'warehouse_dispatch_wizard',
                             tripCreationError: message,
                         },

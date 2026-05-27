@@ -386,8 +386,8 @@ export default function TeamPage() {
 
                 {teamResponse?.limits?.entitlementState === 'pilot_active' ? (
                     <InlineNotice
-                        title="Launch Pilot activo"
-                        description={`Quedan ${teamResponse.limits.pilotDaysRemaining ?? 0} dias para validar equipo, roles y bodegas con limites piloto antes de pasar a Free o pagar Pro.`}
+                        title="Acceso Operativo activo"
+                        description={`Quedan ${teamResponse.limits.pilotDaysRemaining ?? 0} dias para validar equipo, roles y bodegas con limites altos antes de pasar a Free o activar Growth.`}
                     />
                 ) : null}
 

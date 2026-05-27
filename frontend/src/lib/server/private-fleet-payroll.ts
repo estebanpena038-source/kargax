@@ -1,7 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createAdminNotification } from '@/lib/server/route-auth';
-import { resolveBusinessAccessContext } from '@/lib/server/warehouses';
-import { getBusinessRoleCapabilities } from '@/lib/business-roles';
+import { resolveBusinessRolePolicy } from '@/lib/server/role-policy';
 import type { PrivateFleetPayrollPaymentReference } from '@/lib/contracts/payments';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -13,6 +12,7 @@ export type PayrollAccessProfile = {
 } | null;
 
 export const PRIVATE_FLEET_PAYROLL_FEE_PERCENT = Number(process.env.PRIVATE_FLEET_PAYROLL_FEE_PERCENT || 0);
+const PRIVATE_FLEET_PAYROLL_WALLET_RELEASE_ENABLED = process.env.PRIVATE_FLEET_PAYROLL_WALLET_RELEASE_ENABLED === 'true';
 
 export function getPayrollFeeAmount(grossAmount: number) {
     const feePercent = Number.isFinite(PRIVATE_FLEET_PAYROLL_FEE_PERCENT)
@@ -28,27 +28,19 @@ export async function resolvePrivateFleetPayrollAccess(
     profile: PayrollAccessProfile,
     requestedBusinessId?: string | null
 ) {
-    const access = await resolveBusinessAccessContext(supabaseAdmin, authUserId, profile);
-    const businessId = profile?.user_type === 'admin'
-        ? requestedBusinessId?.trim() || access.businessId || null
-        : access.businessId;
-
-    const effectiveRole = profile?.user_type === 'admin'
-        ? 'admin'
-        : access.isOwner
-            ? 'owner'
-            : access.teamMember?.role || 'viewer';
-    const capabilities = getBusinessRoleCapabilities(effectiveRole);
-    const canManagePayroll = profile?.user_type === 'admin'
-        || access.isOwner
-        || access.teamMember?.role === 'finance_accountant';
-    const canViewPayroll = canManagePayroll || capabilities.canViewFinance;
+    const policy = await resolveBusinessRolePolicy(supabaseAdmin, authUserId, profile, {
+        requestedBusinessId,
+    });
+    const canManagePayroll = policy.capabilities.canManagePrivateFleetMoney;
+    const canViewPayroll = canManagePayroll || policy.capabilities.canViewPrivateFleetMoney;
 
     return {
-        access,
-        businessId,
-        effectiveRole,
-        capabilities,
+        access: policy.access,
+        businessId: policy.businessId,
+        effectiveRole: policy.effectiveRole,
+        capabilities: policy.baseCapabilities,
+        policyCapabilities: policy.capabilities,
+        scopeError: policy.scopeError,
         canManagePayroll,
         canViewPayroll,
     };
@@ -137,6 +129,68 @@ export async function releasePrivateFleetPayrollRun(
         };
     }
 
+    const paymentMode = String(run.payment_mode || 'external_proof');
+    if (paymentMode !== 'mercadopago_funded' || !PRIVATE_FLEET_PAYROLL_WALLET_RELEASE_ENABLED) {
+        const nextExternalStatus = paymentMode === 'external_proof' ? 'paid_external' : 'proof_uploaded';
+
+        await supabaseAdmin
+            .from('private_fleet_payroll_runs')
+            .update({
+                status: nextExternalStatus,
+                external_payment_status: nextExternalStatus,
+                external_paid_at: nextExternalStatus === 'paid_external' ? new Date().toISOString() : run.external_paid_at || null,
+                external_payment_method: 'mercadopago',
+                external_payment_reference: providerPaymentId,
+                funded_payment_id: providerPaymentId,
+                funded_at: run.funded_at || new Date().toISOString(),
+                gateway_response: mpPayment,
+                metadata: {
+                    ...(run.metadata || {}),
+                    wallet_touched: false,
+                    payment_mode: paymentMode,
+                    source_kind: 'private_fleet_external_proof',
+                },
+            })
+            .eq('id', run.id);
+
+        await supabaseAdmin
+            .from('private_fleet_payroll_items')
+            .update({
+                status: nextExternalStatus,
+                released_at: nextExternalStatus === 'paid_external' ? new Date().toISOString() : null,
+                metadata: {
+                    source_kind: 'private_fleet_external_proof',
+                    wallet_touched: false,
+                    mp_payment_id: providerPaymentId,
+                },
+            })
+            .eq('run_id', run.id)
+            .eq('business_id', refData.business_id)
+            .neq('status', 'released_to_wallet');
+
+        await createAdminNotification(supabaseAdmin, {
+            type: 'private_fleet_payroll_external_documented',
+            title: 'Nomina privada documentada',
+            message: `La empresa ${refData.business_id} documento una liquidacion privada por ${Number(run.gross_amount || 0).toFixed(0)} sin tocar wallet.`,
+            data: {
+                business_id: refData.business_id,
+                payroll_run_id: run.id,
+                payment_mode: paymentMode,
+                wallet_touched: false,
+                mp_payment_id: providerPaymentId,
+            },
+        });
+
+        return {
+            released: true,
+            duplicate: false,
+            status: nextExternalStatus,
+            runId: run.id,
+            releasedItems: 0,
+            walletTouched: false,
+        };
+    }
+
     if (run.status === 'released' && run.funded_payment_id && providerPaymentId && run.funded_payment_id === providerPaymentId) {
         return {
             released: true,
@@ -144,6 +198,7 @@ export async function releasePrivateFleetPayrollRun(
             status: 'released',
             runId: run.id,
             releasedItems: 0,
+            walletTouched: true,
         };
     }
 
@@ -208,6 +263,11 @@ export async function releasePrivateFleetPayrollRun(
                 pending_balance_after: pendingBefore,
                 description: `Nomina flota privada ${String(run.period_start).slice(0, 7)}`,
                 reference_id: run.id,
+                money_rail: 'private_fleet_mercadopago_funded',
+                source_system: 'mercadopago',
+                payout_eligible: false,
+                locked_for_payout: false,
+                external_proof_only: true,
                 metadata: {
                     source_kind: 'private_fleet_salary',
                     source_reference: run.id,
@@ -217,6 +277,9 @@ export async function releasePrivateFleetPayrollRun(
                     mp_payment_id: providerPaymentId,
                     period_start: run.period_start,
                     period_end: run.period_end,
+                    payment_mode: 'mercadopago_funded',
+                    legacy_wallet_funded: true,
+                    wallet_touched: true,
                 },
             })
             .select('id')
@@ -248,13 +311,15 @@ export async function releasePrivateFleetPayrollRun(
         await supabaseAdmin.rpc('create_notification', {
             p_user_id: item.trucker_id,
             p_type: 'private_fleet_salary_released',
-            p_title: 'Nomina privada disponible',
-            p_message: `Tu empresa libero ${amount.toFixed(0)} en nomina privada a tu billetera KargaX.`,
+            p_title: 'Nomina privada financiada por KargaX',
+            p_message: `Tu empresa libero ${amount.toFixed(0)} en nomina privada por el flujo legacy financiado. No se mezcla con comprobantes externos.`,
             p_data: {
                 payroll_run_id: run.id,
                 payroll_item_id: item.id,
                 amount,
                 wallet_transaction_id: transaction.id,
+                payment_mode: 'mercadopago_funded',
+                external_proof_only: true,
             },
         });
 
@@ -287,5 +352,6 @@ export async function releasePrivateFleetPayrollRun(
         status: 'released',
         runId: run.id,
         releasedItems,
+        walletTouched: true,
     };
 }

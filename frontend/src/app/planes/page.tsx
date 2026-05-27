@@ -33,7 +33,7 @@ function formatPlanCapacity(limit: number | null, limitedLabel: string, unlimite
 }
 
 function getPlanStage(plan: BillingPlan) {
-    return ({ free: 'Arranque', growth: 'Operacion', scale: 'Expansion', enterprise: 'Corporativo' } as Record<string, string>)[plan.code] || 'Plan';
+    return ({ free: 'Arranque', growth: 'Despachos diarios', scale: 'Alto volumen', enterprise: 'Corporativo' } as Record<string, string>)[plan.code] || 'Plan';
 }
 
 function getSupportLabel(plan: BillingPlan) {
@@ -44,6 +44,11 @@ function getNumericPrice(plan: BillingPlan | BusinessPlanSubscription['plan'] | 
     return Number(plan?.price_monthly_cop ?? 0) || Math.round(Number(plan?.price_monthly_usd || 0) * 4000);
 }
 
+function getPlanPriceLabel(plan: BillingPlan) {
+    const price = formatPriceCop(getNumericPrice(plan));
+    return plan.code === 'enterprise' ? `Desde ${price}` : price;
+}
+
 function getPlanHighlights(plan: BillingPlan) {
     const shared = [
         formatPlanCapacity(plan.max_warehouses, 'bodegas activas', 'Bodegas ilimitadas'),
@@ -52,10 +57,10 @@ function getPlanHighlights(plan: BillingPlan) {
         formatPlanCapacity(plan.max_private_fleet_drivers, 'conductores privados', 'Flota privada ilimitada'),
     ];
     const byCode: Record<string, string[]> = {
-        free: ['PIN/POD, evidencia esencial y wallet base', `Marketplace con ${MARKETPLACE_COMMISSION_PERCENT}% solo en viajes externos`, getSupportLabel(plan)],
-        growth: ['Equipo interno por empresa y por bodega', 'Inventario visual, ubicaciones, recibos y analitica base', getSupportLabel(plan)],
-        scale: ['3PL multi-cliente, API/webhooks y control tower', 'Reportes financieros, automatizacion y flota privada ilimitada', getSupportLabel(plan)],
-        enterprise: ['Holding multiempresa con vista corporativa', 'Aprobaciones, auditoria, treasury y soporte premium', getSupportLabel(plan)],
+        free: ['PIN/POD, receptor, hora, foto/firma y novedad', `Marketplace con ${MARKETPLACE_COMMISSION_PERCENT}% solo en viajes externos`, getSupportLabel(plan)],
+        growth: ['Inventario visual, recibos, despachos y analitica base', 'Equipo interno por empresa y por bodega', getSupportLabel(plan)],
+        scale: ['Reportes, exportaciones, novedades y soporte premium', 'Flota, bodega y alto volumen operativo', getSupportLabel(plan)],
+        enterprise: ['API/webhooks, control tower y 3PL multi-cliente', 'Aprobaciones, auditoria, treasury y soporte premium', getSupportLabel(plan)],
     };
     return [...shared, ...(byCode[plan.code] || [getSupportLabel(plan)])];
 }
@@ -167,7 +172,7 @@ function PlansPageContent() {
     const isPilotActive = entitlementState === 'pilot_active';
     const isPilotExpired = entitlementState === 'pilot_expired';
     const pilotDaysRemaining = limits.pilotDaysRemaining;
-    const currentPlanName = isPilotActive ? 'Launch Pilot' : subscription?.plan?.name || 'Free';
+    const currentPlanName = isPilotActive ? 'Acceso Operativo' : subscription?.plan?.name || 'Free';
 
     return (
         <DashboardLayout pageTitle="Planes y facturacion">
@@ -200,8 +205,8 @@ function PlansPageContent() {
 
                         {isPilotActive ? (
                             <InlineNotice
-                                title="Launch Pilot activo"
-                                description={`Quedan ${pilotDaysRemaining ?? 'varios'} dias. Al terminar, Free mantiene 1 bodega, 3 usuarios, 3 conductores y 25 viajes/mes.`}
+                                title="Acceso Operativo activo"
+                                description={`Quedan ${pilotDaysRemaining ?? 'varios'} dias. Al terminar, Free mantiene 1 bodega, 2 usuarios, 3 conductores y 50 viajes/mes.`}
                                 action={<Button asChild><Link href="#planes">Ver plan recomendado</Link></Button>}
                             />
                         ) : null}
@@ -209,7 +214,7 @@ function PlansPageContent() {
                         {isPilotExpired ? (
                             <InlineNotice
                                 tone="warning"
-                                title="Piloto finalizado"
+                                title="Acceso Operativo finalizado"
                                 description="Tu cuenta ya opera con limites Free. Tus datos, viajes activos, evidencia, wallet y reportes siguen disponibles."
                                 action={<Button asChild><Link href="#planes">Activar plan</Link></Button>}
                             />
@@ -262,7 +267,7 @@ function PlansPageContent() {
 
                                             <div className="mt-5">
                                                 <p className={`break-words font-money text-3xl font-semibold leading-tight min-[420px]:text-4xl ${plan.code === 'enterprise' ? 'text-white' : 'text-zinc-950'}`}>
-                                                    {formatPriceCop(getNumericPrice(plan))}
+                                                    {getPlanPriceLabel(plan)}
                                                 </p>
                                                 <p className={`mt-2 text-xs ${plan.code === 'enterprise' ? 'text-white/50' : 'text-zinc-500'}`}>/ mes + IVA si aplica</p>
                                             </div>
@@ -374,29 +379,45 @@ function PublicPricingPage() {
             code: 'free',
             name: 'Free',
             price: '$0 COP',
-            tagline: 'Validacion inicial',
-            highlights: ['1 bodega, 3 usuarios, 3 conductores', '25 viajes/mes', 'PIN/POD, wallet y evidencia esencial'],
+            tagline: 'Para probar el cierre operativo',
+            highlights: [
+                '1 bodega, 2 usuarios, 3 conductores',
+                '50 viajes/mes',
+                'PIN/POD, receptor, hora, foto/firma y novedad',
+            ],
         },
         {
             code: 'growth',
-            name: 'Pro',
-            price: '$149.000 COP',
-            tagline: 'Operacion diaria',
-            highlights: ['5 bodegas, 20 usuarios, 20 conductores', '500 viajes/mes', 'Inventario visual, ubicaciones y analitica base'],
+            name: 'Growth',
+            price: '$299.000 COP',
+            tagline: 'Para despachos diarios',
+            highlights: [
+                '3 bodegas, 10 usuarios, 15 conductores',
+                '500 viajes/mes',
+                'Inventario visual, recibos, despachos y analitica base',
+            ],
         },
         {
             code: 'scale',
             name: 'Scale',
-            price: '$399.000 COP',
-            tagline: '3PL y automatizacion',
-            highlights: ['25 bodegas y 100 usuarios', '5.000 viajes/mes', 'API/webhooks, control tower y flota privada ilimitada'],
+            price: '$799.000 COP',
+            tagline: 'Para flota, bodega y alto volumen',
+            highlights: [
+                '10 bodegas, 30 usuarios, 50 conductores',
+                '2.000 viajes/mes',
+                'Reportes, exportaciones, novedades y soporte premium',
+            ],
         },
         {
             code: 'enterprise',
             name: 'Enterprise',
-            price: 'Desde $1.200.000 COP',
-            tagline: 'Holding y treasury',
-            highlights: ['Capacidad ilimitada', 'Vista corporativa', 'Aprobaciones, auditoria, treasury y soporte premium'],
+            price: 'Desde $2.500.000 COP',
+            tagline: 'Para 3PL, multiempresa y operacion corporativa',
+            highlights: [
+                'Volumen personalizado segun operacion',
+                'API/webhooks, control tower y 3PL multi-cliente',
+                'Aprobaciones, auditoria, treasury y soporte premium',
+            ],
         },
     ];
 
@@ -406,7 +427,7 @@ function PublicPricingPage() {
                 <EnterpriseHero
                     eyebrow="Planes de produccion"
                     title="Planes KargaX"
-                    description={`Free, Pro y Scale entran por uso inmediato en COP. Enterprise entra por operacion multiempresa, treasury, governance y soporte operativo serio. Marketplace mantiene ${MARKETPLACE_COMMISSION_PERCENT}% solo en viajes externos.`}
+                    description={`Free, Growth y Scale entran por uso inmediato en COP. Enterprise entra por operacion multiempresa, treasury, governance y soporte operativo serio. Marketplace mantiene ${MARKETPLACE_COMMISSION_PERCENT}% solo en viajes externos.`}
                     icon={Crown}
                     actions={(
                         <div className="grid w-full gap-3 sm:flex sm:w-auto sm:flex-wrap">

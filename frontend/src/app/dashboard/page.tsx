@@ -53,7 +53,7 @@ import { useUserCountry } from '@/lib/platform/useUserCountry';
 import { getPrivateFleetDriverTripAction, getPrivateFleetTripStatusLabel } from '@/lib/private-fleet/driver-trip-actions';
 import { supabaseApi } from '@/lib/supabase/api-bridge';
 import warehouseClient from '@/lib/warehouses/client';
-import type { PrivateFleetDriverContext } from '@/lib/warehouses/types';
+import type { PrivateFleetDriverContext, WarehouseAccessResponse } from '@/lib/warehouses/types';
 import { getVehicleTypeName, VEHICLE_TYPES as COLOMBIA_VEHICLE_TYPES } from '@/constants/colombia';
 import { TruckerScoreBadge } from '@/components/trucker/TruckerScoreBadge';
 
@@ -511,9 +511,92 @@ function TruckerMetricStrip({
     );
 }
 
+function CommercialActivationCard({
+    activation,
+}: {
+    activation: WarehouseAccessResponse['commercialActivation'] | null | undefined;
+}) {
+    if (!activation) {
+        return null;
+    }
+
+    const completedSteps = activation.checklist.filter((item) => item.completed).length;
+    const statusCopy = {
+        setup: {
+            label: 'Configuracion',
+            title: 'Activa KargaX con operacion real',
+            description: 'La cuenta no se considera activada solo por registrarse. La meta es cerrar 3 entregas con evidencia.',
+        },
+        first_value: {
+            label: 'Primer valor',
+            title: 'Ya tienes evidencia real en KargaX',
+            description: 'El siguiente paso es usar una ruta completa y revisar el reporte de novedades.',
+        },
+        activated: {
+            label: 'Activada',
+            title: 'Empresa activada operativamente',
+            description: 'Ya cerraste 3 entregas con evidencia. Growth o Scale mantienen el flujo sin frenar despachos.',
+        },
+    }[activation.status];
+
+    return (
+        <Card className="border-zinc-200 p-5 sm:p-6">
+            <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0">
+                    <div className="mb-3 inline-flex w-fit items-center gap-2 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-600">
+                        <CheckCircle2 className="h-4 w-4" />
+                        {statusCopy.label}
+                    </div>
+                    <h2 className="text-xl font-semibold text-zinc-950">{statusCopy.title}</h2>
+                    <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-500">{statusCopy.description}</p>
+                </div>
+                <div className="w-full rounded-lg border border-zinc-200 bg-zinc-50 p-4 lg:w-64">
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">Entregas con evidencia</p>
+                    <p className="mt-2 font-money text-2xl font-semibold text-zinc-950">
+                        {activation.completedDeliveriesWithEvidence} / {activation.activationTarget}
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-zinc-500">
+                        {completedSteps} de {activation.checklist.length} pasos completados.
+                    </p>
+                </div>
+            </div>
+
+            <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                {activation.checklist.map((item) => (
+                    <Link key={item.key} href={item.href} className="min-w-0">
+                        <div className={cn(
+                            'flex h-full min-w-0 items-center gap-3 rounded-lg border p-3 transition hover:border-zinc-950',
+                            item.completed
+                                ? 'border-zinc-950 bg-zinc-950 text-white'
+                                : 'border-zinc-200 bg-zinc-50 text-zinc-950'
+                        )}>
+                            <CheckCircle2 className={cn('h-4 w-4 shrink-0', item.completed ? 'text-white' : 'text-zinc-400')} />
+                            <span className="min-w-0 flex-1 break-words text-sm font-semibold">{item.label}</span>
+                            <ArrowRight className={cn('h-4 w-4 shrink-0', item.completed ? 'text-white/70' : 'text-zinc-400')} />
+                        </div>
+                    </Link>
+                ))}
+            </div>
+
+            <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm leading-6 text-zinc-500">
+                    Activacion real: 3 entregas cerradas con evidencia, no solo una cuenta creada.
+                </p>
+                <Button asChild>
+                    <Link href={activation.nextActionHref}>
+                        {activation.nextActionLabel}
+                        <ArrowRight className="h-4 w-4" />
+                    </Link>
+                </Button>
+            </div>
+        </Card>
+    );
+}
+
 function BusinessDashboardHome() {
     const { user } = useAuthStore();
     const [isLoading, setIsLoading] = React.useState(true);
+    const [commercialActivation, setCommercialActivation] = React.useState<WarehouseAccessResponse['commercialActivation'] | null>(null);
     const [stats, setStats] = React.useState({
         totalOffers: 0,
         activeOffers: 0,
@@ -546,7 +629,9 @@ function BusinessDashboardHome() {
                 teamMembers: accessResult?.limits?.activeInternalUsers ?? 0,
                 planName: accessResult?.subscription?.plan?.name || accessResult?.subscription?.plan_code || 'Free',
             });
+            setCommercialActivation(accessResult?.commercialActivation ?? null);
         } catch (error) {
+            setCommercialActivation(null);
             toast.error('Dashboard', error instanceof Error ? error.message : 'No se pudieron cargar las metricas');
         } finally {
             setIsLoading(false);
@@ -607,6 +692,8 @@ function BusinessDashboardHome() {
                         </div>
                     </div>
                 </div>
+
+                <CommercialActivationCard activation={commercialActivation} />
 
                 {isLoading ? (
                     <div className="flex min-h-[240px] items-center justify-center">

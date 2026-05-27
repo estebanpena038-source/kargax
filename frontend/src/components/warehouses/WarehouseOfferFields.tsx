@@ -88,7 +88,7 @@ export function WarehouseOfferFields({ watch, setValue }: WarehouseOfferFieldsPr
                 ]}
             />
 
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4">
                 <Select
                     label="Bodega origen"
                     value={watch('originWarehouseId')}
@@ -107,7 +107,7 @@ export function WarehouseOfferFields({ watch, setValue }: WarehouseOfferFieldsPr
                 />
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4">
                 <Select
                     label="Bodega destino"
                     value={watch('destinationWarehouseId')}

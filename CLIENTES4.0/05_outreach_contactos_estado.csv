@@ -1,0 +1,46 @@
+ranking,empresa,web,email_publico,whatsapp_publico,linkedin_publico,email_estado,whatsapp_estado,linkedin_estado,notas
+6,Emergent Cold LatAm Colombia,https://www.emergentcoldlatam.com/,info@emergentcold.com,,https://www.linkedin.com/company/emergent-cold-latam,enviado_verificado_gmail,,pendiente_contacto,Email lead 6 enviado y verificado con toast de Gmail
+7,Incolbest,https://www.incolbest.com/,,573188072269,,sin_email_publico,enviado_verificado_whatsapp,sin_linkedin_publico,WhatsApp encontrado en web oficial
+8,Huevos Kikes,https://www.huevoskikes.com/,servicioalcliente@kikes.com.co,,,enviado_intentado_gmail,sin_whatsapp_publico,sin_linkedin_publico,
+9,Santa Reyes,https://santareyes.com.co/,info@santareyes.com.co,573223471017,,enviado_intentado_gmail,enviado_verificado_whatsapp,sin_linkedin_publico,WhatsApp encontrado en web oficial
+10,Alqueria,https://www.alqueria.com.co/,servicioalcliente@alqueria.com.co,573112361452,https://www.linkedin.com/company/alquer-a-colombia,enviado_intentado_gmail,enviado_verificado_whatsapp,pendiente_contacto,WhatsApp y LinkedIn encontrados
+11,Frubana Colombia,https://www.frubana.com/,soporte@frubana.com,573182312294,https://www.linkedin.com/company/frubana,enviado_verificado_gmail,no_mostro_boton_enviar,pendiente_contacto,Datos encontrados en terminos publicos y LinkedIn; WhatsApp no permitio envio
+12,Impocali,https://impocali.com/,servicliente@impocali.com,,,enviado_intentado_gmail,sin_whatsapp_publico,sin_linkedin_publico,
+13,Mundial de Tornillos,https://mundialdetornillos.com/,,573122778888,https://www.linkedin.com/company/mundial-de-tornillos,sin_email_publico,enviado_verificado_whatsapp,pendiente_contacto,WhatsApp y LinkedIn encontrados en web
+14,Imcolmedica,https://www.imcolmedica.com/,info@imcolmedica.com.co,,https://www.linkedin.com/company/imcolmedica-s-a-,enviado_verificado_gmail,sin_whatsapp_publico,pendiente_contacto,Contacto encontrado en web imcolmedica.co
+15,Japan Motos,https://japanmotos.com/,,,,sin_email_publico,sin_whatsapp_publico,sin_linkedin_publico,No se encontro contacto publico confiable en extraccion inicial
+16,Distrimotos,https://distrimotos.com.co/,,,,sin_email_publico,sin_whatsapp_publico,sin_linkedin_publico,No se encontro contacto publico confiable en extraccion inicial
+17,The Elite Flower,https://eliteflower.com/,sales@eliteflower.com,573057224700,,enviado_intentado_gmail,no_mostro_boton_enviar,sin_linkedin_publico,
+18,Envia / Colvanes,https://www.envia.co/,contactanos@envia.co,,,enviado_intentado_gmail,sin_whatsapp_publico,sin_linkedin_publico,
+19,Ditransa,https://ditransa.co/,Ditransa@ditransa.com.co,,https://www.linkedin.com/company/ditransa/,enviado_verificado_gmail,sin_whatsapp_publico,pendiente_contacto,WhatsApp encontrado era para Home D/conductores; se prioriza email general
+20,Transmultimac,https://www.transmultimac.com/,angiecastiblanco.tmm@flotalamacarena.com,573223471224,,enviado_intentado_gmail,enviado_verificado_whatsapp,sin_linkedin_publico,
+21,Logytech Mobile,https://www.logytechmobile.com/,contacto_comercial@logytechmobile.com,,https://co.linkedin.com/company/logytechcolombia,enviado_verificado_gmail,sin_whatsapp_publico,pendiente_contacto,Enviado por flujo normal de Gmail
+22,Muebles Jamar,https://www.jamar.com/,,573123683461,https://www.linkedin.com/company/mueblesjamar,sin_email_publico,enviado_verificado_whatsapp,pendiente_contacto,WhatsApp servicio al cliente encontrado en pagina asesores virtuales
+23,Flores El Capiro,https://elcapiro.co/,,,https://www.linkedin.com/company/flores-el-capiro,sin_email_publico,sin_whatsapp_publico,pendiente_contacto,LinkedIn corporativo encontrado
+24,Tugo,https://www.tugo.co/,servicioalcliente@tugo.com.co,573174267836,,enviado_verificado_gmail,enviado_verificado_whatsapp,sin_linkedin_publico,Enviado por flujo normal de Gmail
+25,Importadora JE / Repuestos JE,No encontrado publicamente,,,,sin_email_publico,sin_whatsapp_publico,sin_linkedin_publico,No hay web publica en CSV
+26,Sumatec,https://www.sumatec.co/,,,https://www.linkedin.com/company/sumatecoficial,sin_email_publico,sin_whatsapp_publico,pendiente_contacto,Email notificaciones descartado por baja calidad comercial
+27,Melexa,https://www.melexa.com/,,,,sin_email_publico,sin_whatsapp_publico,sin_linkedin_publico,No se encontro contacto publico confiable en extraccion inicial
+28,Hospitec,https://www.hospitec.co/,,,,sin_email_publico,sin_whatsapp_publico,sin_linkedin_publico,No se encontro contacto publico confiable en extraccion inicial
+29,Colanta,https://colanta.com/,serviciocliente@colanta.com.co,573009120125,https://www.linkedin.com/company/cooperativa-colanta,enviado_verificado_gmail,enviado_verificado_whatsapp,pendiente_contacto,WhatsApp y correo encontrados en contacto oficial Colanta
+30,Saferbo,https://www.saferbo.com/,,573009136222,https://www.linkedin.com/company/transportes-saferbo-s.a.,sin_email_publico,enviado_verificado_whatsapp,pendiente_contacto,Linea nacional encontrada en contacto Saferbo
+31,Sunshine Bouquet Colombia,https://www.sunshinebouquet.com/,info@sunshinebouquet.com,,,enviado_verificado_gmail,sin_whatsapp_publico,sin_linkedin_publico,
+32,Inter Rapidisimo,https://www.interrapidisimo.com/,,573112375735,,sin_email_publico,enviado_verificado_whatsapp,sin_linkedin_publico,WhatsApp encontrado en web oficial
+33,Suppla,https://www.suppla.com/,,,https://www.linkedin.com/company/suppla-s-a,sin_email_publico,sin_whatsapp_publico,pendiente_contacto,LinkedIn corporativo encontrado
+34,Open Market,https://www.openmarket.com.co/,principal@openmarket.com.co,,https://www.linkedin.com/company/open-market-ltda,enviado_verificado_gmail,sin_whatsapp_publico,pendiente_contacto,Email encontrado en fuente publica; no WhatsApp confiable
+35,TCC,https://tcc.com.co/,,,https://www.linkedin.com/company/tcc-s-a-/,sin_email_publico,sin_whatsapp_publico,pendiente_contacto,LinkedIn corporativo encontrado
+36,Coordinadora,https://www.coordinadora.com/,,573103157444,https://co.linkedin.com/company/coordinadora-mercantil,sin_email_publico,enviado_verificado_whatsapp,pendiente_contacto,WhatsApp y LinkedIn encontrados
+37,Haceb,https://www.haceb.com/,asesor.servicio@haceb.com,573164539797,,enviado_verificado_gmail,enviado_verificado_whatsapp,sin_linkedin_publico,
+38,Alexandra Farms,https://alexandrafarms.com/,info@alexandrafarms.com,,,enviado_verificado_gmail,sin_whatsapp_publico,sin_linkedin_publico,
+39,Auteco Mobility,https://www.auteco.com.co/,servicioalcliente@auteco.com.co,573186186650,,enviado_verificado_gmail,enviado_verificado_whatsapp,sin_linkedin_publico,WhatsApp oficial encontrado en contacto Auteco
+40,AKT Motos,https://www.aktmotos.com/,,,https://www.linkedin.com/company/motos-akt/,sin_email_publico,sin_whatsapp_publico,pendiente_contacto,Contacto web tiene canales pero no numero visible confiable; LinkedIn encontrado
+41,Didacol,https://www.didacol.com/,didacol@didacol.com,573009126630,https://www.linkedin.com/company/praco-didacol-s-a-,enviado_verificado_gmail,enviado_verificado_whatsapp,pendiente_contacto,WhatsApp y emails de marca encontrados en contacto Praco Didacol
+42,Autonal,https://www.autonal.com/,,573115113434,,sin_email_publico,enviado_verificado_whatsapp,sin_linkedin_publico,WhatsApp encontrado en web oficial
+43,Challenger,https://www.challenger.com.co/,,573222783347,https://www.linkedin.com/company/challenger-s-a-s/,sin_email_publico,enviado_verificado_whatsapp,pendiente_contacto,WhatsApp encontrado en web oficial; LinkedIn encontrado
+44,Almaviva,https://www.almaviva.com.co/,servicioalcliente@almaviva.com.co,,https://www.linkedin.com/company/almaviva-s-a,enviado_verificado_gmail,sin_whatsapp_publico,pendiente_contacto,
+45,Transborder,https://www.transborder.com.co/,mercadeo@transborder.com.co,,https://www.linkedin.com/company/transborder-s-a-s,enviado_verificado_gmail,sin_whatsapp_publico,pendiente_contacto,Email y LinkedIn encontrados en contacto oficial
+46,Blue Logistic,https://bluelogistics.com.co/,info@blulogistics.com,,https://www.linkedin.com/company/blue-logistics,enviado_verificado_gmail,sin_whatsapp_publico,pendiente_contacto,Email encontrado en fuentes publicas de Blu Logistics
+47,Sonepar Colombia,https://www.sonepar.com.co/,,,https://www.linkedin.com/company/soneparcolombia,sin_email_publico,sin_whatsapp_publico,pendiente_contacto,LinkedIn corporativo encontrado
+48,B. Braun Colombia,https://www.bbraun.co/,info.colombia@bbraun.com,,https://www.linkedin.com/company/6773,enviado_verificado_gmail,sin_whatsapp_publico,pendiente_contacto,Email Colombia encontrado en pagina oficial B. Braun
+49,Dismedex,https://www.dismedex.com.co/,info@dismedex.com.co,573019464296,,enviado_verificado_gmail,enviado_verificado_whatsapp,sin_linkedin_publico,
+50,Servientrega,https://www.servientrega.com/,,573153993910,https://www.linkedin.com/company/servientrega,sin_email_publico,enviado_verificado_whatsapp,pendiente_contacto,WhatsApp oficial Colombia encontrado; ya se habia enviado a otro WhatsApp publico antes de confirmar el oficial

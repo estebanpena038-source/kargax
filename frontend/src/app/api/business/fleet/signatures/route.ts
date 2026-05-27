@@ -1,9 +1,24 @@
 import { NextRequest } from 'next/server';
+import { randomUUID } from 'node:crypto';
 import { apiError, apiSuccess, getRequestId } from '@/lib/server/api-response';
 import { requireAuthenticatedRoute } from '@/lib/server/route-auth';
+import { assertWarehouseCapability, ensureWarehouseAccess } from '@/lib/server/warehouses';
 
 const BUCKET_NAME = 'trip-signatures';
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
+const SIGNATURE_STAGES = [
+    'origin_dispatch',
+    'delivery_pod',
+    'origin_warehouse_release',
+    'origin_driver_acceptance',
+    'destination_driver_handoff',
+    'destination_warehouse_receipt',
+];
+const DRIVER_SIGNATURE_STAGES = ['origin_dispatch', 'delivery_pod', 'origin_driver_acceptance', 'destination_driver_handoff'];
+const WAREHOUSE_SIGNATURE_STAGE_CAPABILITY: Record<string, 'manageDispatches' | 'manageReceipts'> = {
+    origin_warehouse_release: 'manageDispatches',
+    destination_warehouse_receipt: 'manageReceipts',
+};
 
 function resolveFileExtension(file: File) {
     const fromName = file.name.split('.').pop()?.trim().toLowerCase();
@@ -29,14 +44,6 @@ export async function POST(request: NextRequest) {
 
     const { supabaseAdmin, authUser, profile } = auth.context;
 
-    if (profile?.user_type !== 'trucker' && profile?.user_type !== 'admin') {
-        return apiError('Solo transportadores pueden subir firmas del viaje', {
-            requestId,
-            status: 403,
-            code: 'PRIVATE_FLEET_SIGNATURE_FORBIDDEN',
-        });
-    }
-
     const formData = await request.formData().catch(() => null);
     if (!formData) {
         return apiError('No se pudo leer el formulario de firma', {
@@ -61,7 +68,7 @@ export async function POST(request: NextRequest) {
         });
     }
 
-    if (!['origin_dispatch', 'delivery_pod'].includes(signatureStage)) {
+    if (!SIGNATURE_STAGES.includes(signatureStage)) {
         return apiError('signatureStage no valido', {
             requestId,
             status: 400,
@@ -87,7 +94,7 @@ export async function POST(request: NextRequest) {
 
     const { data: offer, error: offerError } = await supabaseAdmin
         .from('cargo_offers')
-        .select('id, business_id, assigned_trucker_id, is_private_fleet')
+        .select('id, business_id, assigned_trucker_id, is_private_fleet, origin_warehouse_id, destination_warehouse_id')
         .eq('id', offerId)
         .maybeSingle();
 
@@ -99,16 +106,61 @@ export async function POST(request: NextRequest) {
         });
     }
 
-    if (offer.assigned_trucker_id !== authUser.id) {
-        return apiError('No tienes permiso para subir esta firma', {
-            requestId,
-            status: 403,
-            code: 'PRIVATE_FLEET_SIGNATURE_SCOPE_DENIED',
-        });
+    if (DRIVER_SIGNATURE_STAGES.includes(signatureStage)) {
+        if (profile?.user_type !== 'trucker' && profile?.user_type !== 'admin') {
+            return apiError('Solo transportadores pueden subir esta firma del viaje', {
+                requestId,
+                status: 403,
+                code: 'PRIVATE_FLEET_SIGNATURE_FORBIDDEN',
+            });
+        }
+
+        if (profile?.user_type !== 'admin' && offer.assigned_trucker_id !== authUser.id) {
+            return apiError('No tienes permiso para subir esta firma', {
+                requestId,
+                status: 403,
+                code: 'PRIVATE_FLEET_SIGNATURE_SCOPE_DENIED',
+            });
+        }
+    } else {
+        const warehouseId = signatureStage === 'origin_warehouse_release'
+            ? offer.origin_warehouse_id
+            : offer.destination_warehouse_id;
+
+        if (!warehouseId) {
+            return apiError('Este viaje no tiene bodega asociada para esta firma', {
+                requestId,
+                status: 400,
+                code: 'WAREHOUSE_SIGNATURE_WAREHOUSE_REQUIRED',
+            });
+        }
+
+        const warehouseAccess = await ensureWarehouseAccess(supabaseAdmin, authUser.id, profile, warehouseId);
+        if (!warehouseAccess) {
+            return apiError('No tienes acceso a la bodega de esta firma', {
+                requestId,
+                status: 403,
+                code: 'WAREHOUSE_SIGNATURE_SCOPE_DENIED',
+            });
+        }
+
+        try {
+            assertWarehouseCapability(
+                warehouseAccess,
+                WAREHOUSE_SIGNATURE_STAGE_CAPABILITY[signatureStage],
+                'Este rol de bodega no puede capturar esta firma.'
+            );
+        } catch (error) {
+            return apiError(error instanceof Error ? error.message : 'No tienes permiso para esta firma', {
+                requestId,
+                status: 403,
+                code: 'WAREHOUSE_SIGNATURE_CAPABILITY_DENIED',
+            });
+        }
     }
 
     const extension = resolveFileExtension(file);
-    const storagePath = `${offerId}/${signatureStage}/${Date.now()}-${authUser.id}.${extension}`;
+    const storagePath = `${offerId}/${signatureStage}/${Date.now()}-${randomUUID()}-${authUser.id}.${extension}`;
     const fileBuffer = Buffer.from(await file.arrayBuffer());
 
     const { error: uploadError } = await supabaseAdmin.storage
@@ -144,6 +196,8 @@ export async function POST(request: NextRequest) {
             metadata: {
                 mime_type: file.type,
                 size: file.size,
+                actor_user_id: authUser.id,
+                actor_user_type: profile?.user_type || null,
             },
         })
         .select('id, created_at, public_url')
@@ -162,7 +216,7 @@ export async function POST(request: NextRequest) {
         await supabaseAdmin.rpc('create_notification', {
             p_user_id: offer.business_id,
             p_type: 'private_fleet_signature_captured',
-            p_title: signatureStage === 'origin_dispatch' ? 'Firma capturada en salida' : 'Firma capturada en entrega',
+            p_title: signatureStage.includes('origin') ? 'Firma capturada en salida' : 'Firma capturada en entrega',
             p_message: signerName
                 ? `${signerName} firmo la evidencia digital del viaje privado.`
                 : 'Se capturo una firma digital para el viaje privado.',

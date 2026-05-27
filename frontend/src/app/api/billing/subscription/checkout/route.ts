@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { preferenceApi } from '@/lib/mercadopago/config';
-import { requireAal2Route, resolveScopedBusinessId } from '@/lib/server/route-auth';
+import { requireAal2Route } from '@/lib/server/route-auth';
 import { getPaymentRuntimeConfig } from '@/lib/server/runtime-env';
 import { apiError, apiSuccess, getRequestId } from '@/lib/server/api-response';
 import {
@@ -8,8 +8,8 @@ import {
     getBusinessOperationsSetupMessage,
     getBusinessPlanSnapshot,
     isBillingPlanPaymentAttemptsTableMissing,
-    resolveBusinessAccessContext,
 } from '@/lib/server/warehouses';
+import { resolveBusinessRolePolicy } from '@/lib/server/role-policy';
 import {
     buildBillingPlanPaymentReference,
     buildPaymentIdempotencyKey,
@@ -72,9 +72,12 @@ export async function POST(request: NextRequest) {
     }
 
     const { supabaseAdmin, authUser, profile } = auth.context;
-    const access = await resolveBusinessAccessContext(supabaseAdmin, authUser.id, profile);
+    const body = (await request.json()) as { planCode?: string; businessId?: string };
+    const policy = await resolveBusinessRolePolicy(supabaseAdmin, authUser.id, profile, {
+        requestedBusinessId: body.businessId,
+    });
 
-    if (profile?.user_type !== 'admin' && (!access.businessId || !access.isOwner)) {
+    if (!policy.capabilities.canManageBilling) {
         return apiError('Only owners or admins can purchase plans', {
             status: 403,
             code: 'BILLING_OWNER_REQUIRED',
@@ -82,22 +85,15 @@ export async function POST(request: NextRequest) {
         });
     }
 
-    const body = (await request.json()) as { planCode?: string; businessId?: string };
-    const scopedBusiness = resolveScopedBusinessId({
-        requestedBusinessId: body.businessId,
-        resolvedBusinessId: access.businessId,
-        profile,
-    });
-
-    if ('error' in scopedBusiness) {
-        return apiError(scopedBusiness.error || 'Business scope error', {
-            status: scopedBusiness.status,
+    if (policy.scopeError) {
+        return apiError(policy.scopeError.error || 'Business scope error', {
+            status: policy.scopeError.status,
             code: 'BUSINESS_SCOPE_ERROR',
             requestId,
         });
     }
 
-    const businessId = scopedBusiness.businessId;
+    const businessId = policy.businessId;
     const planCode = body.planCode;
 
     if (!businessId || !planCode) {

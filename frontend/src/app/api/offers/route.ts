@@ -7,14 +7,31 @@ import {
     resolveBusinessAccessContext,
 } from '@/lib/server/warehouses';
 import { normalizePhoneForNotification } from '@/lib/phone/andean';
-import { normalizeVehicleTypeCode } from '@/constants/colombia';
-import { getBusinessRoleCapabilities } from '@/lib/business-roles';
+import { COLOMBIAN_DEPARTMENTS, getCitiesByDepartment, normalizeVehicleTypeCode } from '@/constants/colombia';
+import {
+    getBusinessPolicyCapabilities,
+    resolveEffectiveBusinessRole,
+} from '@/lib/server/role-policy';
 
 const COUNTRY_TO_CURRENCY: Record<string, string> = {
     CO: 'COP',
     EC: 'USD',
     PE: 'PEN',
     BR: 'BRL',
+};
+
+const COUNTRY_NAMES: Record<string, string> = {
+    CO: 'Colombia',
+    EC: 'Ecuador',
+    PE: 'Peru',
+    BR: 'Brasil',
+};
+
+type GeocodeResult = {
+    latitude: number;
+    longitude: number;
+    formattedAddress: string;
+    provider: 'google' | 'nominatim';
 };
 
 interface ManifestItemInput {
@@ -46,9 +63,16 @@ interface CreateOfferRequest {
     originDepartment: string;
     originCity: string;
     originAddress: string;
+    originLatitude?: number | null;
+    originLongitude?: number | null;
     destinationDepartment: string;
     destinationCity: string;
     destinationAddress: string;
+    destDepartment?: string;
+    destCity?: string;
+    destAddress?: string;
+    destinationLatitude?: number | null;
+    destinationLongitude?: number | null;
     pickupDate: string;
     pickupTimeStart: string;
     pickupTimeEnd: string;
@@ -184,6 +208,298 @@ function extractStoragePath(photoUrl: string): string | null {
     }
 }
 
+function hasValidCoordinates(latitude: unknown, longitude: unknown) {
+    if (latitude === null || latitude === undefined || longitude === null || longitude === undefined) {
+        return false;
+    }
+
+    if (String(latitude).trim() === '' || String(longitude).trim() === '') {
+        return false;
+    }
+
+    const lat = Number(latitude);
+    const lng = Number(longitude);
+
+    return Number.isFinite(lat)
+        && Number.isFinite(lng)
+        && !(lat === 0 && lng === 0)
+        && lat >= -90
+        && lat <= 90
+        && lng >= -180
+        && lng <= 180;
+}
+
+function normalizeLocationToken(value: string | null | undefined) {
+    return String(value || '').trim();
+}
+
+function matchesLocationLabel(left: string, right: string) {
+    return left.localeCompare(right, 'es', { sensitivity: 'base' }) === 0;
+}
+
+function resolveDepartmentCode(value: string | null | undefined) {
+    const token = normalizeLocationToken(value);
+    if (!token) return '';
+
+    return COLOMBIAN_DEPARTMENTS.find((department) => (
+        department.code.toUpperCase() === token.toUpperCase()
+        || matchesLocationLabel(department.name, token)
+    ))?.code || '';
+}
+
+function normalizeDepartmentName(value: string | null | undefined) {
+    const token = normalizeLocationToken(value);
+    if (!token) return '';
+
+    return COLOMBIAN_DEPARTMENTS.find((department) => (
+        department.code.toUpperCase() === token.toUpperCase()
+        || matchesLocationLabel(department.name, token)
+    ))?.name || token;
+}
+
+function normalizeCityName(cityValue: string | null | undefined, departmentValue: string | null | undefined) {
+    const token = normalizeLocationToken(cityValue);
+    if (!token) return '';
+
+    const departmentCode = resolveDepartmentCode(departmentValue);
+    const scopedCities = departmentCode ? getCitiesByDepartment(departmentCode) : [];
+    const city = scopedCities.find((candidate) => (
+        candidate.code.toUpperCase() === token.toUpperCase()
+        || matchesLocationLabel(candidate.name, token)
+    ));
+
+    return city?.name || token;
+}
+
+function removeDiacritics(value: string) {
+    return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+function normalizeForSearch(value: string | null | undefined) {
+    return removeDiacritics(String(value || ''))
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function cleanGeocodePart(value: string | null | undefined) {
+    return String(value || '')
+        .trim()
+        .replace(/#/g, ' ')
+        .replace(/\s*-\s*/g, ' ')
+        .replace(/[.,;]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function normalizeStreetAddressForGeocoding(value: string | null | undefined) {
+    return cleanGeocodePart(value)
+        .replace(/\b(carrera|carrea|cra|cra\.|kr|kr\.|cr|cr\.)\s*(\d)/gi, 'Carrera $2')
+        .replace(/\b(carrera|carrea|cra|cra\.|kr|kr\.|cr|cr\.)\b/gi, 'Carrera')
+        .replace(/\b(calle|cll|cl|cl\.)\s*(\d)/gi, 'Calle $2')
+        .replace(/\b(calle|cll|cl|cl\.)\b/gi, 'Calle')
+        .replace(/\b(avenida|av|av\.)\s*(\d)/gi, 'Avenida $2')
+        .replace(/\b(avenida|av|av\.)\b/gi, 'Avenida')
+        .replace(/\b(transversal|tv|tv\.)\s*(\d)/gi, 'Transversal $2')
+        .replace(/\b(transversal|tv|tv\.)\b/gi, 'Transversal')
+        .replace(/\b(diagonal|dg|dg\.)\s*(\d)/gi, 'Diagonal $2')
+        .replace(/\b(diagonal|dg|dg\.)\b/gi, 'Diagonal')
+        .replace(/\b(barrio|barrcio|br|br\.)\s+/gi, 'Barrio ')
+        .replace(/\b(no|nro|numero|num)\b/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function withoutNeighborhoodWord(value: string) {
+    return value.replace(/\b(barrio|barrcio|br|br\.)\s+/gi, '').replace(/\s+/g, ' ').trim();
+}
+
+function extractNeighborhood(value: string) {
+    return value.match(/\b(barrio|barrcio|br|br\.)\s+([^,]+)/i)?.[2]?.trim() || '';
+}
+
+function buildGeocodeQueries(input: {
+    address: string;
+    city: string;
+    department: string;
+    countryCode: CreateOfferRequest['countryCode'];
+}) {
+    const country = COUNTRY_NAMES[input.countryCode || 'CO'] || COUNTRY_NAMES.CO;
+    const address = normalizeStreetAddressForGeocoding(input.address);
+    const addressWithoutNeighborhood = withoutNeighborhoodWord(address);
+    const neighborhood = extractNeighborhood(address);
+    const city = cleanGeocodePart(input.city);
+    const department = cleanGeocodePart(input.department);
+    const queries = [
+        [addressWithoutNeighborhood, city, department, country],
+        [address, city, department, country],
+        [addressWithoutNeighborhood, neighborhood, city, department, country],
+        [addressWithoutNeighborhood.replace(/\b(apto|apartamento|interior|int|local)\b.*$/i, '').trim(), city, department, country],
+        [city, department, country],
+    ]
+        .map((parts) => parts.filter(Boolean).join(', '))
+        .filter((query, index, all) => query.length >= 8 && all.indexOf(query) === index);
+
+    return queries;
+}
+
+async function geocodeQuery(
+    query: string,
+    context?: {
+        city?: string;
+        department?: string;
+        countryCode?: CreateOfferRequest['countryCode'];
+    }
+): Promise<GeocodeResult | null> {
+    const googleKey = process.env.GOOGLE_MAPS_GEOCODING_API_KEY
+        || process.env.GOOGLE_MAPS_API_KEY
+        || process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+
+    if (googleKey) {
+        const googleUrl = new URL('https://maps.googleapis.com/maps/api/geocode/json');
+        googleUrl.searchParams.set('address', query);
+        googleUrl.searchParams.set('key', googleKey);
+
+        const googleResponse = await fetch(googleUrl, { cache: 'no-store' }).catch(() => null);
+        if (googleResponse?.ok) {
+            const json = await googleResponse.json().catch(() => null) as {
+                status?: string;
+                results?: Array<{
+                    formatted_address?: string;
+                    geometry?: { location?: { lat?: number; lng?: number } };
+                }>;
+            } | null;
+            const first = json?.results?.[0];
+            const latitude = Number(first?.geometry?.location?.lat);
+            const longitude = Number(first?.geometry?.location?.lng);
+
+            if (json?.status === 'OK' && hasValidCoordinates(latitude, longitude)) {
+                return {
+                    latitude,
+                    longitude,
+                    formattedAddress: first?.formatted_address || query,
+                    provider: 'google',
+                };
+            }
+        }
+    }
+
+    const nominatimUrl = new URL('https://nominatim.openstreetmap.org/search');
+    nominatimUrl.searchParams.set('q', query);
+    nominatimUrl.searchParams.set('format', 'jsonv2');
+    nominatimUrl.searchParams.set('limit', '5');
+
+    if (context?.countryCode) {
+        nominatimUrl.searchParams.set('countrycodes', context.countryCode.toLowerCase());
+    }
+
+    const nominatimResponse = await fetch(nominatimUrl, {
+        cache: 'no-store',
+        headers: { 'User-Agent': 'KargaX/1.0 route geocoding' },
+    }).catch(() => null);
+
+    if (!nominatimResponse?.ok) return null;
+
+    const rows = await nominatimResponse.json().catch(() => null) as Array<{
+        lat?: string;
+        lon?: string;
+        display_name?: string;
+    }> | null;
+    const normalizedCity = normalizeForSearch(context?.city);
+    const normalizedDepartment = normalizeForSearch(context?.department);
+    const candidates = (rows || [])
+        .map((row) => {
+            const display = normalizeForSearch(row.display_name);
+            const cityScore = normalizedCity && display.includes(normalizedCity) ? 4 : 0;
+            const departmentScore = normalizedDepartment && display.includes(normalizedDepartment) ? 2 : 0;
+            return {
+                row,
+                score: cityScore + departmentScore,
+            };
+        })
+        .sort((left, right) => right.score - left.score);
+    const first = candidates.find((candidate) => candidate.score > 0)?.row || candidates[0]?.row;
+    const latitude = Number(first?.lat);
+    const longitude = Number(first?.lon);
+
+    if (!hasValidCoordinates(latitude, longitude)) return null;
+
+    return {
+        latitude,
+        longitude,
+        formattedAddress: first?.display_name || query,
+        provider: 'nominatim',
+    };
+}
+
+async function geocodeLocation(input: {
+    address: string;
+    city: string;
+    department: string;
+    countryCode: CreateOfferRequest['countryCode'];
+}) {
+    for (const query of buildGeocodeQueries(input)) {
+        const result = await geocodeQuery(query, {
+            city: input.city,
+            department: input.department,
+            countryCode: input.countryCode,
+        });
+        if (result) return result;
+    }
+
+    return null;
+}
+
+async function resolveRouteCoordinates(
+    data: CreateOfferRequest,
+    fallbackCountryCode?: string | null
+): Promise<CreateOfferRequest> {
+    const countryCode = data.countryCode || (fallbackCountryCode as CreateOfferRequest['countryCode']) || 'CO';
+    const destinationDepartmentInput = data.destinationDepartment || data.destDepartment || '';
+    const destinationCityInput = data.destinationCity || data.destCity || '';
+    const destinationAddress = data.destinationAddress || data.destAddress || '';
+    const originDepartment = normalizeDepartmentName(data.originDepartment);
+    const originCity = normalizeCityName(data.originCity, data.originDepartment);
+    const destinationDepartment = normalizeDepartmentName(destinationDepartmentInput);
+    const destinationCity = normalizeCityName(destinationCityInput, destinationDepartmentInput);
+    const originCoordinates = hasValidCoordinates(data.originLatitude, data.originLongitude)
+        ? { latitude: Number(data.originLatitude), longitude: Number(data.originLongitude) }
+        : await geocodeLocation({
+            address: data.originAddress,
+            city: originCity,
+            department: originDepartment,
+            countryCode,
+        });
+    const destinationCoordinates = hasValidCoordinates(data.destinationLatitude, data.destinationLongitude)
+        ? { latitude: Number(data.destinationLatitude), longitude: Number(data.destinationLongitude) }
+        : await geocodeLocation({
+            address: destinationAddress,
+            city: destinationCity,
+            department: destinationDepartment,
+            countryCode,
+        });
+
+    if (data.publishImmediately !== false && !originCoordinates) {
+        throw new Error('No pudimos ubicar automaticamente la direccion de origen. Revisa direccion, ciudad y departamento.');
+    }
+
+    if (data.publishImmediately !== false && !destinationCoordinates) {
+        throw new Error('No pudimos ubicar automaticamente la direccion de destino. Revisa direccion, ciudad y departamento.');
+    }
+
+    return {
+        ...data,
+        destinationAddress,
+        destinationDepartment: destinationDepartmentInput,
+        destinationCity: destinationCityInput,
+        originLatitude: originCoordinates?.latitude ?? data.originLatitude ?? null,
+        originLongitude: originCoordinates?.longitude ?? data.originLongitude ?? null,
+        destinationLatitude: destinationCoordinates?.latitude ?? data.destinationLatitude ?? null,
+        destinationLongitude: destinationCoordinates?.longitude ?? data.destinationLongitude ?? null,
+    };
+}
+
 function toInsertPayload(data: CreateOfferRequest, businessId: string, fallbackCountryCode?: string | null) {
     const countryCode = data.countryCode || (fallbackCountryCode as CreateOfferRequest['countryCode']) || 'CO';
     const currencyCode = data.currencyCode || COUNTRY_TO_CURRENCY[countryCode] || 'COP';
@@ -204,6 +520,13 @@ function toInsertPayload(data: CreateOfferRequest, businessId: string, fallbackC
     const manifestTotals = getManifestTotals(manifestItems);
     const weightKg = manifestTotals.weightKg > 0 ? manifestTotals.weightKg : Math.max(1, Number(data.weightKg || 1));
     const quantity = manifestTotals.quantity > 0 ? manifestTotals.quantity : Math.max(1, Number(data.quantity || 1));
+    const destinationDepartmentInput = data.destinationDepartment || data.destDepartment || '';
+    const destinationCityInput = data.destinationCity || data.destCity || '';
+    const destinationAddress = data.destinationAddress || data.destAddress || '';
+    const originDepartment = normalizeDepartmentName(data.originDepartment);
+    const originCity = normalizeCityName(data.originCity, data.originDepartment);
+    const destinationDepartment = normalizeDepartmentName(destinationDepartmentInput);
+    const destinationCity = normalizeCityName(destinationCityInput, destinationDepartmentInput);
 
     return {
         business_id: businessId,
@@ -219,12 +542,16 @@ function toInsertPayload(data: CreateOfferRequest, businessId: string, fallbackC
         temperature_min: data.temperatureMin,
         temperature_max: data.temperatureMax,
         special_requirements: data.specialRequirements,
-        origin_department: data.originDepartment,
-        origin_city: data.originCity,
+        origin_department: originDepartment,
+        origin_city: originCity,
         origin_address: data.originAddress,
-        destination_department: data.destinationDepartment,
-        destination_city: data.destinationCity,
-        destination_address: data.destinationAddress,
+        origin_latitude: data.originLatitude ?? null,
+        origin_longitude: data.originLongitude ?? null,
+        destination_department: destinationDepartment,
+        destination_city: destinationCity,
+        destination_address: destinationAddress,
+        destination_latitude: data.destinationLatitude ?? null,
+        destination_longitude: data.destinationLongitude ?? null,
         pickup_date: data.pickupDate,
         pickup_time_start: data.pickupTimeStart,
         pickup_time_end: data.pickupTimeEnd,
@@ -266,7 +593,7 @@ function toInsertPayload(data: CreateOfferRequest, businessId: string, fallbackC
         compensation_mode: compensationMode,
         expenses_release_policy: isPrivateFleet ? (data.expensesReleasePolicy || 'acceptance') : null,
         private_payment_status: isPrivateFleet
-            ? (freightPaymentAmount > 0 ? 'held' : 'not_applicable')
+            ? (freightPaymentAmount > 0 || expenseAllowanceAmount > 0 ? 'external_proof_pending' : 'not_applicable')
             : null,
         private_fleet_notes: data.privateFleetNotes || null,
         net_amount: isPrivateFleet ? freightPaymentAmount : undefined,
@@ -283,19 +610,10 @@ export async function POST(request: NextRequest) {
 
     const { supabaseAdmin, authUser, profile } = auth.context;
     const businessAccess = await resolveBusinessAccessContext(supabaseAdmin, authUser.id, profile);
-    const effectiveRole = profile?.user_type === 'admin'
-        ? 'admin'
-        : businessAccess.isOwner
-            ? 'owner'
-            : businessAccess.teamMember?.role || 'viewer';
-    const roleCapabilities = getBusinessRoleCapabilities(effectiveRole);
-    const canCreateOffers = profile?.user_type === 'admin'
-        || businessAccess.isOwner
-        || roleCapabilities.canCreateMarketplaceOffers
-        || roleCapabilities.canManagePrivateFleet;
-    const canManagePrivateMoney = profile?.user_type === 'admin'
-        || businessAccess.isOwner
-        || businessAccess.teamMember?.role === 'finance_accountant';
+    const effectiveRole = resolveEffectiveBusinessRole(profile, businessAccess);
+    const roleCapabilities = getBusinessPolicyCapabilities(effectiveRole);
+    const canCreateOffers = roleCapabilities.canCreateAnyOffer;
+    const canManagePrivateMoney = roleCapabilities.canCreatePrivateOfferWithMoney;
 
     if (
         profile?.user_type !== 'business' &&
@@ -326,6 +644,7 @@ export async function POST(request: NextRequest) {
     const countryCode = body.countryCode || (profile as { country_code?: CreateOfferRequest['countryCode'] } | null)?.country_code || 'CO';
     const pickupContactPhone = normalizePhoneForNotification(body.pickupContactPhone, countryCode);
     const deliveryContactPhone = normalizePhoneForNotification(body.deliveryContactPhone, countryCode);
+    let offerBody: CreateOfferRequest;
     const requestedFreightAmount = allowsTripPay
         ? Number(body.freightPaymentAmount || body.totalAmount || 0)
         : Number(body.freightPaymentAmount || 0);
@@ -359,6 +678,10 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Solo gastos requiere un valor de gastos mayor a cero' }, { status: 400 });
     }
 
+    if (isPrivateFleet && compensationMode === 'trip_pay_plus_expenses' && requestedExpenseAmount <= 0) {
+        return NextResponse.json({ error: 'Ruta + viaticos requiere un valor de gastos mayor a cero' }, { status: 400 });
+    }
+
     if (isPrivateFleet && (requestedFreightAmount > 0 || requestedExpenseAmount > 0) && !canManagePrivateMoney) {
         return NextResponse.json({ error: 'Solo owner/admin/contabilidad puede definir montos de flota privada' }, { status: 403 });
     }
@@ -374,6 +697,24 @@ export async function POST(request: NextRequest) {
         )
     ) {
         return NextResponse.json({ error: 'Completa responsable y telefono validos de origen y entrega para enviar los PIN' }, { status: 400 });
+    }
+
+    try {
+        offerBody = await resolveRouteCoordinates(body, (profile as { country_code?: string } | null)?.country_code);
+    } catch (error) {
+        return NextResponse.json({
+            error: error instanceof Error ? error.message : 'No pudimos ubicar automaticamente la ruta.',
+        }, { status: 400 });
+    }
+
+    if (
+        offerBody.publishImmediately !== false
+        && (
+            !hasValidCoordinates(offerBody.originLatitude, offerBody.originLongitude)
+            || !hasValidCoordinates(offerBody.destinationLatitude, offerBody.destinationLongitude)
+        )
+    ) {
+        return NextResponse.json({ error: 'No pudimos calcular coordenadas validas para origen y destino. Revisa las direcciones.' }, { status: 400 });
     }
 
     try {
@@ -415,7 +756,7 @@ export async function POST(request: NextRequest) {
 
     }
 
-    const insertPayload = toInsertPayload(body, businessId, (profile as { country_code?: string } | null)?.country_code);
+    const insertPayload = toInsertPayload(offerBody, businessId, (profile as { country_code?: string } | null)?.country_code);
     let offerResult = await supabaseAdmin
         .from('cargo_offers')
         .insert(insertPayload)
@@ -474,9 +815,14 @@ export async function POST(request: NextRequest) {
                 trucker_id: body.privateFleetTruckerId,
                 allocation_type: 'freight_payment',
                 amount: freightPaymentAmount,
-                status: 'held_in_custody',
-                release_trigger: 'delivery_pod',
-                metadata: { source_kind: 'private_fleet_offer_assignment', compensation_mode: compensationMode },
+                status: 'external_proof_pending',
+                release_trigger: 'manual',
+                external_payment_status: 'pending_external_pay',
+                metadata: {
+                    source_kind: 'private_fleet_external_assignment',
+                    compensation_mode: compensationMode,
+                    wallet_touched: false,
+                },
             } : null,
             expenseAllowanceAmount > 0 ? {
                 offer_id: offer.id,
@@ -484,12 +830,14 @@ export async function POST(request: NextRequest) {
                 trucker_id: body.privateFleetTruckerId,
                 allocation_type: 'expense_advance',
                 amount: expenseAllowanceAmount,
-                status: 'held_in_custody',
-                release_trigger: body.expensesReleasePolicy || 'acceptance',
+                status: 'external_proof_pending',
+                release_trigger: 'manual',
+                external_payment_status: 'pending_external_pay',
                 metadata: {
-                    source_kind: 'private_fleet_offer_assignment',
+                    source_kind: 'private_fleet_external_expense_assignment',
                     product_label: 'company_trip_expense',
                     compensation_mode: compensationMode,
+                    wallet_touched: false,
                 },
             } : null,
         ].filter((row): row is NonNullable<typeof row> => Boolean(row));
@@ -509,7 +857,7 @@ export async function POST(request: NextRequest) {
             p_type: 'private_fleet_assignment',
             p_title: 'Nueva ruta directa asignada',
             p_message: expenseAllowanceAmount > 0
-                ? `Tu empresa te asigno una ruta privada. Confirma el viaje para liberar ${expenseAllowanceAmount.toFixed(0)} en gastos del viaje.`
+                ? `Tu empresa te asigno una ruta privada. Los gastos del viaje quedan como liquidacion externa con comprobante.`
                 : 'Tu empresa te asigno una ruta privada. Confirma el viaje para iniciar el flujo operativo.',
             p_data: {
                 offer_id: offer.id,

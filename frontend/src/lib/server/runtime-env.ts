@@ -26,6 +26,7 @@ interface PaymentRuntimeConfigOptions {
     requireInternalApiKey?: boolean;
     requireNotificationProvider?: boolean;
     requireTwilio?: boolean;
+    requirePayoutProvider?: boolean;
 }
 
 export function getPaymentRuntimeConfig(options: PaymentRuntimeConfigOptions = {}) {
@@ -76,6 +77,28 @@ export function getPaymentRuntimeConfig(options: PaymentRuntimeConfigOptions = {
 
             if (!process.env.TWILIO_PHONE_NUMBER) {
                 missingVariables.push('TWILIO_PHONE_NUMBER');
+            }
+        }
+
+        if (options.requirePayoutProvider || process.env.PAYOUTS_ENABLED === 'true') {
+            const payoutProvider = (process.env.PAYOUT_PROVIDER || 'manual').trim().toLowerCase();
+
+            if (!process.env.PAYOUT_PROVIDER) {
+                missingVariables.push('PAYOUT_PROVIDER');
+            }
+
+            if (!process.env.PAYOUT_WEBHOOK_SECRET) {
+                missingVariables.push('PAYOUT_WEBHOOK_SECRET');
+            }
+
+            if (payoutProvider === 'cobre' && process.env.PAYOUT_DRY_RUN === 'false') {
+                if (!process.env.COBRE_API_KEY) {
+                    missingVariables.push('COBRE_API_KEY');
+                }
+
+                if (!process.env.COBRE_SOURCE_ACCOUNT_ID) {
+                    missingVariables.push('COBRE_SOURCE_ACCOUNT_ID');
+                }
             }
         }
 

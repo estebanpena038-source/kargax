@@ -7,8 +7,13 @@ import { DashboardLayout } from '@/components/layouts/DashboardLayout';
 import { Button, Input, Select, toast } from '@/components/ui';
 import { SectionCard, WarehouseWorkspace } from '@/components/warehouses/WarehouseWorkspace';
 import {
-    WmsCompletionMark,
     WmsEmptyState,
+    WmsFleetCard,
+    WmsFleetDarkPanel,
+    WmsFleetIdentity,
+    WmsFleetInfoGrid,
+    WmsFleetInfoItem,
+    WmsFleetSection,
     WmsMetric,
     WmsMetricGrid,
     WmsPanelGrid,
@@ -25,7 +30,6 @@ import {
     getWarehouseActionLabel,
     mapWarehouseErrorMessage,
 } from '@/lib/warehouses/localization';
-import type { WarehouseReceiptLine } from '@/lib/warehouses/types';
 
 type ReceiptLineDraft = {
     skuCode: string;
@@ -57,6 +61,10 @@ const EMPTY_LINE: ReceiptLineDraft = {
 function toNumber(value: string) {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : NaN;
+}
+
+function normalizeSkuCode(value: string) {
+    return value.trim().toUpperCase();
 }
 
 function receiptTone(status: string) {
@@ -99,25 +107,49 @@ export default function WarehouseReceiptsPage() {
     const [lineDraft, setLineDraft] = React.useState<ReceiptLineDraft>(EMPTY_LINE);
     const [lines, setLines] = React.useState<ReceiptLinePayload[]>([]);
 
-    const addLine = () => {
+    const addLine = (existingSkuName?: string) => {
         const error = validateLine(lineDraft);
         if (error) {
             setFormError(error);
             return;
         }
 
+        const normalizedSku = normalizeSkuCode(lineDraft.skuCode);
+        const normalizedLocation = lineDraft.locationCode.trim().toUpperCase() || 'REC-01';
+        const nextLine = {
+            skuCode: normalizedSku,
+            skuName: existingSkuName || lineDraft.skuName.trim(),
+            locationCode: normalizedLocation,
+            expectedQty: toNumber(lineDraft.expectedQty || '0'),
+            receivedQty: toNumber(lineDraft.receivedQty),
+            damagedQty: toNumber(lineDraft.damagedQty || '0'),
+        };
+
         setFormError('');
-        setLines((current) => [
-            ...current,
-            {
-                skuCode: lineDraft.skuCode.trim().toUpperCase(),
-                skuName: lineDraft.skuName.trim(),
-                locationCode: lineDraft.locationCode.trim().toUpperCase() || undefined,
-                expectedQty: toNumber(lineDraft.expectedQty || '0'),
-                receivedQty: toNumber(lineDraft.receivedQty),
-                damagedQty: toNumber(lineDraft.damagedQty || '0'),
-            },
-        ]);
+        setLines((current) => {
+            const duplicateIndex = current.findIndex((line) => (
+                normalizeSkuCode(line.skuCode) === nextLine.skuCode &&
+                (line.locationCode || 'REC-01').trim().toUpperCase() === normalizedLocation
+            ));
+
+            if (duplicateIndex === -1) {
+                return [...current, nextLine];
+            }
+
+            return current.map((line, index) => {
+                if (index !== duplicateIndex) {
+                    return line;
+                }
+
+                return {
+                    ...line,
+                    skuName: nextLine.skuName,
+                    expectedQty: line.expectedQty + nextLine.expectedQty,
+                    receivedQty: line.receivedQty + nextLine.receivedQty,
+                    damagedQty: line.damagedQty + nextLine.damagedQty,
+                };
+            });
+        });
         setLineDraft(EMPTY_LINE);
     };
 
@@ -127,11 +159,35 @@ export default function WarehouseReceiptsPage() {
                 warehouseId={warehouseId}
                 section="receipts"
                 renderSection={({ receipts, stock, capabilities, reload }) => {
-                    const skuOptions = Array.from(new Map(
-                        stock
-                            .filter((balance) => balance.sku?.sku_code && balance.sku?.name)
-                            .map((balance) => [balance.sku!.sku_code, { value: balance.sku!.sku_code, label: `${balance.sku!.sku_code} - ${balance.sku!.name}`, description: balance.location?.code || 'Sin ubicacion' }])
-                    ).values());
+                    const skuOptions = Array.from(stock.reduce((map, balance) => {
+                        const skuCode = normalizeSkuCode(balance.sku?.sku_code || '');
+                        if (!skuCode || !balance.sku?.name) {
+                            return map;
+                        }
+
+                        const current = map.get(skuCode);
+                        const quantity = Number(balance.quantity_on_hand || 0);
+                        const locationCode = balance.location?.code || 'REC-01';
+                        map.set(skuCode, {
+                            value: skuCode,
+                            label: `${skuCode} - ${balance.sku.name}`,
+                            description: `${current ? current.totalOnHand + quantity : quantity} en stock`,
+                            skuCode,
+                            skuName: current?.skuName || balance.sku.name,
+                            totalOnHand: current ? current.totalOnHand + quantity : quantity,
+                            defaultLocationCode: current?.defaultLocationCode || locationCode,
+                        });
+                        return map;
+                    }, new Map<string, {
+                        value: string;
+                        label: string;
+                        description: string;
+                        skuCode: string;
+                        skuName: string;
+                        totalOnHand: number;
+                        defaultLocationCode: string;
+                    }>()).values());
+                    const selectedExistingSku = skuOptions.find((item) => item.value === normalizeSkuCode(lineDraft.skuCode));
                     const totalLines = receipts.reduce((sum, receipt) => sum + (receipt.lines?.length || 0), 0);
                     const receivedUnits = receipts.reduce((sum, receipt) => (
                         sum + (receipt.lines || []).reduce((lineSum, line) => lineSum + Number(line.received_qty || 0), 0)
@@ -142,7 +198,7 @@ export default function WarehouseReceiptsPage() {
                     const closedReceipts = receipts.filter((receipt) => receipt.status === 'closed').length;
 
                     return (
-                        <div className="space-y-6">
+                        <div className="space-y-4 sm:space-y-5">
                             <WmsMetricGrid>
                                 <WmsMetric label="Recepciones" value={receipts.length} detail="Documentos registrados" />
                                 <WmsMetric label="Lineas" value={totalLines} detail="Items recibidos" />
@@ -153,7 +209,7 @@ export default function WarehouseReceiptsPage() {
                             <WmsPanelGrid aside="wide">
                                 <SectionCard title="Crear recepcion" description="Cada linea conserva esperado, recibido y rechazado antes de tocar stock.">
                                     <div className="space-y-4">
-                                        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-1">
+                                        <div className="grid gap-3">
                                             <Input
                                                 label="Numero de recepcion"
                                                 value={form.receiptNumber}
@@ -175,7 +231,7 @@ export default function WarehouseReceiptsPage() {
                                             minHeight={84}
                                         />
 
-                                        <div className="min-w-0 rounded-lg border border-zinc-200 bg-zinc-50 p-4">
+                                        <div className="min-w-0 rounded-lg border border-zinc-200 bg-zinc-50 p-3.5">
                                             <div className="mb-4 flex items-center justify-between gap-3">
                                                 <div className="min-w-0">
                                                     <p className="text-sm font-semibold text-zinc-950">Linea de recepcion</p>
@@ -188,7 +244,16 @@ export default function WarehouseReceiptsPage() {
                                                     <Input
                                                         label="SKU"
                                                         value={lineDraft.skuCode}
-                                                        onChange={(event) => setLineDraft((current) => ({ ...current, skuCode: event.target.value.toUpperCase() }))}
+                                                        onChange={(event) => {
+                                                            const skuCode = normalizeSkuCode(event.target.value);
+                                                            const existing = skuOptions.find((item) => item.value === skuCode);
+                                                            setLineDraft((current) => ({
+                                                                ...current,
+                                                                skuCode,
+                                                                skuName: existing?.skuName || current.skuName,
+                                                                locationCode: current.locationCode || existing?.defaultLocationCode || '',
+                                                            }));
+                                                        }}
                                                         placeholder="ARR-001"
                                                     />
                                                     {skuOptions.length > 0 ? (
@@ -198,8 +263,13 @@ export default function WarehouseReceiptsPage() {
                                                                 value=""
                                                                 onChange={(value) => {
                                                                     const option = skuOptions.find((item) => item.value === value);
-                                                                    const [skuCode, ...nameParts] = option?.label.split(' - ') || [value];
-                                                                    setLineDraft((current) => ({ ...current, skuCode, skuName: nameParts.join(' - ') || current.skuName }));
+                                                                    if (!option) return;
+                                                                    setLineDraft((current) => ({
+                                                                        ...current,
+                                                                        skuCode: option.skuCode,
+                                                                        skuName: option.skuName,
+                                                                        locationCode: current.locationCode || option.defaultLocationCode,
+                                                                    }));
                                                                 }}
                                                                 options={skuOptions}
                                                                 searchable
@@ -207,23 +277,28 @@ export default function WarehouseReceiptsPage() {
                                                             />
                                                         </div>
                                                     ) : null}
+                                                    {selectedExistingSku ? (
+                                                        <p className="mt-2 rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-600">
+                                                            SKU existente: esta recepcion se sumara al producto actual. Stock actual: <span className="font-money text-zinc-950">{selectedExistingSku.totalOnHand}</span>.
+                                                        </p>
+                                                    ) : null}
                                                 </div>
                                                 <Input label="Nombre" value={lineDraft.skuName} onChange={(event) => setLineDraft((current) => ({ ...current, skuName: event.target.value }))} />
                                                 <Input label="Ubicacion" value={lineDraft.locationCode} onChange={(event) => setLineDraft((current) => ({ ...current, locationCode: event.target.value.toUpperCase() }))} placeholder="REC-01" />
-                                                <div className="grid gap-3 sm:grid-cols-3">
+                                                <div className="grid gap-3">
                                                     <Input label="Esperado" type="number" min={0} value={lineDraft.expectedQty} onChange={(event) => setLineDraft((current) => ({ ...current, expectedQty: event.target.value }))} />
                                                     <Input label="Recibido" type="number" min={0} value={lineDraft.receivedQty} onChange={(event) => setLineDraft((current) => ({ ...current, receivedQty: event.target.value }))} />
                                                     <Input label="Rechazado" type="number" min={0} value={lineDraft.damagedQty} onChange={(event) => setLineDraft((current) => ({ ...current, damagedQty: event.target.value }))} />
                                                 </div>
                                             </div>
                                             {formError ? <p className="mt-3 text-sm font-medium text-zinc-950">{formError}</p> : null}
-                                            <Button variant="outline" className="mt-4" leftIcon={<Plus className="h-4 w-4" />} onClick={addLine}>
+                                            <Button variant="outline" className="mt-4" leftIcon={<Plus className="h-4 w-4" />} onClick={() => addLine(selectedExistingSku?.skuName)}>
                                                 Agregar linea
                                             </Button>
                                         </div>
 
                                         {lines.length ? (
-                                            <div className="space-y-2">
+                                            <div className="grid min-w-0 gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,14rem),1fr))]">
                                                 {lines.map((line, index) => (
                                                     <div key={`${line.skuCode}-${index}`} className="rounded-lg border border-zinc-200 bg-white p-3">
                                                         <div className="flex min-w-0 items-start justify-between gap-3">
@@ -283,11 +358,14 @@ export default function WarehouseReceiptsPage() {
                                     </div>
                                 </SectionCard>
 
-                                <SectionCard title="Recepciones registradas" description="Lista ejecutiva con estado, lineas y siguiente accion.">
-                                    <div className="mb-5">
-                                        <WmsProgress label="Cierre de recepciones" value={closedReceipts} total={receipts.length} />
-                                    </div>
-                                    <div className="space-y-4">
+                                <WmsFleetSection
+                                    icon={ClipboardCheck}
+                                    title="Recepciones registradas"
+                                    description="Estado, unidades y lineas clave en una lectura lista para revisar."
+                                    action={<WmsProgress label="Cierre de recepciones" value={closedReceipts} total={receipts.length} />}
+                                >
+                                    {receipts.length ? (
+                                    <>
                                         {receipts.map((receipt) => {
                                             const linesReceived = (receipt.lines || []).reduce((sum, line) => sum + Number(line.received_qty || 0), 0);
                                             const linesDamaged = (receipt.lines || []).reduce((sum, line) => sum + Number(line.damaged_qty || 0), 0);
@@ -296,43 +374,40 @@ export default function WarehouseReceiptsPage() {
                                                     : [];
 
                                             return (
-                                                <div key={receipt.id} className="rounded-lg border border-zinc-200 bg-white p-4">
-                                                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                                                        <div>
-                                                            <div className="flex flex-wrap items-center gap-2">
-                                                                <WmsCompletionMark done={receipt.status === 'closed'} />
-                                                                <p className="font-semibold text-zinc-950">{receipt.receipt_number}</p>
-                                                                <WmsStatusBadge label={getReceiptStatusLabel(receipt.status)} tone={receiptTone(receipt.status)} />
-                                                            </div>
-                                                            <p className="mt-2 text-sm text-zinc-500">{formatWarehouseDateTime(receipt.received_at)}</p>
-                                                        </div>
-                                                        <p className="font-money text-sm text-zinc-500">{receipt.offer_id ? `Viaje ${receipt.offer_id.slice(0, 8)}` : 'Sin viaje vinculado'}</p>
-                                                    </div>
-
-                                                    <WmsMetricGrid dense className="mt-4">
-                                                        <WmsMetric label="Lineas" value={receipt.lines?.length || 0} />
-                                                        <WmsMetric label="Recibido" value={linesReceived} />
-                                                        <WmsMetric label="Rechazado" value={linesDamaged} />
-                                                    </WmsMetricGrid>
-
-                                                    {receipt.lines?.length ? (
-                                                        <div className="mt-4 overflow-hidden rounded-lg border border-zinc-200">
-                                                            {receipt.lines.map((line: WarehouseReceiptLine) => (
-                                                                <div key={line.id} className="grid min-w-0 gap-2 border-b border-zinc-100 px-3 py-3 last:border-b-0 min-[380px]:px-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
-                                                                    <div className="min-w-0">
-                                                                        <p className="font-medium text-zinc-950">{line.sku_code_snapshot} / {line.sku_name_snapshot}</p>
-                                                                        <p className="text-xs text-zinc-500">{line.location?.code || 'Sin ubicacion'} / esperado {line.expected_qty}</p>
+                                                <WmsFleetCard
+                                                    key={receipt.id}
+                                                    identity={(
+                                                        <WmsFleetIdentity
+                                                            title={receipt.receipt_number}
+                                                            subtitle={formatWarehouseDateTime(receipt.received_at)}
+                                                            status={<WmsStatusBadge label={getReceiptStatusLabel(receipt.status)} tone={receiptTone(receipt.status)} />}
+                                                            activity={receipt.offer_id ? `Viaje ${receipt.offer_id.slice(0, 8)}` : 'Sin viaje vinculado'}
+                                                        />
+                                                    )}
+                                                    info={(
+                                                        <WmsFleetInfoGrid>
+                                                            <WmsFleetInfoItem label="Lineas" value={receipt.lines?.length || 0} />
+                                                            <WmsFleetInfoItem label="Recibido" value={linesReceived} />
+                                                            <WmsFleetInfoItem label="Rechazado" value={linesDamaged} />
+                                                            <WmsFleetInfoItem
+                                                                label="Detalle"
+                                                                value={receipt.lines?.length ? (
+                                                                    <div className="space-y-2 text-sm font-normal">
+                                                                        {receipt.lines.slice(0, 3).map((line) => (
+                                                                            <p key={line.id} className="truncate text-zinc-700">
+                                                                                {line.sku_code_snapshot} / Rec {line.received_qty} / Rech {line.damaged_qty}
+                                                                            </p>
+                                                                        ))}
                                                                     </div>
-                                                                    <p className="font-money text-sm text-zinc-600">
-                                                                        Rec {line.received_qty} / Rech {line.damaged_qty}
-                                                                    </p>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    ) : null}
-
-                                                    {capabilities?.manageReceipts && nextStatuses.length ? (
-                                                        <WmsActionRow className="mt-4">
+                                                                ) : 'Sin lineas'}
+                                                                detail={receipt.lines && receipt.lines.length > 3 ? `+${receipt.lines.length - 3} lineas mas` : undefined}
+                                                                className="min-[520px]:col-span-2 xl:col-span-1 2xl:col-span-2"
+                                                            />
+                                                        </WmsFleetInfoGrid>
+                                                    )}
+                                                    darkPanel={<WmsFleetDarkPanel label="Estado" value={getReceiptStatusLabel(receipt.status)} detail={receipt.status === 'closed' ? 'Stock cerrado y trazable.' : 'Pendiente de cierre operativo.'} />}
+                                                    actions={capabilities?.manageReceipts && nextStatuses.length ? (
+                                                        <WmsActionRow>
                                                             {nextStatuses.map((nextStatus) => (
                                                                 <Button
                                                                     key={nextStatus}
@@ -357,17 +432,17 @@ export default function WarehouseReceiptsPage() {
                                                             ))}
                                                         </WmsActionRow>
                                                     ) : null}
-                                                </div>
+                                                />
                                             );
                                         })}
-                                        {receipts.length === 0 ? (
-                                            <WmsEmptyState
-                                                title="Aun no hay recepciones"
-                                                description="Cuando ingrese mercancia, las lineas recibidas y rechazadas apareceran aqui."
-                                            />
-                                        ) : null}
-                                    </div>
-                                </SectionCard>
+                                    </>
+                                    ) : (
+                                        <WmsEmptyState
+                                            title="Aun no hay recepciones"
+                                            description="Cuando ingrese mercancia, las lineas recibidas y rechazadas apareceran aqui."
+                                        />
+                                    )}
+                                </WmsFleetSection>
                             </WmsPanelGrid>
                         </div>
                     );

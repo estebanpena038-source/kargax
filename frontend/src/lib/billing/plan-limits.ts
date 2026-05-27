@@ -21,8 +21,8 @@ const FEATURE_LABELS: Record<string, string> = {
 
 const PLAN_LABELS: Record<string, string> = {
     free: 'Free',
-    growth: 'Pro',
-    pro: 'Pro',
+    growth: 'Growth',
+    pro: 'Growth',
     scale: 'Scale',
     enterprise: 'Enterprise',
 };
@@ -80,7 +80,7 @@ export function coercePlanLimitDetails(input: unknown): PlanLimitErrorDetails | 
 
 export function getPlanLabel(planCode: string | null | undefined) {
     if (!planCode) {
-        return 'Pro';
+        return 'Growth';
     }
 
     return PLAN_LABELS[planCode] || planCode.charAt(0).toUpperCase() + planCode.slice(1);
@@ -95,8 +95,8 @@ export function buildPlanLimitCopy(details: PlanLimitErrorDetails) {
     const planLabel = getPlanLabel(details.recommendedPlan);
 
     return {
-        title: 'Tu operacion ya llego al limite del plan',
-        description: `Tienes ${details.currentUsage} ${featureLabel} y el limite actual es ${details.limitValue}. Para seguir creciendo, activa ${planLabel}.`,
+        title: 'Tu operacion ya supero el limite del plan actual',
+        description: `Tus datos siguen seguros. Tienes ${details.currentUsage} ${featureLabel} y el limite actual es ${details.limitValue}. Para crear mas viajes, usuarios, bodegas o conductores, activa ${planLabel}.`,
         actionLabel: `Ver ${planLabel}`,
     };
 }

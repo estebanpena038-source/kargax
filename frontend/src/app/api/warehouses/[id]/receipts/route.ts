@@ -9,6 +9,14 @@ interface RouteContext {
 
 type ReceiptLineRow = Record<string, unknown> & { receipt_id: string };
 
+function normalizeSkuCode(value: string) {
+    return value.trim().toUpperCase();
+}
+
+function normalizeLocationCode(value?: string | null) {
+    return value?.trim().toUpperCase() || 'REC-01';
+}
+
 export async function GET(request: NextRequest, context: RouteContext) {
     const requestId = getRequestId(request);
     const auth = await requireAuthenticatedRoute(request);
@@ -128,6 +136,30 @@ export async function POST(request: NextRequest, context: RouteContext) {
         });
     }
 
+    const invalidLine = body.lines.find((line) => {
+        const receivedQty = Number(line.receivedQty || 0);
+        const damagedQty = Number(line.damagedQty || 0);
+        const expectedQty = Number(line.expectedQty || 0);
+
+        return !normalizeSkuCode(line.skuCode || '') ||
+            !line.skuName?.trim() ||
+            !Number.isFinite(receivedQty) ||
+            receivedQty <= 0 ||
+            !Number.isFinite(damagedQty) ||
+            damagedQty < 0 ||
+            damagedQty > receivedQty ||
+            !Number.isFinite(expectedQty) ||
+            expectedQty < 0;
+    });
+
+    if (invalidLine) {
+        return apiError('Each receipt line requires SKU, name, received quantity and valid rejected quantity', {
+            status: 400,
+            code: 'WAREHOUSE_RECEIPT_LINE_VALIDATION_ERROR',
+            requestId,
+        });
+    }
+
     try {
         const { data: receipt, error } = await supabaseAdmin
             .from('warehouse_receipts')
@@ -153,17 +185,48 @@ export async function POST(request: NextRequest, context: RouteContext) {
         }
 
         const createdLines: ReceiptLineRow[] = [];
+        const normalizedLines = Array.from(body.lines.reduce((map, line) => {
+            const skuCode = normalizeSkuCode(line.skuCode || '');
+            const locationCode = normalizeLocationCode(line.locationCode);
+            const key = `${skuCode}:${locationCode}`;
+            const current = map.get(key);
+            const nextLine = {
+                skuCode,
+                skuName: line.skuName.trim(),
+                locationCode,
+                expectedQty: Number(line.expectedQty || 0),
+                receivedQty: Number(line.receivedQty || 0),
+                damagedQty: Number(line.damagedQty || 0),
+            };
 
-        for (const line of body.lines) {
+            if (!current) {
+                map.set(key, nextLine);
+                return map;
+            }
+
+            current.expectedQty += nextLine.expectedQty;
+            current.receivedQty += nextLine.receivedQty;
+            current.damagedQty += nextLine.damagedQty;
+            return map;
+        }, new Map<string, {
+            skuCode: string;
+            skuName: string;
+            locationCode: string;
+            expectedQty: number;
+            receivedQty: number;
+            damagedQty: number;
+        }>()).values());
+
+        for (const line of normalizedLines) {
             const netQty = Math.max(Number(line.receivedQty || 0) - Number(line.damagedQty || 0), 0);
 
             const balance = await applyStockDelta(supabaseAdmin, {
                 warehouseId: id,
                 businessId: access.warehouse.business_id,
-                skuCode: line.skuCode.trim().toUpperCase(),
-                skuName: line.skuName.trim(),
+                skuCode: line.skuCode,
+                skuName: line.skuName,
                 quantityDelta: netQty,
-                locationCode: line.locationCode?.trim().toUpperCase() || 'REC-01',
+                locationCode: line.locationCode,
                 locationType: 'receiving',
                 movementType: 'receipt',
                 referenceType: 'receipt',
