@@ -318,7 +318,6 @@ export async function GET(request: NextRequest) {
     let tripsResponse = initialTripsResponse;
     let assignmentSchemaReady = true;
 
-    let tripsResponse = initialTripsResponse;
     if (tripsResponse.error && isPrivateFleetAssignmentSchemaMissing(tripsResponse.error)) {
         assignmentSchemaReady = false;
         tripsResponse = await supabaseAdmin
