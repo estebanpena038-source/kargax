@@ -494,12 +494,12 @@ export function DashboardLayout({
 
         if (entitlementState === 'pilot_active') {
             return typeof pilotDaysRemaining === 'number'
-                ? `Acceso Operativo - ${pilotDaysRemaining} dias`
+                ? `Acceso Operativo · ${pilotDaysRemaining} dias`
                 : 'Acceso Operativo';
         }
 
         if (entitlementState === 'pilot_expired' && !businessAccess?.subscription?.plan_code) {
-            return 'Free - Acceso Operativo finalizado';
+            return 'Free · Acceso Operativo finalizado';
         }
 
         return businessAccess?.subscription?.plan?.name
@@ -516,10 +516,10 @@ export function DashboardLayout({
     const handleLogout = React.useCallback(async () => {
         try {
             await signOut();
-            toast.success('Sesion cerrada', 'Has cerrado sesion correctamente');
+            toast.success('Sesión cerrada', 'Has cerrado sesión correctamente');
             router.push('/login');
         } catch {
-            toast.error('Error', 'No se pudo cerrar la sesion');
+            toast.error('Error', 'No se pudo cerrar la sesión');
         }
     }, [signOut, router]);
 
@@ -621,7 +621,7 @@ export function DashboardLayout({
                     <button
                         onClick={() => setIsMobileMenuOpen(true)}
                         className="flex h-10 w-10 items-center justify-center rounded-2xl border border-zinc-200 bg-white text-zinc-700 shadow-sm transition hover:-translate-y-0.5 hover:text-zinc-950"
-                        aria-label="Abrir menu"
+                        aria-label="Abrir menú"
                     >
                         <Menu className="h-5 w-5" />
                     </button>
@@ -651,12 +651,12 @@ export function DashboardLayout({
                             exit="closed"
                             variants={mobileMenuVariants}
                             transition={{ type: 'spring', damping: 26, stiffness: 220 }}
-                            className="fixed left-0 top-0 z-50 flex h-full w-[min(20rem,calc(100vw-1.25rem))] flex-col overflow-hidden rounded-r-[2rem] border-r border-white/70 bg-white shadow-[32px_0_100px_-62px_rgba(0,0,0,.95)]"
+                            className="fixed left-0 top-0 z-50 flex h-full w-[min(22rem,calc(100vw-1rem))] flex-col overflow-hidden rounded-r-[2rem] border-r border-white/70 bg-white shadow-[32px_0_100px_-62px_rgba(0,0,0,.95)]"
                         >
                             <button
                                 onClick={handleMobileMenuClose}
                                 className="absolute right-4 top-4 z-30 flex h-9 w-9 items-center justify-center rounded-2xl border border-zinc-200 bg-white/90 text-zinc-500 shadow-sm transition hover:text-zinc-950"
-                                aria-label="Cerrar menu"
+                                aria-label="Cerrar menú"
                             >
                                 <X className="h-4 w-4" />
                             </button>
@@ -699,7 +699,7 @@ export function DashboardLayout({
                         <div className="mx-auto flex min-h-[4.5rem] max-w-7xl flex-col gap-3 px-3 py-3 min-[380px]:px-4 sm:px-6 md:flex-row md:items-center md:justify-between lg:px-8">
                             <div className="min-w-0">
                                 <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-zinc-400">KargaX Command</p>
-                                <h1 className="mt-1 min-w-0 text-xl font-semibold leading-tight text-zinc-950 sm:text-2xl">
+                                <h1 className="mt-1 min-w-0 text-xl font-semibold leading-tight tracking-[-0.02em] text-zinc-950 sm:text-2xl">
                                     {pageTitle || 'Centro operativo'}
                                 </h1>
                             </div>
@@ -715,7 +715,7 @@ export function DashboardLayout({
                                             options={(businessAccess?.warehouses || []).map((warehouse) => ({
                                                 value: warehouse.id,
                                                 label: warehouse.name,
-                                                description: `${warehouse.code} - ${warehouse.city}, ${warehouse.department}`,
+                                                description: `${warehouse.code} · ${warehouse.city}, ${warehouse.department}`,
                                             }))}
                                             placeholder="Bodega activa"
                                             isLoading={businessAccessLoading}

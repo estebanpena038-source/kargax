@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "check": "npm run typecheck && npm run build",
     "check:release": "node ./scripts/release-check.mjs",
+    "test:algorithms": "node ./scripts/run-algorithms-p0-tests.mjs",
     "visual:qa": "node ./scripts/visual-qa-release-gate.mjs",
     "visual:qa:browser": "node ./scripts/visual-qa-release-gate.mjs --require-browser",
     "smoke:release": "node ./scripts/smoke-suite.mjs",

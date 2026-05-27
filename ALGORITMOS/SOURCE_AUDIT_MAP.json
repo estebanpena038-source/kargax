@@ -1,0 +1,53 @@
+{
+  "root": [
+    "README.md",
+    "package.json",
+    "scripts/repo-audit.mjs"
+  ],
+  "frontend": [
+    "frontend/package.json",
+    "frontend/src/app/page.tsx",
+    "frontend/src/app/planes/page.tsx",
+    "frontend/src/app/api/offers/route.ts",
+    "frontend/src/lib/business-roles.ts",
+    "frontend/src/lib/billing/pricing.ts",
+    "frontend/src/lib/billing/plan-limits.ts",
+    "frontend/src/lib/server/warehouses.ts",
+    "frontend/src/lib/server/trip-tracking.ts",
+    "frontend/src/lib/warehouses/types.ts"
+  ],
+  "db": [
+    "supabase/migrations/023_warehouse_management_and_saas.sql",
+    "supabase/migrations/035_private_fleet_b2b.sql",
+    "supabase/migrations/042_payout_methods_and_attempts.sql (mencionada por SPTRINTS/20)",
+    "supabase/migrations/043_private_fleet_dispatch_control_tower.sql (mencionada por SPTRINTS/22)",
+    "supabase/migrations/044_retention_infra_pricing.sql (mencionada por SPTRINTS/25)",
+    "supabase/migrations/045_live_trip_tracking_pwa.sql (mencionada por SPTRINTS/30)",
+    "supabase/migrations/046_business_role_presets.sql (mencionada por SPTRINTS/32)"
+  ],
+  "docs": [
+    "COMMERCIAL/README.md",
+    "COMMERCIAL/01_ANALISIS_KARGAX.md",
+    "COMMERCIAL/02_PRICING_RETENCION_Y_DEPENDENCIA_POR_VALOR.md",
+    "COMMERCIAL/03_ECOSISTEMA_TRANSPORTE_LOGISTICA.md",
+    "COMMERCIAL/04_IMPLEMENTACION_DEV.md",
+    "SPTRINTS/README.md",
+    "SPTRINTS/07_MARKETPLACE_TRIP_EXECUTION.md",
+    "SPTRINTS/08_WAREHOUSE_OS.md",
+    "SPTRINTS/09_WALLET_SETTLEMENTS.md",
+    "SPTRINTS/16_PRIVATE_FLEET_B2B.md",
+    "SPTRINTS/20_WALLET_SETTLEMENTS_AND_AUTOMATIC_PAYOUTS.md",
+    "SPTRINTS/22_PRIVATE_FLEET_FINANCE_AND_ROLES.md",
+    "SPTRINTS/23_WMS_DISPATCH_TO_TRIP_AUTOMATION.md",
+    "SPTRINTS/24_CEO_KARGAX_CONTROL_TOWER.md",
+    "SPTRINTS/25_RETENTION_REPUTATION_NOTIFICATIONS.md",
+    "SPTRINTS/30_LIVE_TRIP_TRACKING_PWA.md",
+    "SPTRINTS/32_BUSINESS_ROLES_AND_INTELLIGENCE_DASHBOARD.md",
+    "KARGAX_AI_OPERATING_SYSTEM/docs/ai/KARGAX_ARCHITECTURE_MAP.md",
+    "KARGAX_AI_OPERATING_SYSTEM/frontend/AGENTS.md",
+    "KARGAX_AI_OPERATING_SYSTEM/supabase/AGENTS.md",
+    "WALLET/01_CONTEXTO_Y_DECISIONES.md",
+    "WALLET/03_MARKETPLACE_AUTOPAYOUT.md",
+    "WALLET/04_FLOTA_PRIVADA_COMPROBANTES.md"
+  ]
+}

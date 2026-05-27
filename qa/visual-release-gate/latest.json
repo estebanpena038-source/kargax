@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-26T20:32:41.797Z",
+  "generated_at": "2026-05-27T12:12:53.672Z",
   "status": "pass",
   "mode": {
     "static_only": true,
@@ -146,8 +146,8 @@
     {
       "key": "source:legacy-color-utilities-neutralized-by-css",
       "evidence": {
-        "files": 27,
-        "hits": 600,
+        "files": 33,
+        "hits": 640,
         "samples": [
           {
             "file": "frontend/src/app/bodegas/[id]/despachos/page.tsx",
@@ -250,6 +250,15 @@
             ]
           },
           {
+            "file": "frontend/src/app/pod-marketplace/[offerId]/components.tsx",
+            "count": 4,
+            "samples": [
+              "border-red-",
+              "bg-red-",
+              "text-red-"
+            ]
+          },
+          {
             "file": "frontend/src/components/admin/AdvancesPanel.tsx",
             "count": 49,
             "samples": [
@@ -261,6 +270,55 @@
               "text-blue-",
               "border-green-",
               "bg-green-"
+            ]
+          },
+          {
+            "file": "frontend/src/components/algorithms/DeliveryRiskBadge.tsx",
+            "count": 12,
+            "samples": [
+              "border-emerald-",
+              "bg-emerald-",
+              "text-emerald-",
+              "border-amber-",
+              "bg-amber-",
+              "text-amber-",
+              "border-orange-",
+              "bg-orange-"
+            ]
+          },
+          {
+            "file": "frontend/src/components/algorithms/EvidenceQualityBadge.tsx",
+            "count": 12,
+            "samples": [
+              "border-emerald-",
+              "bg-emerald-",
+              "text-emerald-",
+              "border-amber-",
+              "bg-amber-",
+              "text-amber-",
+              "border-orange-",
+              "bg-orange-"
+            ]
+          },
+          {
+            "file": "frontend/src/components/algorithms/ExecutiveAlertsPanel.tsx",
+            "count": 5,
+            "samples": [
+              "border-emerald-",
+              "bg-emerald-",
+              "text-emerald-"
+            ]
+          },
+          {
+            "file": "frontend/src/components/algorithms/NextBestActionPanel.tsx",
+            "count": 6,
+            "samples": [
+              "border-red-",
+              "bg-red-",
+              "text-red-",
+              "border-amber-",
+              "bg-amber-",
+              "text-amber-"
             ]
           },
           {
@@ -287,6 +345,13 @@
             ]
           },
           {
+            "file": "frontend/src/components/last-mile/LastMileDashboard.tsx",
+            "count": 1,
+            "samples": [
+              "text-red-"
+            ]
+          },
+          {
             "file": "frontend/src/components/notifications/NotificationBell.tsx",
             "count": 4,
             "samples": [
@@ -303,65 +368,6 @@
               "border-red-",
               "bg-red-",
               "text-red-"
-            ]
-          },
-          {
-            "file": "frontend/src/components/tracking/LiveTripTracker.tsx",
-            "count": 1,
-            "samples": [
-              "text-amber-"
-            ]
-          },
-          {
-            "file": "frontend/src/components/trucker/TruckerScoreBadge.tsx",
-            "count": 13,
-            "samples": [
-              "text-orange-",
-              "bg-orange-",
-              "text-amber-",
-              "bg-amber-",
-              "text-blue-",
-              "bg-blue-",
-              "bg-emerald-",
-              "text-emerald-"
-            ]
-          },
-          {
-            "file": "frontend/src/components/ui/AndeanPhoneInput.tsx",
-            "count": 12,
-            "samples": [
-              "border-green-",
-              "ring-green-",
-              "text-red-",
-              "border-red-",
-              "ring-red-"
-            ]
-          },
-          {
-            "file": "frontend/src/components/ui/Avatar.tsx",
-            "count": 5,
-            "samples": [
-              "bg-emerald-",
-              "bg-green-",
-              "bg-red-",
-              "from-green-",
-              "to-emerald-"
-            ]
-          },
-          {
-            "file": "frontend/src/components/ui/Button.tsx",
-            "count": 4,
-            "samples": [
-              "bg-red-",
-              "border-red-"
-            ]
-          },
-          {
-            "file": "frontend/src/components/ui/CommandPalette.tsx",
-            "count": 2,
-            "samples": [
-              "bg-green-",
-              "text-green-"
             ]
           }
         ]

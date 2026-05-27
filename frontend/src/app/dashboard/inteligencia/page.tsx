@@ -17,9 +17,11 @@ import {
 import { DashboardLayout } from '@/components/layouts/DashboardLayout';
 import { Button, Card, toast } from '@/components/ui';
 import { EnterpriseHero, EnterpriseMetric, SectionHeader, StatusPill } from '@/components/enterprise/EnterpriseLuxury';
+import { DeliveryRiskBadge, EvidenceQualityBadge, ExecutiveAlertsPanel, NextBestActionPanel } from '@/components/algorithms';
 import { useAuthStore } from '@/features/auth/store/authStore';
 import warehouseClient from '@/lib/warehouses/client';
 import type { WarehouseAccessResponse } from '@/lib/warehouses/types';
+import type { AlgorithmRiskLevel, EvidenceQualityStatus, ExecutiveAlert, NextBestAction, OperationRail } from '@/algorithms/shared/types';
 import {
     getBusinessRoleCapabilities,
     getBusinessRoleLabel,
@@ -70,6 +72,44 @@ interface ReportPayload {
     private_finance: Array<Record<string, unknown>>;
     private_payroll?: Array<Record<string, unknown>>;
     payouts: Array<Record<string, unknown>>;
+}
+
+interface AlgorithmOfferRecord {
+    offerId: string;
+    businessId: string;
+    status: string | null;
+    rail: OperationRail;
+    cargoType: string | null;
+    originLabel: string;
+    destinationLabel: string;
+    updatedAt: string | null;
+    risk: {
+        score: number;
+        riskLevel: AlgorithmRiskLevel;
+        reasons: Array<{ code: string; label: string }>;
+    };
+    evidence: {
+        score: number;
+        status: EvidenceQualityStatus;
+        missingRequirements: Array<{ code: string; label: string }>;
+        warnings: Array<{ code: string; label: string }>;
+    };
+}
+
+interface AlgorithmsOverviewPayload {
+    generatedAt: string;
+    summary: {
+        evaluatedOffers: number;
+        criticalRisks: number;
+        highRisks: number;
+        incompleteEvidence: number;
+        nextActions: number;
+        executiveAlerts: number;
+    };
+    deliveryRisks: AlgorithmOfferRecord[];
+    nextBestActions: NextBestAction[];
+    executiveAlerts: ExecutiveAlert[];
+    snapshotPersistence: 'stored' | 'skipped';
 }
 
 const money = new Intl.NumberFormat('es-CO', {
@@ -258,6 +298,7 @@ export default function InteligenciaDashboardPage() {
     const { user } = useAuthStore();
     const [month, setMonth] = React.useState(currentMonth());
     const [report, setReport] = React.useState<ReportPayload | null>(null);
+    const [algorithms, setAlgorithms] = React.useState<AlgorithmsOverviewPayload | null>(null);
     const [access, setAccess] = React.useState<WarehouseAccessResponse | null>(null);
     const [activeTab, setActiveTab] = React.useState<BusinessIntelligenceTab>('overview');
     const [loading, setLoading] = React.useState(true);
@@ -273,9 +314,23 @@ export default function InteligenciaDashboardPage() {
             if (!response.ok) {
                 throw new Error(payload?.error || 'No se pudo cargar el reporte mensual');
             }
+            let algorithmsData: AlgorithmsOverviewPayload | null = null;
+            const algorithmParams = new URLSearchParams({ month });
+            if (accessPayload?.businessId) {
+                algorithmParams.set('businessId', accessPayload.businessId);
+            }
+            try {
+                const algorithmsResponse = await fetch(`/api/algorithms/lastmile/overview?${algorithmParams.toString()}`);
+                const algorithmsPayload = await algorithmsResponse.json().catch(() => ({}));
+                algorithmsData = algorithmsResponse.ok ? algorithmsPayload.data as AlgorithmsOverviewPayload : null;
+            } catch {
+                algorithmsData = null;
+            }
             setAccess(accessPayload);
             setReport(payload.data as ReportPayload);
+            setAlgorithms(algorithmsData);
         } catch (error) {
+            setAlgorithms(null);
             toast.error('Inteligencia', error instanceof Error ? error.message : 'Reporte no disponible');
         } finally {
             setLoading(false);
@@ -288,7 +343,9 @@ export default function InteligenciaDashboardPage() {
 
     const role = access?.role || 'viewer';
     const roleCapabilities = React.useMemo(() => getBusinessRoleCapabilities(role), [role]);
-    const availableTabs: BusinessIntelligenceTab[] = roleCapabilities.intelligenceTabs.length ? roleCapabilities.intelligenceTabs : ['overview'];
+    const availableTabs = React.useMemo<BusinessIntelligenceTab[]>(() => (
+        roleCapabilities.intelligenceTabs.length ? roleCapabilities.intelligenceTabs : ['overview']
+    ), [roleCapabilities]);
     const roleLabel = role === 'admin' || user?.userType === 'admin' ? 'Admin KargaX' : getBusinessRoleLabel(role);
     const questions = React.useMemo(() => roleQuestions(role), [role]);
     const canExportPdf = Boolean(access?.canExportFinance || roleCapabilities.canExportFinance || user?.userType === 'admin');
@@ -304,6 +361,15 @@ export default function InteligenciaDashboardPage() {
     const routes = React.useMemo(() => groupTopRoutes(analyticsTrips), [analyticsTrips]);
     const trend = React.useMemo(() => weeklyTrend(analyticsTrips), [analyticsTrips]);
     const truckers = React.useMemo(() => topTruckers(analyticsTrips), [analyticsTrips]);
+    const algorithmTrips = React.useMemo(() => {
+        const records = algorithms?.deliveryRisks || [];
+        if (activeTab === 'marketplace') return records.filter((record) => record.rail === 'marketplace');
+        if (activeTab === 'private_fleet' || activeTab === 'warehouse') return records.filter((record) => record.rail === 'private_fleet');
+        return records;
+    }, [activeTab, algorithms?.deliveryRisks]);
+    const topAlgorithmTrips = React.useMemo(() => (
+        [...algorithmTrips].sort((left, right) => right.risk.score - left.risk.score).slice(0, 6)
+    ), [algorithmTrips]);
 
     React.useEffect(() => {
         if (!availableTabs.includes(activeTab)) {
@@ -374,6 +440,71 @@ export default function InteligenciaDashboardPage() {
                             ))}
                         </div>
                     </section>
+
+                    {algorithms ? (
+                        <>
+                            <div className="grid gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(20rem,0.95fr)]">
+                                <ExecutiveAlertsPanel
+                                    alerts={algorithms.executiveAlerts}
+                                    generatedAt={algorithms.generatedAt}
+                                    snapshotPersistence={algorithms.snapshotPersistence}
+                                />
+                                <NextBestActionPanel actions={algorithms.nextBestActions} />
+                            </div>
+
+                            <Card className="kx-enterprise-card p-4 min-[380px]:p-5">
+                                <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                    <SectionHeader
+                                        icon={Shield}
+                                        title="Control P0 de entrega y POD"
+                                        description="Riesgo, proxima accion y calidad de evidencia calculados bajo permisos de empresa."
+                                    />
+                                    <div className="flex flex-wrap gap-2">
+                                        <StatusPill>{algorithms.summary.evaluatedOffers} viajes evaluados</StatusPill>
+                                        <StatusPill>{algorithms.summary.incompleteEvidence} POD por revisar</StatusPill>
+                                    </div>
+                                </div>
+
+                                {topAlgorithmTrips.length === 0 ? (
+                                    <p className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-500">
+                                        Sin viajes evaluables para esta vista.
+                                    </p>
+                                ) : (
+                                    <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                                        {topAlgorithmTrips.map((record) => (
+                                            <div key={record.offerId} className="rounded-lg border border-zinc-200 bg-white p-4">
+                                                <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                                    <div className="min-w-0">
+                                                        <p className="truncate text-sm font-bold text-zinc-950">
+                                                            {record.originLabel} &gt; {record.destinationLabel}
+                                                        </p>
+                                                        <p className="mt-1 text-xs text-zinc-500">
+                                                            {record.cargoType || 'Carga'} - {record.rail === 'private_fleet' ? 'Flota privada' : 'Marketplace'} - {record.status || 'sin estado'}
+                                                        </p>
+                                                    </div>
+                                                    <div className="flex shrink-0 flex-wrap gap-2">
+                                                        <DeliveryRiskBadge riskLevel={record.risk.riskLevel} />
+                                                        <EvidenceQualityBadge status={record.evidence.status} />
+                                                    </div>
+                                                </div>
+                                                <div className="mt-3 grid gap-2 text-sm text-zinc-600">
+                                                    {(record.risk.reasons[0] || record.evidence.missingRequirements[0] || record.evidence.warnings[0]) ? (
+                                                        <p className="leading-6">
+                                                            {record.risk.reasons[0]?.label
+                                                                || record.evidence.missingRequirements[0]?.label
+                                                                || record.evidence.warnings[0]?.label}
+                                                        </p>
+                                                    ) : (
+                                                        <p className="leading-6">Entrega sin bloqueos P0 detectados.</p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </Card>
+                        </>
+                    ) : null}
 
                     <div className="grid kx-enterprise-grid gap-4">
                         <EnterpriseMetric label="Fletes pagados" value={formatMoney(report.summary.gross_amount_cop)} detail="Marketplace + flota privada" icon={Wallet} />
