@@ -185,7 +185,7 @@ export async function GET(request: NextRequest) {
     monthStart.setDate(1);
     monthStart.setHours(0, 0, 0, 0);
 
-    let [businessProfileResponse, businessUserResponse, tripsResponse, payrollItemsResponse] = await Promise.all([
+    const [businessProfileResponse, businessUserResponse, initialTripsResponse, payrollItemsResponse] = await Promise.all([
         supabaseAdmin
             .from('business_profiles')
             .select('company_name')
@@ -242,6 +242,7 @@ export async function GET(request: NextRequest) {
             .gte('created_at', monthStart.toISOString()),
     ]) as any;
 
+    let tripsResponse = initialTripsResponse;
     let assignmentSchemaReady = true;
 
     if (tripsResponse.error && isPrivateFleetAssignmentSchemaMissing(tripsResponse.error)) {

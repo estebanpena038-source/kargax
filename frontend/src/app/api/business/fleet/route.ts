@@ -104,7 +104,7 @@ export async function GET(request: NextRequest) {
     monthStart.setDate(1);
     monthStart.setHours(0, 0, 0, 0);
 
-    let [membersResponse, invitationsResponse, offersResponse, allocationsResponse, payrollItemsResponse, snapshot] = await Promise.all([
+    const [membersResponse, invitationsResponse, initialOffersResponse, allocationsResponse, payrollItemsResponse, snapshot] = await Promise.all([
         supabaseAdmin
             .from('business_fleet_members')
             .select(`
@@ -137,6 +137,7 @@ export async function GET(request: NextRequest) {
         getBusinessPlanSnapshot(supabaseAdmin, businessId),
     ]) as any;
 
+    let offersResponse = initialOffersResponse;
     if (offersResponse.error && isPrivateFleetAssignmentSchemaMissing(offersResponse.error)) {
         offersResponse = await supabaseAdmin
             .from('cargo_offers')

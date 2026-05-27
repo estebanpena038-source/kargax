@@ -2,7 +2,9 @@ export type PlanLimitFeatureKey =
     | 'warehouse_limit'
     | 'team_limit'
     | 'monthly_trip_limit'
-    | 'private_fleet_limit';
+    | 'private_fleet_limit'
+    | 'last_mile_contract_limit'
+    | 'last_mile_alert_limit';
 
 export interface PlanLimitErrorDetails {
     featureKey: PlanLimitFeatureKey | string;
@@ -17,6 +19,8 @@ const FEATURE_LABELS: Record<string, string> = {
     team_limit: 'usuarios internos',
     monthly_trip_limit: 'viajes del mes',
     private_fleet_limit: 'conductores privados',
+    last_mile_contract_limit: 'contratos de margen activos',
+    last_mile_alert_limit: 'alertas de margen del mes',
 };
 
 const PLAN_LABELS: Record<string, string> = {

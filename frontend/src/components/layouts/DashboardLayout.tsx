@@ -47,6 +47,7 @@ import {
     CalendarClock,
     Warehouse,
     Crown,
+    TrendingDown,
 } from 'lucide-react';
 
 import { useTranslation, LanguageSelector } from '@/lib/i18n';
@@ -247,6 +248,14 @@ const getNavigationItems = (
             fallbackLabel: 'Inteligencia',
             icon: BarChart3,
             href: '/dashboard/inteligencia',
+            allowedUserTypes: ['business', 'admin'],
+        },
+        {
+            id: 'margin-control',
+            labelKey: 'nav.marginControl',
+            fallbackLabel: 'Control de margen',
+            icon: TrendingDown,
+            href: '/dashboard/control-margen',
             allowedUserTypes: ['business', 'admin'],
         },
         {
@@ -1092,6 +1101,10 @@ export function DashboardLayout({
 
             if (item.id === 'business-intelligence') {
                 return user.userType === 'admin' || (businessAccess ? businessAccess.canViewIntelligence : true);
+            }
+
+            if (item.id === 'margin-control') {
+                return user.userType === 'admin' || user.userType === 'business';
             }
 
             if (item.id === 'warehouses') {
