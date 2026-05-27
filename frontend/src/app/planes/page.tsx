@@ -57,10 +57,10 @@ function getPlanHighlights(plan: BillingPlan) {
         formatPlanCapacity(plan.max_private_fleet_drivers, 'conductores privados', 'Flota privada ilimitada'),
     ];
     const byCode: Record<string, string[]> = {
-        free: ['PIN/POD, receptor, hora, foto/firma y novedad', `Marketplace con ${MARKETPLACE_COMMISSION_PERCENT}% solo en viajes externos`, getSupportLabel(plan)],
-        growth: ['Inventario visual, recibos, despachos y analitica base', 'Equipo interno por empresa y por bodega', getSupportLabel(plan)],
-        scale: ['Reportes, exportaciones, novedades y soporte premium', 'Flota, bodega y alto volumen operativo', getSupportLabel(plan)],
-        enterprise: ['API/webhooks, control tower y 3PL multi-cliente', 'Aprobaciones, auditoria, treasury y soporte premium', getSupportLabel(plan)],
+        free: ['50 viajes/mes para validar operacion real', 'PIN/POD, receptor, hora, foto/firma y novedad', `Marketplace con ${MARKETPLACE_COMMISSION_PERCENT}% solo en viajes externos`, getSupportLabel(plan)],
+        growth: ['500 viajes/mes para operacion B2B inicial', 'Inventario visual, recibos, despachos y analitica base', 'Equipo interno por empresa y por bodega', 'Paywall comercial hacia Control de margen Enterprise', getSupportLabel(plan)],
+        scale: ['2.000 viajes/mes para 3PL y equipos en crecimiento', 'API/webhooks, control tower y flota privada avanzada', 'Reportes, exportaciones, novedades y soporte premium', 'Scorecards basicos de rutas y proveedores', getSupportLabel(plan)],
+        enterprise: ['Volumen personalizado bajo contrato', 'Control de margen logistico por ruta, proveedor y zona', 'Contratos, scorecards y alertas de sobrecosto', 'Enterprise Margin OS desde $4.500.000 COP/mes', 'Aprobaciones, auditoria, treasury y soporte premium', getSupportLabel(plan)],
     };
     return [...shared, ...(byCode[plan.code] || [getSupportLabel(plan)])];
 }
@@ -405,17 +405,20 @@ function PublicPricingPage() {
             highlights: [
                 '10 bodegas, 30 usuarios, 50 conductores',
                 '2.000 viajes/mes',
+                'API/webhooks, control tower y scorecards basicos',
                 'Reportes, exportaciones, novedades y soporte premium',
             ],
         },
         {
             code: 'enterprise',
             name: 'Enterprise',
-            price: 'Desde $2.500.000 COP',
-            tagline: 'Para 3PL, multiempresa y operacion corporativa',
+            price: 'Desde $4.500.000 COP',
+            tagline: 'Margin OS, 3PL y governance',
             highlights: [
                 'Volumen personalizado segun operacion',
                 'API/webhooks, control tower y 3PL multi-cliente',
+                'Control de margen por ruta y proveedor',
+                'Contratos, alertas y renegociaciones sugeridas',
                 'Aprobaciones, auditoria, treasury y soporte premium',
             ],
         },
@@ -427,7 +430,7 @@ function PublicPricingPage() {
                 <EnterpriseHero
                     eyebrow="Planes de produccion"
                     title="Planes KargaX"
-                    description={`Free, Growth y Scale entran por uso inmediato en COP. Enterprise entra por operacion multiempresa, treasury, governance y soporte operativo serio. Marketplace mantiene ${MARKETPLACE_COMMISSION_PERCENT}% solo en viajes externos.`}
+                    description={`Free, Growth y Scale entran por uso inmediato en COP. Enterprise entra por Control de margen, operacion multiempresa, treasury, governance y soporte operativo serio. Marketplace mantiene ${MARKETPLACE_COMMISSION_PERCENT}% solo en viajes externos.`}
                     icon={Crown}
                     actions={(
                         <div className="grid w-full gap-3 sm:flex sm:w-auto sm:flex-wrap">

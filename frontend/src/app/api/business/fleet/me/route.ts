@@ -315,6 +315,7 @@ export async function GET(request: NextRequest) {
             .gte('created_at', monthStart.toISOString()),
     ]) as any;
 
+    let tripsResponse = initialTripsResponse;
     let assignmentSchemaReady = true;
 
     let tripsResponse = initialTripsResponse;
