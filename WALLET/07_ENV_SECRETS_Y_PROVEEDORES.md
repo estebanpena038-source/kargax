@@ -12,34 +12,16 @@ KargaX debe integrarse por API oficial de un proveedor de pagos/dispersión, con
 
 Agregar a `.env.example` solo nombres, nunca valores reales:
 
-```bash
-# Payouts
-PAYOUTS_ENABLED=false
-PAYOUT_DRY_RUN=true
-PAYOUT_PROVIDER=manual
-PAYOUT_WEBHOOK_SECRET=
-PAYOUT_MAX_SINGLE_COP=500000
-PAYOUT_DAILY_LIMIT_COP=2000000
-PAYOUT_MIN_AMOUNT_COP=50000
-PAYOUT_BATCH_SIZE=10
+```text
+Payouts: PAYOUTS_ENABLED, PAYOUT_DRY_RUN, PAYOUT_PROVIDER, PAYOUT_WEBHOOK_SECRET,
+PAYOUT_MAX_SINGLE_COP, PAYOUT_DAILY_LIMIT_COP, PAYOUT_MIN_AMOUNT_COP, PAYOUT_BATCH_SIZE.
 
-# Cobre example placeholders
-COBRE_API_BASE_URL=
-COBRE_API_KEY=
-COBRE_API_SECRET=
-COBRE_WEBHOOK_SECRET=
+Cobre placeholders: COBRE_API_BASE_URL, COBRE_API_KEY, COBRE_API_SECRET, COBRE_WEBHOOK_SECRET.
 
-# Wompi / bank partner placeholders
-WOMPI_API_BASE_URL=
-WOMPI_PRIVATE_KEY=
-WOMPI_EVENTS_SECRET=
+Wompi / bank partner placeholders: WOMPI_API_BASE_URL, WOMPI_PRIVATE_KEY, WOMPI_EVENTS_SECRET.
 
-# Existing sensitive vars
-MERCADOPAGO_ACCESS_TOKEN=
-MERCADOPAGO_WEBHOOK_SECRET=
-INTERNAL_API_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
-RESEND_API_KEY=
+Existing sensitive vars: MERCADOPAGO_ACCESS_TOKEN, MERCADOPAGO_WEBHOOK_SECRET,
+INTERNAL_API_KEY, SUPABASE_SERVICE_ROLE_KEY, RESEND_API_KEY.
 ```
 
 ## Producción
@@ -47,17 +29,17 @@ RESEND_API_KEY=
 En Vercel/hosting:
 
 ```text
-PAYOUTS_ENABLED=true
-PAYOUT_DRY_RUN=false
-PAYOUT_PROVIDER=<proveedor_real>
+PAYOUTS_ENABLED true
+PAYOUT_DRY_RUN false
+PAYOUT_PROVIDER proveedor_real
 ```
 
 En staging:
 
 ```text
-PAYOUTS_ENABLED=true
-PAYOUT_DRY_RUN=true
-PAYOUT_PROVIDER=manual
+PAYOUTS_ENABLED true
+PAYOUT_DRY_RUN true
+PAYOUT_PROVIDER manual
 ```
 
 ## Seguridad por ambiente
@@ -67,8 +49,8 @@ El código debe impedir retiros reales si:
 ```text
 NODE_ENV !== production
 VERCEL_ENV !== production
-PAYOUT_DRY_RUN=true
-PAYOUTS_ENABLED=false
+PAYOUT_DRY_RUN true
+PAYOUTS_ENABLED false
 NEXT_PUBLIC_APP_URL no es HTTPS público
 ```
 
