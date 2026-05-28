@@ -30,6 +30,7 @@ const PUBLIC_ROUTES = [
     '/api/notifications/send-pin',
     '/api/notifications/inspection',
     '/api/payments/webhook',
+    '/api/jobs/payouts/process',
     '/api/support/requests',
     '/api/health',
 ];

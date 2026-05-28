@@ -78,7 +78,7 @@ const SETTLEMENT_SECTION_COPY: Array<{
     {
         mode: 'expenses_only',
         title: 'Viaticos',
-        description: 'Gastos operativos del viaje, separados del saldo retirable.',
+        description: 'Gastos operativos del viaje, separados del saldo disponible para retiro.',
     },
     {
         mode: 'trip_pay_plus_expenses',
@@ -983,7 +983,7 @@ export default function FleetDashboardPage() {
                                     <SectionHeader
                                         icon={Shield}
                                         title="Liquidaciones por ruta"
-                                        description="Cada viaje queda separado por modelo de pago. Privado usa comprobante externo y no crea saldo retirable."
+                                        description="Cada viaje queda separado por modelo de pago. Privado usa comprobante externo y no aumenta el saldo disponible para retiro."
                                     />
                                     <div className="mt-5 grid gap-5">
                                         {settlementSections.length ? (
@@ -1097,7 +1097,7 @@ export default function FleetDashboardPage() {
                                     <SectionHeader
                                         icon={Wallet}
                                         title="Nomina flota privada"
-                                        description="Corrida mensual separada de las rutas. Se aprueba y se soporta con comprobante externo sin aumentar billetera retirable."
+                                        description="Corrida mensual separada de las rutas. Se aprueba y se soporta con comprobante externo sin aumentar el saldo disponible para retiro."
                                     />
                                     {payrollResponse ? (
                                         <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,.85fr)_minmax(0,1.15fr)]">

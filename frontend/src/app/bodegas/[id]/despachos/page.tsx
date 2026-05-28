@@ -533,7 +533,7 @@ export default function WarehouseDispatchesPage() {
                                                         <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3.5">
                                                             <p className="text-sm font-semibold text-zinc-950">Comprobante externo requerido</p>
                                                             <p className="mt-1 text-sm leading-6 text-zinc-500">
-                                                                Finanzas registra el pago externo despues. KargaX no crea saldo retirable ni payout por este viaje privado.
+                                                                Finanzas registra el pago externo despues. KargaX no aumenta el saldo disponible para retiro por este viaje privado.
                                                             </p>
                                                         </div>
                                                     ) : null}

@@ -28,7 +28,30 @@ double_marketplace_release_sample_1000=0
 duplicate_payout_idempotency_sample_1000=0
 ```
 
-Pendiente manual corto: ejecutar un flujo real sandbox con ruta marketplace completa y un flujo privado con comprobante. Eso cubre Escenario A y B end-to-end.
+## Validacion manual staging 2026-05-28
+
+Empresa: `tasyuaysau`.
+
+### Escenario A: Marketplace dry-run - PASS
+
+- Viaje marketplace con `carlitos`: `03d3f17c-2d9c-4295-8bda-2a105243fb25`.
+- Pago Mercado Pago sandbox: `add08499-7e94-4130-b2dc-9f07888ccabb`, `payments.status='completed'`, `total_amount=3000000`.
+- Liberacion wallet: una sola transaccion `trip_deposit` (`307760f8-0581-478e-af94-c37ed46791cc`) por `2760000`.
+- La transaccion quedo con `money_rail='marketplace_freelancer'`, `metadata->>'source_kind'='marketplace_freight_release'`, `payout_eligible=true`, `external_proof_only=false`.
+- `payout_attempts` para ese viaje: 0.
+- Doble liberacion: `duplicateTripDepositCount=1` para ese viaje, esperado porque debe existir exactamente una liberacion.
+
+### Escenario B: Flota privada external proof - PASS con nota
+
+- Ultimo viaje privado con `pruebaQA`: `a8b6765d-8f0c-45f2-a151-433db930914c`.
+- Ese viaje usa `compensation_mode='salary_no_trip_pay'`, `private_payment_status='not_applicable'`, montos en 0. Resultado esperado: no crea pago, no crea allocation, no crea wallet transaction y no crea payout.
+- Comprobante externo validado para `pruebaQA` via nomina privada: run `037f7f11-0eda-4149-9bee-c7a7f228fd9a`.
+- El run quedo `payment_mode='external_proof'`, `status='proof_uploaded'`, `external_payment_status='proof_uploaded'`, `total_amount=10000000`, con soporte cargado.
+- Item de nomina: `8b1fa6b9-706c-47d2-9faf-653f3eea8fd9`, `amount=10000000`, `status='proof_uploaded'`, `metadata->>'source_kind'='private_fleet_external_proof'`.
+- No hay transaccion de wallet asociada al run ni al ultimo viaje privado.
+- Check global: `private_withdrawable_leaks=0`, `processing_payouts=0`.
+
+Nota: el ultimo viaje privado prueba que el modo "nomina mensual sin pago por viaje" no contamina la wallet. El comprobante externo real queda cubierto por la nomina privada del mismo transportador y empresa.
 
 ## Escenario A: Marketplace dry-run
 

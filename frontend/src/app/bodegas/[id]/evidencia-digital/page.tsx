@@ -77,7 +77,7 @@ const STAGE_LABELS: Record<WarehouseDigitalEvidenceStage, string> = {
     origin: 'Origen',
     loading: 'Carga',
     pickup_pin: 'PIN salida',
-    tracking: 'Tracking',
+    tracking: 'Seguimiento',
     destination: 'Destino',
     delivery: 'Entrega',
     delivery_pin: 'PIN entrega',
@@ -438,7 +438,7 @@ function EvidenceDetail({
                 </div>
             ) : null}
 
-            <SectionCard title="Linea de custodia" description="Eventos de asignacion, origen, carga, PIN, tracking, destino, entrega y cierre.">
+            <SectionCard title="Linea de custodia" description="Eventos de orden, asignacion, origen, carga, PIN, seguimiento, destino, entrega y cierre.">
                 <TimelinePanel record={record} />
             </SectionCard>
 

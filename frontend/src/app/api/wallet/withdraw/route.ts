@@ -462,7 +462,7 @@ export async function POST(request: NextRequest) {
             .single();
 
         if (payoutAttemptError) {
-            return NextResponse.json({ error: payoutAttemptError.message || 'No se pudo crear el intento de payout' }, { status: 500 });
+            return NextResponse.json({ error: payoutAttemptError.message || 'No se pudo registrar el retiro operativo' }, { status: 500 });
         }
 
         const { data: withdrawalTransaction } = await supabaseAdmin
@@ -545,7 +545,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({
             success: true,
             message: automaticPayoutsEnabled
-                ? 'Retiro recibido. KargaX procesara el payout operativo automaticamente.'
+                ? 'Retiro recibido. KargaX procesara el giro operativo automaticamente.'
                 : 'Solicitud de retiro creada. Queda pendiente de aprobacion administrativa.',
             payoutMode: automaticPayoutsEnabled ? 'automatic' : 'manual',
             request_id: withdrawalRequest.request_id,

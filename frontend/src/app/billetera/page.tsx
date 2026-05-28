@@ -176,7 +176,7 @@ const COLOMBIAN_BANKS = [
     'Citibank',
 ];
 
-const PAYOUT_STEPS = [
+const WITHDRAWAL_STEPS = [
     {
         title: 'Solicitado',
         description: 'La solicitud queda registrada con referencia interna.',
@@ -187,11 +187,11 @@ const PAYOUT_STEPS = [
     },
     {
         title: 'Procesando',
-        description: 'El retiro operativo pasa al proveedor configurado o revision manual.',
+        description: 'KargaX revisa el destino y deja el retiro listo para giro o revision manual.',
     },
     {
         title: 'Pagado',
-        description: 'El payout fue marcado como enviado al metodo elegido.',
+        description: 'El retiro fue marcado como enviado al metodo elegido.',
     },
     {
         title: 'Rechazado/devuelto',
@@ -614,7 +614,7 @@ export default function WalletPage() {
         {
             label: 'Marketplace disponible',
             value: formatCOP(withdrawableMarketplaceBalance || 0),
-            detail: `${formatCOP(marketplaceWallet?.payoutProcessingCop || 0)} en payout marketplace`,
+            detail: `${formatCOP(marketplaceWallet?.payoutProcessingCop || 0)} en retiros en proceso`,
             icon: Truck,
         },
         {
@@ -639,7 +639,7 @@ export default function WalletPage() {
             icon: History,
         },
         {
-            label: 'Payouts en proceso',
+            label: 'Retiros en proceso',
             value: String(payoutAttempts.filter((attempt) => ['queued', 'processing', 'failed', 'manual_review'].includes(attempt.status)).length),
             detail: 'Retiros operativos con trazabilidad.',
             icon: Clock,
@@ -662,7 +662,7 @@ export default function WalletPage() {
         {
             value: 'nequi' as const,
             title: 'Nequi',
-            detail: 'Celular validado para payout operativo.',
+            detail: 'Celular validado para retiro operativo.',
             icon: Smartphone,
         },
         {
@@ -828,7 +828,7 @@ export default function WalletPage() {
                             <div className="flex items-start justify-between gap-4">
                                 <div>
                                     <p className="font-sans text-[11px] uppercase tracking-[0.28em] text-white/48">KargaX Marketplace</p>
-                                    <p className="mt-1 font-display text-lg font-semibold text-white sm:text-xl">Saldo retirable</p>
+                                    <p className="mt-1 font-display text-lg font-semibold text-white sm:text-xl">Saldo para retiro</p>
                                 </div>
                                 <div className="flex h-12 w-12 items-center justify-center rounded-lg border border-white/15 bg-white/[0.075] shadow-[inset_0_1px_0_rgba(255,255,255,.18)]">
                                     <span className="font-display text-lg font-semibold">KX</span>
@@ -842,7 +842,7 @@ export default function WalletPage() {
                                     ))}
                                 </div>
                                 <div className="min-w-0 sm:text-right">
-                                    <p className="font-sans text-[11px] uppercase tracking-[0.24em] text-white/45">Marketplace retirable</p>
+                                    <p className="font-sans text-[11px] uppercase tracking-[0.24em] text-white/45">Marketplace disponible</p>
                                     <p className="font-money mt-1 text-4xl font-bold tracking-normal text-white sm:text-5xl">
                                         {formatCOP(withdrawableMarketplaceBalance || 0)}
                                     </p>
@@ -858,7 +858,7 @@ export default function WalletPage() {
                                     </p>
                                 </div>
                                 <div className="text-left sm:text-right">
-                                    <p className="font-sans text-[10px] uppercase tracking-[0.24em] text-white/40">Ledger rail</p>
+                                    <p className="font-sans text-[10px] uppercase tracking-[0.24em] text-white/40">Control KX</p>
                                     <p className="mt-1 font-display text-sm font-semibold text-white">KX Verified</p>
                                 </div>
                             </div>
@@ -876,12 +876,12 @@ export default function WalletPage() {
                         <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Informacion de billetera</p>
                         <h2 className="mt-2 text-xl font-semibold text-zinc-950">Saldo marketplace y liquidaciones</h2>
                         <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-600">
-                            El saldo retirable corresponde a marketplace confirmado. Las liquidaciones de flota privada
+                            El saldo para retiro corresponde a marketplace confirmado. Las liquidaciones de flota privada
                             se registran como comprobante externo y no aumentan el saldo de retiro.
                         </p>
                         {marketplaceWallet && Math.abs(Number(marketplaceWallet.balanceMismatchCop || 0)) > 0 ? (
                             <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm leading-6 text-zinc-600">
-                                Operaciones tiene una diferencia historica de {formatCOP(Math.abs(Number(marketplaceWallet.balanceMismatchCop || 0)))} entre wallet tecnica y rail marketplace. Tu retiro usa solo el saldo marketplace validado.
+                                Operaciones tiene una diferencia historica de {formatCOP(Math.abs(Number(marketplaceWallet.balanceMismatchCop || 0)))} entre saldo historico y saldo validado de marketplace. Tu retiro usa solo el saldo marketplace validado.
                             </div>
                         ) : null}
                         <div className="mt-4 grid gap-3 sm:grid-cols-3">
@@ -925,9 +925,9 @@ export default function WalletPage() {
                     <div className="flex items-start gap-3">
                         <ShieldCheck className="mt-0.5 h-5 w-5 text-zinc-950" />
                         <div>
-                            <p className="font-semibold text-zinc-950">Ledger operativo, no producto financiero</p>
+                            <p className="font-semibold text-zinc-950">Registro operativo, no producto financiero</p>
                             <p className="mt-1 text-sm leading-6 text-zinc-600">
-                                KargaX separa saldo marketplace retirable de liquidaciones privadas externas.
+                                KargaX separa saldo marketplace disponible para retiro de liquidaciones privadas externas.
                                 El pago privado lo realiza tu empresa por su canal habitual; aqui queda el soporte operativo.
                             </p>
                         </div>
@@ -987,8 +987,8 @@ export default function WalletPage() {
                     >
                         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                             <div>
-                                <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Timeline de retiro</p>
-                                <h2 className="mt-2 text-xl font-semibold text-zinc-950">Payout con cadena de control</h2>
+                                <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Estado del retiro</p>
+                                <h2 className="mt-2 text-xl font-semibold text-zinc-950">Retiro con cadena de control</h2>
                                 <p className="mt-2 text-sm leading-6 text-zinc-600">
                                     Cada solicitud conserva estado, referencia y narrativa humana para que sepas que esta pasando.
                                 </p>
@@ -1002,7 +1002,7 @@ export default function WalletPage() {
                         </div>
 
                         <div className="mt-6 space-y-3">
-                            {PAYOUT_STEPS.map((step, index) => (
+                            {WITHDRAWAL_STEPS.map((step, index) => (
                                 <div key={step.title} className="flex gap-4 rounded-lg border border-zinc-200 bg-white p-4">
                                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-zinc-300 bg-zinc-50 text-xs font-semibold text-zinc-950">
                                         {index + 1}
@@ -1086,7 +1086,7 @@ export default function WalletPage() {
                         <div className="flex items-start gap-3">
                             <Clock className="mt-0.5 h-5 w-5 text-zinc-950" />
                             <div>
-                                <p className="font-semibold text-zinc-950">Payouts en proceso</p>
+                                <p className="font-semibold text-zinc-950">Retiros en proceso</p>
                                 <p className="mt-1 text-sm leading-6 text-zinc-600">
                                     Tienes {pendingWithdrawals.length} solicitud(es) con saldo marketplace reservado.
                                     KargaX conserva referencia, destino enmascarado y estado de conciliacion.
@@ -1109,7 +1109,7 @@ export default function WalletPage() {
                                     <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Flota privada</p>
                                     <h2 className="mt-2 text-xl font-semibold text-zinc-950">Liquidaciones con comprobante externo</h2>
                                     <p className="mt-2 text-sm leading-6 text-zinc-600">
-                                        Estas liquidaciones no suman al saldo retirable. La empresa conserva el soporte del pago externo.
+                                        Estas liquidaciones no suman al saldo disponible para retiro. La empresa conserva el soporte del pago externo.
                                     </p>
                                 </div>
                                 <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3">
@@ -1191,8 +1191,8 @@ export default function WalletPage() {
                     <div className="border-b border-zinc-100 p-6">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                             <div>
-                                <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Ledger marketplace</p>
-                                <h2 className="mt-2 text-xl font-semibold text-zinc-950">Historial retirable</h2>
+                                <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Movimientos marketplace</p>
+                                <h2 className="mt-2 text-xl font-semibold text-zinc-950">Historial para retiro</h2>
                             </div>
                             <p className="text-sm text-zinc-500">Referencias cortas, sin datos sensibles.</p>
                         </div>
@@ -1305,7 +1305,7 @@ export default function WalletPage() {
                             {withdrawStep === 1 ? (
                                 <div className="space-y-6 p-6">
                                     <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-5 text-center">
-                                        <p className="text-sm text-zinc-500">Saldo marketplace retirable</p>
+                                        <p className="text-sm text-zinc-500">Saldo marketplace disponible para retiro</p>
                                         <p className="font-money mt-2 text-3xl font-semibold text-zinc-950">
                                             {formatCOP(withdrawableMarketplaceBalance || 0)}
                                         </p>
@@ -1412,7 +1412,7 @@ export default function WalletPage() {
                                     <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4">
                                         <p className="font-money text-lg font-semibold text-zinc-950">{withdrawAmount}</p>
                                         <p className="mt-1 text-sm leading-6 text-zinc-600">
-                                            Retiro a {getPaymentMethodLabel(selectedMethod)}. KargaX valida el destino y procesa el payout operativo si el proveedor esta habilitado.
+                                            Retiro a {getPaymentMethodLabel(selectedMethod)}. KargaX valida el destino y registra el retiro operativo cuando queda aprobado.
                                         </p>
                                     </div>
 
@@ -1542,7 +1542,7 @@ export default function WalletPage() {
                                     <div>
                                         <h4 className="text-xl font-semibold text-zinc-950">Solicitud enviada</h4>
                                         <p className="mt-2 text-sm leading-6 text-zinc-600">
-                                            {withdrawResult?.message || 'Solicitud registrada para payout operativo.'}
+                                            {withdrawResult?.message || 'Solicitud registrada para retiro operativo.'}
                                         </p>
                                     </div>
                                     <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 text-left">

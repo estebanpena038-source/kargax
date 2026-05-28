@@ -462,7 +462,7 @@ export default function TripHubPage() {
                                     </div>
                                 ) : null}
                                 <p className="mt-2 text-xs leading-5 text-white/55">
-                                    Flota privada se soporta con comprobante externo; no genera saldo retirable en wallet.
+                                    Flota privada se soporta con comprobante externo; no aumenta el saldo disponible para retiro.
                                 </p>
                             </div>
                         </div>

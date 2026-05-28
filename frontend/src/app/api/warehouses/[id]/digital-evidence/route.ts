@@ -183,6 +183,60 @@ function stageFromEventType(eventType: string | null): WarehouseDigitalEvidenceS
     return 'incident';
 }
 
+function getPickingEventLabel(eventType: string | null) {
+    const labels: Record<string, string> = {
+        arrival_origin: 'Llegada a origen',
+        loading_started: 'Carga iniciada',
+        item_loaded: 'Item cargado',
+        item_load_issue: 'Novedad en cargue',
+        loading_completed: 'Carga completada',
+        pickup_pin_verified: 'PIN de salida verificado',
+        arrival_destination: 'Llegada a destino',
+        unloading_started: 'Entrega iniciada',
+        item_delivered: 'Item entregado',
+        item_rejected: 'Item rechazado',
+        unloading_completed: 'Entrega completada',
+        delivery_pin_verified: 'PIN de entrega verificado',
+    };
+
+    if (!eventType) return 'Evento operativo';
+    return labels[eventType] || eventType.replace(/_/g, ' ');
+}
+
+function getTimelineDetailLabel(value: string | null) {
+    const labels: Record<string, string> = {
+        accepted: 'Aceptado',
+        cancelled: 'Cancelado',
+        completed: 'Completado',
+        dispatched: 'Despachado',
+        draft: 'Borrador',
+        in_transit: 'En ruta',
+        paid_external: 'Pagado por fuera de KargaX',
+        pending: 'Pendiente',
+        proof_uploaded: 'Comprobante cargado',
+        ready: 'Listo para salida',
+        rejected: 'Rechazado',
+        customer_refused: 'Cliente rechazo la entrega',
+        damaged: 'Producto averiado',
+        missing: 'Faltante',
+        wrong_item: 'Referencia equivocada',
+        other: 'Otro motivo',
+    };
+
+    if (!value) return null;
+    return labels[value] || value;
+}
+
+function getPickingTimelineDetail(event: Row) {
+    const parts = [
+        asString(event.manifest_item_name),
+        asString(event.notes),
+        getTimelineDetailLabel(asString(event.rejection_reason)),
+    ].filter((part, index, list): part is string => Boolean(part) && list.indexOf(part) === index);
+
+    return parts.length ? parts.join(' / ') : null;
+}
+
 function addPhoto(
     photos: WarehouseDigitalEvidencePhoto[],
     seen: Set<string>,
@@ -257,10 +311,10 @@ function buildPhotos(offer: Row | null, pickingEvents: Row[]) {
         asStringList(event.photo_urls).forEach((url, index) => addPhoto(photos, seen, url, {
             id: `${asString(event.id) || 'event'}-${index}`,
             stage,
-            label: eventType ? eventType.replace(/_/g, ' ') : 'Evidencia operativa',
+            label: getPickingEventLabel(eventType),
             itemName: asString(event.manifest_item_name),
             notes: asString(event.notes),
-            rejectionReason: asString(event.rejection_reason),
+            rejectionReason: getTimelineDetailLabel(asString(event.rejection_reason)),
             createdAt: asString(event.created_at),
         }));
     }
@@ -339,15 +393,15 @@ function buildTimeline(
     paymentRows: Row[]
 ) {
     const events: WarehouseDigitalEvidenceTimelineEvent[] = [
-        timelineEvent('dispatch-created', 'dispatch', 'Despacho creado', 'dispatch', asString(dispatchItem.created_at), asString(dispatchItem.dispatch_number)),
-        timelineEvent('dispatch-confirmed', 'dispatch', 'Salida de bodega registrada', 'dispatch', asString(dispatchItem.dispatched_at) || asString(dispatchItem.confirmed_at), asString(dispatchItem.status)),
+        timelineEvent('dispatch-created', 'dispatch', 'Orden de despacho creada', 'dispatch', asString(dispatchItem.created_at), asString(dispatchItem.dispatch_number)),
+        timelineEvent('dispatch-confirmed', 'dispatch', 'Salida de bodega confirmada', 'dispatch', asString(dispatchItem.dispatched_at) || asString(dispatchItem.confirmed_at), getTimelineDetailLabel(asString(dispatchItem.status))),
     ];
 
     if (offer) {
         const assignmentStatus = asString(offer.private_fleet_assignment_status);
         events.push(
             timelineEvent('trip-created', 'assignment', 'Viaje enlazado', 'offer', asString(offer.created_at), asString(offer.id)),
-            timelineEvent('trip-accepted', 'assignment', 'Conductor acepto viaje', 'offer', asString(offer.private_fleet_confirmed_at), assignmentStatus),
+            timelineEvent('trip-accepted', 'assignment', 'Conductor acepto viaje', 'offer', asString(offer.private_fleet_confirmed_at), getTimelineDetailLabel(assignmentStatus)),
             timelineEvent('arrival-origin', 'origin', 'Llegada a origen', 'offer', asString(offer.arrived_at_origin_at), null),
             timelineEvent('loading-started', 'loading', 'Carga iniciada', 'offer', asString(offer.loading_started_at), null),
             timelineEvent('pickup-pin', 'pickup_pin', 'PIN salida verificado', 'offer', asString(offer.pickup_verified_at), null),
@@ -364,7 +418,7 @@ function buildTimeline(
                 'Viaje rechazado',
                 'offer',
                 asString(offer.private_fleet_rejected_at),
-                asString(offer.private_fleet_rejection_reason),
+                getTimelineDetailLabel(asString(offer.private_fleet_rejection_reason)),
                 'rejected'
             ));
         }
@@ -385,10 +439,10 @@ function buildTimeline(
             events.push(timelineEvent(
                 `picking-${asString(event.id) || events.length}`,
                 stageFromEventType(eventType),
-                eventType ? eventType.replace(/_/g, ' ') : 'Evento operativo',
+                getPickingEventLabel(eventType),
                 'picking',
                 asString(event.created_at),
-                asString(event.notes) || asString(event.manifest_item_name),
+                getPickingTimelineDetail(event),
                 eventType?.includes('rejected') || eventType?.includes('issue') ? 'warning' : 'complete'
             ));
         }
@@ -400,7 +454,7 @@ function buildTimeline(
                 'Pago / custodia actualizado',
                 'payment',
                 asString(payment.completed_at) || asString(payment.updated_at) || asString(payment.created_at),
-                asString(payment.status)
+                getTimelineDetailLabel(asString(payment.status))
             ));
         }
     }
