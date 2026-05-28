@@ -1,5 +1,13 @@
 # WALLET2.0 Rails Hardening QA
 
+## Estado final
+
+PASS completo en staging al 2026-05-28.
+
+- Payout processor automatico queda apagado en Vercel: `PAYOUTS_ENABLED=false`.
+- Cinturon de seguridad de env: `PAYOUT_DRY_RUN=true`, `PAYOUT_PROVIDER=manual`.
+- Marketplace sandbox, flota privada external proof, SQL guards, idempotencia y release gates validados.
+
 ## Objetivo
 
 Validar que KargaX separa saldo marketplace retirable de liquidaciones privadas externas sin activar payouts reales.
@@ -52,6 +60,42 @@ Empresa: `tasyuaysau`.
 - Check global: `private_withdrawable_leaks=0`, `processing_payouts=0`.
 
 Nota: el ultimo viaje privado prueba que el modo "nomina mensual sin pago por viaje" no contamina la wallet. El comprobante externo real queda cubierto por la nomina privada del mismo transportador y empresa.
+
+## Validacion final QA 05 staging 2026-05-28 - PASS
+
+### Processor apagado por seguridad
+
+- Vercel redeploy: `https://kargax-staging.vercel.app`.
+- `GET /api/health`: `payout_automatic_enabled=false`.
+- `POST /api/jobs/payouts/process` ejecutado 2 veces con `x-internal-api-key`.
+- Resultado esperado y obtenido en ambas llamadas: `processed=0`, `skipped=true`, `reason='payouts_disabled'`, `code='PAYOUT_JOB_SKIPPED'`.
+
+### Escenario F: Payout processor sin doble ejecucion - PASS
+
+- Se creo un payout QA temporal `queued` con `idempotency_key='qa05-f-1779978246477'`.
+- Se intento insertar un segundo `payout_attempt` con el mismo `idempotency_key`.
+- Resultado: bloqueado por constraint unica `payout_attempts_idempotency_key_key`.
+- Primer `claim_payout_attempts(p_limit := 1)`: reclamo 1 registro QA.
+- Segundo `claim_payout_attempts(p_limit := 1)`: reclamo 0 registros.
+- Estado despues del primer claim: `status='processing'`, `attempts_count=1`, `processing_started_at` cargado.
+- Las filas sinteticas QA fueron limpiadas al terminar para no dejar retiros ni movimientos visibles en billetera.
+
+### SQL checks obligatorios - PASS
+
+```text
+private_withdrawable_rows=0
+stuck_processing_payouts_30m=0
+duplicate_payout_idempotency_keys=0
+```
+
+### Comandos solicitados - PASS
+
+```bash
+npm --prefix frontend run typecheck
+npm --prefix frontend run build
+npm run repo:audit
+npm run check:release
+```
 
 ## Escenario A: Marketplace dry-run
 
