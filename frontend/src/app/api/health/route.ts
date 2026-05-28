@@ -5,6 +5,33 @@ import { getReliabilitySnapshot } from '@/lib/server/operations';
 import { isLocalAppUrl, isStrictProductionEnvironment, getConfiguredAppUrl } from '@/lib/server/runtime-env';
 
 const REQUIRED_STORAGE_BUCKETS = ['offer-photos', 'trip-photos', 'trip-signatures', 'warehouse-sku-images'];
+const PUBLIC_HEALTH_REDACTIONS: Array<[RegExp, string]> = [
+    [/MERCADOPAGO_WEBHOOK_SECRET/g, 'configuracion de firma del webhook de pagos'],
+    [/SUPABASE_SERVICE_ROLE_KEY/g, 'credencial interna de base de datos'],
+    [/INTERNAL_API_KEY/g, 'credencial interna de jobs'],
+    [/NEXT_PUBLIC_SUPABASE_ANON_KEY/g, 'credencial publica de Supabase'],
+];
+
+function sanitizePublicHealthPayload(value: unknown): unknown {
+    if (typeof value === 'string') {
+        return PUBLIC_HEALTH_REDACTIONS.reduce(
+            (current, [pattern, replacement]) => current.replace(pattern, replacement),
+            value
+        );
+    }
+
+    if (Array.isArray(value)) {
+        return value.map((item) => sanitizePublicHealthPayload(item));
+    }
+
+    if (value && typeof value === 'object') {
+        return Object.fromEntries(
+            Object.entries(value).map(([key, item]) => [key, sanitizePublicHealthPayload(item)])
+        );
+    }
+
+    return value;
+}
 
 export async function GET(request: NextRequest) {
     const requestId = getRequestId(request);
@@ -34,39 +61,41 @@ export async function GET(request: NextRequest) {
         const status = healthy && degradedFlags.length === 0 ? 'healthy' : healthy ? 'degraded' : 'unhealthy';
         const responseStatus = healthy ? 200 : 503;
 
+        const healthData = sanitizePublicHealthPayload({
+            status,
+            requestId,
+            latency_ms: Date.now() - startedAt,
+            environment: {
+                app_url: appUrl,
+                strict_production: isStrictProductionEnvironment(),
+                local_app_url_in_strict_production: appUrlLocalInStrictProduction,
+            },
+            storage: {
+                required_buckets: REQUIRED_STORAGE_BUCKETS,
+                missing_buckets: missingBuckets,
+                error: bucketsError?.message || null,
+            },
+            infra: {
+                release_gate_required: releaseGateRequired,
+                sentry_configured: sentryConfigured,
+                upstash_configured: upstashConfigured,
+                payment_webhook_signature_configured: paymentWebhookConfigured,
+                payout_automatic_enabled: snapshot.flags.some((flag) => flag.key === 'automatic_payouts_enabled' && flag.enabled),
+            },
+            degraded_flags: degradedFlags.map((flag) => flag.key),
+            integrations: snapshot.integrations,
+            countries: snapshot.countries,
+            runbooks: snapshot.backups,
+            launch_readiness: snapshot.launch_readiness,
+            smoke_status: snapshot.smoke_status,
+            risk_summary: snapshot.risk_summary,
+            scorecard_snapshot: snapshot.scorecard_snapshot,
+        });
+
         return NextResponse.json({
             success: healthy,
             code: healthy ? 'HEALTHY' : 'UNHEALTHY',
-            data: {
-                status,
-                requestId,
-                latency_ms: Date.now() - startedAt,
-                environment: {
-                    app_url: appUrl,
-                    strict_production: isStrictProductionEnvironment(),
-                    local_app_url_in_strict_production: appUrlLocalInStrictProduction,
-                },
-                storage: {
-                    required_buckets: REQUIRED_STORAGE_BUCKETS,
-                    missing_buckets: missingBuckets,
-                    error: bucketsError?.message || null,
-                },
-                infra: {
-                    release_gate_required: releaseGateRequired,
-                    sentry_configured: sentryConfigured,
-                    upstash_configured: upstashConfigured,
-                    mercadopago_webhook_secret_configured: paymentWebhookConfigured,
-                    payout_automatic_enabled: snapshot.flags.some((flag) => flag.key === 'automatic_payouts_enabled' && flag.enabled),
-                },
-                degraded_flags: degradedFlags.map((flag) => flag.key),
-                integrations: snapshot.integrations,
-                countries: snapshot.countries,
-                runbooks: snapshot.backups,
-                launch_readiness: snapshot.launch_readiness,
-                smoke_status: snapshot.smoke_status,
-                risk_summary: snapshot.risk_summary,
-                scorecard_snapshot: snapshot.scorecard_snapshot,
-            },
+            data: healthData,
             error: healthy ? null : {
                 message: error?.message
                     || bucketsError?.message

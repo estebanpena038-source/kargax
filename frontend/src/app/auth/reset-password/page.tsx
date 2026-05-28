@@ -8,7 +8,7 @@ import KargaxLogo from '@/components/brand/KargaxLogo';
 import { AuthCard, CenteredAuthState, MatteSpinner } from '@/components/public/PublicLuxury';
 import { Button, toast } from '@/components/ui';
 import { updatePassword } from '@/lib/supabase/auth';
-import { establishSessionFromAuthUrl, getAuthUrlKey, withTimeout } from '@/lib/auth/url-session';
+import { establishRecoverySessionFromAuthUrl, getAuthUrlKey, withTimeout } from '@/lib/auth/url-session';
 
 function ResetPasswordForm() {
   const router = useRouter();
@@ -26,7 +26,7 @@ function ResetPasswordForm() {
     const prepareRecoverySession = async () => {
       try {
         await withTimeout(
-          establishSessionFromAuthUrl(searchParams),
+          establishRecoverySessionFromAuthUrl(searchParams),
           20000,
           'El enlace tardo demasiado validando la sesion. Solicita uno nuevo e intenta de nuevo.'
         );
@@ -71,7 +71,7 @@ function ResetPasswordForm() {
     }
 
     setIsSubmitting(true);
-    const result = await updatePassword(password);
+    const result = await updatePassword(password, { signOutAfterUpdate: true });
     setIsSubmitting(false);
 
     if (!result.success) {
@@ -171,4 +171,3 @@ export default function ResetPasswordPage() {
     </React.Suspense>
   );
 }
-

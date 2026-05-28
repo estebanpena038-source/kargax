@@ -6,6 +6,7 @@
 
 import { supabase } from './client';
 import type { AuthError, User, Session } from '@supabase/supabase-js';
+import { clearSessionBridge } from '@/lib/auth/session-bridge';
 import { buildPublicAppUrl, shouldAllowLocalPublicAppUrl } from '@/lib/platform/public-app-url';
 
 // =============================================================================
@@ -452,7 +453,10 @@ export async function resetPassword(email: string): Promise<{ success: boolean; 
 /**
  * Update password (after reset)
  */
-export async function updatePassword(newPassword: string): Promise<{ success: boolean; error?: string }> {
+export async function updatePassword(
+    newPassword: string,
+    options: { signOutAfterUpdate?: boolean } = {}
+): Promise<{ success: boolean; error?: string }> {
     try {
         const { error } = await supabase.auth.updateUser({
             password: newPassword,
@@ -464,6 +468,11 @@ export async function updatePassword(newPassword: string): Promise<{ success: bo
                 success: false,
                 error: getErrorMessage(error),
             };
+        }
+
+        if (options.signOutAfterUpdate) {
+            await supabase.auth.signOut({ scope: 'global' });
+            await clearSessionBridge();
         }
 
         return { success: true };

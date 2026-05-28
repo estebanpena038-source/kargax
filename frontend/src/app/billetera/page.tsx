@@ -9,7 +9,7 @@
  * =============================================================================
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -157,6 +157,14 @@ interface PayoutAttempt {
 }
 
 const MIN_WITHDRAWAL_AMOUNT = 50000;
+
+function createWithdrawalIdempotencyKey() {
+    const key = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+    return `withdrawal:${key}`;
+}
 
 const COLOMBIAN_BANKS = [
     'Bancolombia',
@@ -483,6 +491,7 @@ export default function WalletPage() {
     const [showWithdrawModal, setShowWithdrawModal] = useState(false);
     const [withdrawStep, setWithdrawStep] = useState<1 | 2 | 3 | 4>(1);
     const [withdrawAmount, setWithdrawAmount] = useState('');
+    const [withdrawIdempotencyKey, setWithdrawIdempotencyKey] = useState(createWithdrawalIdempotencyKey);
     const [selectedMethod, setSelectedMethod] = useState<PaymentMethodType | null>(null);
     const [bankDetails, setBankDetails] = useState<BankDetails>({
         bankName: '',
@@ -494,6 +503,7 @@ export default function WalletPage() {
     const [saveMethod, setSaveMethod] = useState(true);
     const [withdrawing, setWithdrawing] = useState(false);
     const [withdrawResult, setWithdrawResult] = useState<{ success: boolean; message: string } | null>(null);
+    const withdrawalSubmitInFlightRef = useRef(false);
 
     const loadWalletData = useCallback(async () => {
         if (!authUser?.id) {
@@ -682,6 +692,7 @@ export default function WalletPage() {
     const openWithdrawModal = () => {
         setWithdrawResult(null);
         setWithdrawStep(1);
+        setWithdrawIdempotencyKey(createWithdrawalIdempotencyKey());
 
         if (defaultPaymentMethod) {
             setSelectedMethod(defaultPaymentMethod.method_type);
@@ -700,6 +711,7 @@ export default function WalletPage() {
         setShowWithdrawModal(false);
         setWithdrawStep(1);
         setWithdrawAmount('');
+        setWithdrawIdempotencyKey(createWithdrawalIdempotencyKey());
         setSelectedMethod(defaultPaymentMethod?.method_type || null);
         setWithdrawResult(null);
         loadWalletData();
@@ -712,6 +724,10 @@ export default function WalletPage() {
     };
 
     const handleSubmitWithdrawal = async () => {
+        if (withdrawalSubmitInFlightRef.current) {
+            return;
+        }
+
         const validationError = validateWithdrawalDetails(
             withdrawalAmountNumber,
             selectedMethod,
@@ -724,6 +740,7 @@ export default function WalletPage() {
             return;
         }
 
+        withdrawalSubmitInFlightRef.current = true;
         setWithdrawing(true);
         setWithdrawResult(null);
 
@@ -750,6 +767,7 @@ export default function WalletPage() {
                         documentNumber: bankDetails.documentNumber,
                     },
                     saveMethod,
+                    idempotencyKey: withdrawIdempotencyKey,
                 }),
             });
 
@@ -768,6 +786,7 @@ export default function WalletPage() {
                 message: err instanceof Error ? err.message : 'No se pudo procesar el retiro',
             });
         } finally {
+            withdrawalSubmitInFlightRef.current = false;
             setWithdrawing(false);
         }
     };

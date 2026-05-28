@@ -33,6 +33,15 @@ function getAuthParam(searchParams: SearchParamsLike, hashParams: URLSearchParam
     return searchParams?.get(name) || hashParams.get(name);
 }
 
+function hasAuthCredentials(searchParams: SearchParamsLike, hashParams: URLSearchParams) {
+    return Boolean(
+        getAuthParam(searchParams, hashParams, 'code')
+        || getAuthParam(searchParams, hashParams, 'access_token')
+        || getAuthParam(searchParams, hashParams, 'refresh_token')
+        || getAuthParam(searchParams, hashParams, 'token_hash')
+    );
+}
+
 async function getCurrentSession() {
     const { data, error } = await supabase.auth.getSession();
     if (error) {
@@ -151,6 +160,21 @@ export async function establishSessionFromAuthUrl(searchParams: SearchParamsLike
     return session;
 }
 
+export async function establishRecoverySessionFromAuthUrl(searchParams: SearchParamsLike): Promise<Session> {
+    const hashParams = getHashParams();
+    const type = getAuthParam(searchParams, hashParams, 'type');
+
+    if (!hasAuthCredentials(searchParams, hashParams)) {
+        throw new Error('El enlace de recuperacion no trae credenciales validas. Solicita un enlace nuevo e intenta otra vez.');
+    }
+
+    if (type && type !== 'recovery') {
+        throw new Error('Este enlace no corresponde a recuperacion de contrasena.');
+    }
+
+    return establishSessionFromAuthUrl(searchParams);
+}
+
 export async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     const timeoutPromise = new Promise<T>((_, reject) => {
@@ -165,4 +189,3 @@ export async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, mes
         }
     }
 }
-

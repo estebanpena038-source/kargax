@@ -37,22 +37,27 @@
 
 ### Tiene que pasar esto
 
-- [ ] API privada sin login no devuelve datos.
-- [ ] Empresa B no ve datos de Empresa A.
+- [x] API privada sin login no devuelve datos.
+- [x] Empresa B no ve datos de Empresa A.
 - [ ] Script se ve como texto, no se ejecuta.
 - [ ] Camionero no entra a admin.
-- [ ] Errores son claros, no stack traces.
+- [x] Errores son claros, no stack traces.
 
 ### Resultado
 
 | Campo | Valor |
 |---|---|
-| Estado | PASS / FAIL / BLOCKED |
-| Fecha y hora | |
-| Empresa A | |
-| Empresa B | |
+| Estado | PARTIAL |
+| Fecha y hora | 2026-05-28 |
+| Empresa A | URL bodega A: `/bodegas/5e05ec02-696d-4229-8be3-7e752c55906e/evidencia-digital` |
+| Empresa B | Misma URL respondio `Warehouse not found or access denied` |
 | Payload XSS probado | |
 | Screenshots | |
+
+Notas:
+
+- API privada sin login probada con `/api/warehouses`: 401 `Authentication required`.
+- Falta cerrar XSS, camionero contra `/admin` y storage antes de marcar E2E-13 como PASS total.
 
 ---
 
@@ -87,22 +92,30 @@
 
 ### Tiene que pasar esto
 
-- [ ] Lending no aparece activo.
-- [ ] Advances API no crea solicitud nueva.
-- [ ] Links no tienen `localhost`.
-- [ ] Rate limit no rompe la app y responde claro.
-- [ ] No permite retirar mas del disponible.
+- [x] Lending no aparece activo.
+- [x] Advances API no crea solicitud nueva.
+- [x] Links no tienen `localhost`.
+- [x] Rate limit no rompe la app y responde claro.
+- [x] No permite retirar mas del disponible.
 - [ ] No duplica pago ni retiro.
-- [ ] No aparecen secretos en respuestas o logs visibles.
+- [x] No aparecen secretos en respuestas o logs visibles.
 
 ### Resultado
 
 | Campo | Valor |
 |---|---|
-| Estado | PASS / FAIL / BLOCKED |
-| Fecha y hora | |
-| Links revisados | |
-| Rate limit probado | SI / NO |
-| Doble click probado | SI / NO |
+| Estado | PARTIAL - fix desplegado, pendiente retest manual |
+| Fecha y hora | 2026-05-28 |
+| Links revisados | Reset password con redirect a `https://kargax-staging.vercel.app/auth/reset-password`; sin `localhost` |
+| Rate limit probado | SI - primer 429 en intento 25 contra `/api/auth/session` |
+| Doble click probado | NO - backend y UI endurecidos con idempotencia; falta repetir con camionero AAL2 real |
 | Screenshots | |
 
+Notas:
+
+- Lending/adelantos no aparece activo en UI publica: validado manualmente por QA.
+- API `/api/advances` con camionero QA autenticado devolvio 403: `Los adelantos KargaX estan pausados durante Acceso Operativo.` Conteo antes/despues en `fuel_advances`: 0 -> 0 para el usuario temporal.
+- Reset password tenia bug real: permitia quedar con la sesion anterior despues de actualizar password. Se corrigio para exigir enlace de recuperacion valido y cerrar sesion global al guardar la nueva contrasena.
+- Pendiente retest reset password: abrir el link del correo, cambiar contrasena, confirmar que la contrasena vieja ya no entra y la nueva si entra.
+- Pendiente retest doble click/reintento: con camionero real que tenga AAL2, enviar dos veces el mismo retiro y confirmar una sola transaccion activa `withdrawal` y un solo `payout_attempt` por `idempotency_key`.
+- Secret scan en respuestas visibles PASS: `/api/warehouses`, `/api/jobs/payouts/process`, `/api/health` y `/api/advances` no expusieron secretos ni stack traces.

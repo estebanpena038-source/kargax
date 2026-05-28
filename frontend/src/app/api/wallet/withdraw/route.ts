@@ -26,6 +26,7 @@ interface WithdrawalRequest {
         documentNumber?: string;
     };
     saveMethod: boolean;
+    idempotencyKey?: string;
 }
 
 interface WithdrawalAdminNotification {
@@ -66,6 +67,23 @@ function maskSensitiveDigits(value: string | undefined | null) {
     const digits = normalizeDigits(value);
     if (!digits) return '****';
     return `****${digits.slice(-4)}`;
+}
+
+function normalizeWithdrawalIdempotencyKey(value: unknown, userId: string) {
+    if (typeof value !== 'string') {
+        return `withdrawal:${userId}:${crypto.randomUUID()}`;
+    }
+
+    const normalized = value.trim();
+    if (!normalized) {
+        return `withdrawal:${userId}:${crypto.randomUUID()}`;
+    }
+
+    if (!/^withdrawal:[a-zA-Z0-9:._-]{8,180}$/.test(normalized)) {
+        return null;
+    }
+
+    return normalized;
 }
 
 function isMarketplaceEligibleCredit(row: Record<string, any>) {
@@ -230,6 +248,80 @@ function mapWithdrawalRpcError(errorMessage?: string | null, resultMessage?: str
     return 'No pudimos crear la solicitud de retiro. Intenta nuevamente en unos minutos.';
 }
 
+async function findExistingWithdrawalByIdempotencyKey(
+    supabaseAdmin: any,
+    walletId: string,
+    idempotencyKey: string
+) {
+    const { data, error } = await supabaseAdmin
+        .from('transactions')
+        .select('id, status, amount, balance_after, payout_attempt_id, metadata, created_at')
+        .eq('wallet_id', walletId)
+        .eq('type', 'withdrawal')
+        .neq('status', 'cancelled')
+        .eq('metadata->>idempotency_key', idempotencyKey)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+    if (error) {
+        throw new Error(error.message || 'No se pudo validar reintento de retiro');
+    }
+
+    return data as Record<string, any> | null;
+}
+
+async function cancelDuplicateWithdrawal(
+    supabaseAdmin: any,
+    walletId: string,
+    duplicateRequestId: string,
+    duplicateAmount: number,
+    originalRequestId: string,
+    idempotencyKey: string
+) {
+    const { data: duplicateTransaction } = await supabaseAdmin
+        .from('transactions')
+        .select('metadata')
+        .eq('id', duplicateRequestId)
+        .maybeSingle();
+
+    const existingMetadata = duplicateTransaction?.metadata
+        && typeof duplicateTransaction.metadata === 'object'
+        && !Array.isArray(duplicateTransaction.metadata)
+        ? duplicateTransaction.metadata
+        : {};
+
+    await supabaseAdmin
+        .from('transactions')
+        .update({
+            status: 'cancelled',
+            locked_for_payout: false,
+            payout_eligible: false,
+            metadata: {
+                ...existingMetadata,
+                idempotency_key: idempotencyKey,
+                duplicate_of: originalRequestId,
+                cancelled_reason: 'duplicate_withdrawal_retry',
+                cancelled_at: new Date().toISOString(),
+            },
+        })
+        .eq('id', duplicateRequestId);
+
+    const { data: wallet } = await supabaseAdmin
+        .from('wallets')
+        .select('available_balance')
+        .eq('id', walletId)
+        .maybeSingle();
+
+    await supabaseAdmin
+        .from('wallets')
+        .update({
+            available_balance: Number(wallet?.available_balance || 0) + Math.abs(Number(duplicateAmount || 0)),
+            updated_at: new Date().toISOString(),
+        })
+        .eq('id', walletId);
+}
+
 function toCanonicalPayoutMethod(
     method: WithdrawalRequest['paymentMethod'],
     bankName: string | undefined
@@ -268,6 +360,11 @@ export async function POST(request: NextRequest) {
         if ('error' in validated) {
             return NextResponse.json({ error: validated.error }, { status: 400 });
         }
+        const idempotencyKey = normalizeWithdrawalIdempotencyKey(body.idempotencyKey, authUser.id);
+        if (!idempotencyKey) {
+            return NextResponse.json({ error: 'No pudimos validar este intento de retiro. Cierra la ventana e intenta de nuevo.' }, { status: 400 });
+        }
+
         const { amount, paymentMethod, bankDetails } = validated;
         const saveMethod = Boolean(body.saveMethod);
         const flags = await getFeatureFlags(supabaseAdmin);
@@ -284,6 +381,32 @@ export async function POST(request: NextRequest) {
 
         if (walletError || !wallet) {
             return NextResponse.json({ error: 'Billetera no encontrada' }, { status: 404 });
+        }
+
+        const existingWithdrawal = await findExistingWithdrawalByIdempotencyKey(
+            supabaseAdmin,
+            wallet.id,
+            idempotencyKey
+        );
+
+        if (existingWithdrawal) {
+            const existingPayoutAttempt = existingWithdrawal.payout_attempt_id
+                ? await supabaseAdmin
+                    .from('payout_attempts')
+                    .select('id, status, provider, method')
+                    .eq('id', existingWithdrawal.payout_attempt_id)
+                    .maybeSingle()
+                : { data: null };
+
+            return NextResponse.json({
+                success: true,
+                message: 'Solicitud de retiro ya registrada. No se creo una solicitud duplicada.',
+                payoutMode: automaticPayoutsEnabled ? 'automatic' : 'manual',
+                request_id: existingWithdrawal.id,
+                payoutAttemptId: existingWithdrawal.payout_attempt_id || null,
+                payout: existingPayoutAttempt.data || null,
+                duplicate: true,
+            });
         }
 
         let marketplaceWithdrawableBeforeSweep = {
@@ -410,6 +533,7 @@ export async function POST(request: NextRequest) {
                 document_type: bankDetails.documentType,
                 document_number_last4: bankDetails.documentNumber.slice(-4),
                 source_kind: 'withdrawal_request',
+                idempotency_key: idempotencyKey,
                 payout_method: canonicalPayoutMethod,
                 payout_provider: payoutProvider,
                 automatic_payouts_enabled: automaticPayoutsEnabled,
@@ -423,9 +547,36 @@ export async function POST(request: NextRequest) {
                 error: mapWithdrawalRpcError(withdrawalError?.message, withdrawalRequest?.message),
             }, { status: 500 });
         }
+        const duplicateRequestFromRpc = String(withdrawalRequest.message || '').toLowerCase().includes('ya registrada');
+
+        const originalWithdrawal = await findExistingWithdrawalByIdempotencyKey(
+            supabaseAdmin,
+            refreshedWallet.id,
+            idempotencyKey
+        );
+
+        if (originalWithdrawal && originalWithdrawal.id !== withdrawalRequest.request_id) {
+            await cancelDuplicateWithdrawal(
+                supabaseAdmin,
+                refreshedWallet.id,
+                withdrawalRequest.request_id,
+                Number(amount),
+                originalWithdrawal.id,
+                idempotencyKey
+            );
+
+            return NextResponse.json({
+                success: true,
+                message: 'Solicitud de retiro ya registrada. No se creo una solicitud duplicada.',
+                payoutMode: automaticPayoutsEnabled ? 'automatic' : 'manual',
+                request_id: originalWithdrawal.id,
+                payoutAttemptId: originalWithdrawal.payout_attempt_id || null,
+                payout: null,
+                duplicate: true,
+            });
+        }
 
         const marketplaceBalanceAfter = Math.max(marketplaceBalanceBefore - Number(amount), 0);
-        const idempotencyKey = `withdrawal:${withdrawalRequest.request_id}:${Number(amount).toFixed(2)}`;
         const payoutStatus = automaticPayoutsEnabled ? 'queued' : 'manual_review';
 
         const { data: payoutAttempt, error: payoutAttemptError } = await supabaseAdmin
@@ -491,6 +642,7 @@ export async function POST(request: NextRequest) {
                     payment_method: paymentMethod,
                     requested_by: authUser.id,
                     source_kind: 'withdrawal_request',
+                    idempotency_key: idempotencyKey,
                     payout_attempt_id: payoutAttempt?.id,
                     payout_status: payoutAttempt?.status,
                     payout_provider: payoutAttempt?.provider,
@@ -499,6 +651,18 @@ export async function POST(request: NextRequest) {
                 },
             })
             .eq('id', withdrawalRequest.request_id);
+
+        if (duplicateRequestFromRpc) {
+            return NextResponse.json({
+                success: true,
+                message: 'Solicitud de retiro ya registrada. No se creo una solicitud duplicada.',
+                payoutMode: automaticPayoutsEnabled ? 'automatic' : 'manual',
+                request_id: withdrawalRequest.request_id,
+                payoutAttemptId: payoutAttempt?.id || null,
+                payout: payoutAttempt,
+                duplicate: true,
+            });
+        }
 
         const notificationData = {
             request_id: withdrawalRequest.request_id,
