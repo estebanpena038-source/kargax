@@ -4,7 +4,7 @@ import * as React from 'react';
 import Link from 'next/link';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronLeft, ChevronRight, LogOut, Sparkles } from 'lucide-react';
-import { KargaxLogo, Select, Tooltip } from '@/components/ui';
+import { KargaxLogo, Select } from '@/components/ui';
 import { useTranslation } from '@/lib/i18n';
 import { useAuthStore } from '@/features/auth/store/authStore';
 import { cn } from '@/lib/utils';
@@ -97,6 +97,8 @@ const SidebarNavItem = React.memo(function SidebarNavItem({
         <Link
             href={item.href}
             onClick={onClick}
+            title={isCollapsed ? label : undefined}
+            aria-label={isCollapsed ? label : undefined}
             className={cn(
                 'group relative flex min-h-12 items-center gap-3 overflow-hidden rounded-2xl px-3 py-2.5',
                 'transition-[background,color,box-shadow,transform] duration-200 ease-out',
@@ -167,15 +169,7 @@ const SidebarNavItem = React.memo(function SidebarNavItem({
         </Link>
     );
 
-    if (!isCollapsed) {
-        return link;
-    }
-
-    return (
-        <Tooltip content={label} side="right" delayDuration={120}>
-            {link}
-        </Tooltip>
-    );
+    return link;
 });
 
 function NavigationSection({
@@ -202,11 +196,9 @@ function NavigationSection({
     return (
         <section className="space-y-2" aria-label={meta.title}>
             {isCollapsed ? (
-                <Tooltip content={meta.title} side="right" delayDuration={120}>
-                    <div className="flex justify-center py-1">
-                        <span className="h-1.5 w-1.5 rounded-full bg-zinc-300" />
-                    </div>
-                </Tooltip>
+                <div className="flex justify-center py-1" title={meta.title} aria-label={meta.title}>
+                    <span className="h-1.5 w-1.5 rounded-full bg-zinc-300" />
+                </div>
             ) : (
                 <div className="px-2 pt-3">
                     <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-400">
