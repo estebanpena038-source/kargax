@@ -6,6 +6,13 @@ type SearchParamsLike = {
     toString(): string;
 } | null | undefined;
 
+type EstablishSessionOptions = {
+    allowExistingSessionFallback?: boolean;
+};
+
+const RECOVERY_SESSION_MARKER_KEY = 'kargax:auth:recovery-session';
+const RECOVERY_SESSION_MARKER_MAX_AGE_MS = 15 * 60 * 1000;
+
 const AUTH_PARAM_KEYS = [
     'access_token',
     'code',
@@ -17,7 +24,10 @@ const AUTH_PARAM_KEYS = [
     'provider_refresh_token',
     'provider_token',
     'refresh_token',
+    'sb',
+    'token',
     'token_hash',
+    'token_type',
     'type',
 ];
 
@@ -40,6 +50,66 @@ function hasAuthCredentials(searchParams: SearchParamsLike, hashParams: URLSearc
         || getAuthParam(searchParams, hashParams, 'refresh_token')
         || getAuthParam(searchParams, hashParams, 'token_hash')
     );
+}
+
+function getRecoveryStorage() {
+    if (typeof window === 'undefined') {
+        return null;
+    }
+
+    try {
+        return window.sessionStorage;
+    } catch {
+        return null;
+    }
+}
+
+function rememberRecoverySession(session: Session) {
+    const storage = getRecoveryStorage();
+    if (!storage) {
+        return;
+    }
+
+    storage.setItem(
+        RECOVERY_SESSION_MARKER_KEY,
+        JSON.stringify({
+            userId: session.user.id,
+            createdAt: Date.now(),
+        })
+    );
+}
+
+export function clearRecoverySessionMarker() {
+    getRecoveryStorage()?.removeItem(RECOVERY_SESSION_MARKER_KEY);
+}
+
+async function getRecentRecoverySession() {
+    const storage = getRecoveryStorage();
+    const rawMarker = storage?.getItem(RECOVERY_SESSION_MARKER_KEY);
+
+    if (!rawMarker) {
+        return null;
+    }
+
+    try {
+        const marker = JSON.parse(rawMarker) as { userId?: string; createdAt?: number };
+        const isFresh = typeof marker.createdAt === 'number'
+            && Date.now() - marker.createdAt <= RECOVERY_SESSION_MARKER_MAX_AGE_MS;
+
+        if (!marker.userId || !isFresh) {
+            clearRecoverySessionMarker();
+            return null;
+        }
+
+        const session = await getCurrentSession();
+        if (session?.user.id === marker.userId) {
+            return session;
+        }
+    } catch {
+        clearRecoverySessionMarker();
+    }
+
+    return null;
 }
 
 async function getCurrentSession() {
@@ -86,7 +156,10 @@ export function scrubAuthParamsFromBrowserUrl() {
     window.history.replaceState(null, '', nextUrl);
 }
 
-export async function establishSessionFromAuthUrl(searchParams: SearchParamsLike): Promise<Session> {
+export async function establishSessionFromAuthUrl(
+    searchParams: SearchParamsLike,
+    options: EstablishSessionOptions = {}
+): Promise<Session> {
     const hashParams = getHashParams();
     const error = getAuthParam(searchParams, hashParams, 'error');
     const errorDescription = getAuthParam(searchParams, hashParams, 'error_description');
@@ -104,10 +177,12 @@ export async function establishSessionFromAuthUrl(searchParams: SearchParamsLike
     if (code) {
         const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
         if (exchangeError) {
-            const existingSession = await waitForSession(2);
-            if (existingSession) {
-                scrubAuthParamsFromBrowserUrl();
-                return existingSession;
+            if (options.allowExistingSessionFallback !== false) {
+                const existingSession = await waitForSession(2);
+                if (existingSession) {
+                    scrubAuthParamsFromBrowserUrl();
+                    return existingSession;
+                }
             }
 
             throw exchangeError;
@@ -151,6 +226,10 @@ export async function establishSessionFromAuthUrl(searchParams: SearchParamsLike
         }
     }
 
+    if (options.allowExistingSessionFallback === false) {
+        throw new Error('No se pudo crear la sesion desde este enlace. Reenvia el correo e intenta de nuevo.');
+    }
+
     const session = await waitForSession();
     if (!session) {
         throw new Error('No se pudo crear la sesion desde este enlace. Reenvia el correo e intenta de nuevo.');
@@ -165,14 +244,24 @@ export async function establishRecoverySessionFromAuthUrl(searchParams: SearchPa
     const type = getAuthParam(searchParams, hashParams, 'type');
 
     if (!hasAuthCredentials(searchParams, hashParams)) {
-        throw new Error('El enlace de recuperacion no trae credenciales validas. Solicita un enlace nuevo e intenta otra vez.');
+        const recentRecoverySession = await getRecentRecoverySession();
+        if (recentRecoverySession) {
+            return recentRecoverySession;
+        }
+
+        throw new Error('No pudimos leer las credenciales del enlace de recuperacion. Abre el enlace completo desde el correo o solicita uno nuevo.');
     }
 
     if (type && type !== 'recovery') {
         throw new Error('Este enlace no corresponde a recuperacion de contrasena.');
     }
 
-    return establishSessionFromAuthUrl(searchParams);
+    const session = await establishSessionFromAuthUrl(searchParams, {
+        allowExistingSessionFallback: false,
+    });
+    rememberRecoverySession(session);
+
+    return session;
 }
 
 export async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {

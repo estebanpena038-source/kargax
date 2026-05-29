@@ -13,3 +13,7 @@ node_modules/
 *.tsbuildinfo
 **/lint-report.json
 supabase/.temp/
+
+# Local lead exports with contact data; keep out of the public repository.
+CLIENTES5.0(2)/
+CLIENTES6.0/
