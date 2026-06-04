@@ -8,7 +8,12 @@ import KargaxLogo from '@/components/brand/KargaxLogo';
 import { AuthCard, CenteredAuthState, MatteSpinner } from '@/components/public/PublicLuxury';
 import { Button, toast } from '@/components/ui';
 import { updatePassword } from '@/lib/supabase/auth';
-import { establishRecoverySessionFromAuthUrl, getAuthUrlKey, withTimeout } from '@/lib/auth/url-session';
+import {
+  clearRecoverySessionMarker,
+  establishRecoverySessionFromAuthUrl,
+  getAuthUrlKey,
+  withTimeout,
+} from '@/lib/auth/url-session';
 
 function ResetPasswordForm() {
   const router = useRouter();
@@ -19,22 +24,31 @@ function ResetPasswordForm() {
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [isPreparingSession, setIsPreparingSession] = React.useState(true);
   const [sessionError, setSessionError] = React.useState<string | null>(null);
+  const recoveryReadyRef = React.useRef(false);
+  const recoveryPromiseRef = React.useRef<Promise<void> | null>(null);
 
   React.useEffect(() => {
     let active = true;
 
     const prepareRecoverySession = async () => {
       try {
-        await withTimeout(
-          establishRecoverySessionFromAuthUrl(searchParams),
-          20000,
-          'El enlace tardo demasiado validando la sesion. Solicita uno nuevo e intenta de nuevo.'
-        );
+        if (!recoveryReadyRef.current && !recoveryPromiseRef.current) {
+          recoveryPromiseRef.current = withTimeout(
+            establishRecoverySessionFromAuthUrl(searchParams),
+            20000,
+            'El enlace tardo demasiado validando la sesion. Solicita uno nuevo e intenta de nuevo.'
+          ).then(() => {
+            recoveryReadyRef.current = true;
+          });
+        }
+
+        await recoveryPromiseRef.current;
 
         if (active) {
           setSessionError(null);
         }
       } catch (error) {
+        recoveryPromiseRef.current = null;
         if (active) {
           setSessionError(error instanceof Error ? error.message : 'No se pudo preparar la recuperacion');
         }
@@ -79,6 +93,7 @@ function ResetPasswordForm() {
       return;
     }
 
+    clearRecoverySessionMarker();
     toast.success('Contrasena actualizada', 'Ya puedes iniciar sesion con tu nueva contrasena');
     router.push('/login');
   };

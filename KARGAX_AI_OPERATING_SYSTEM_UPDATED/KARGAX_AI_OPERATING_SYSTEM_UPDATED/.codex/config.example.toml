@@ -1,0 +1,79 @@
+# .codex/config.example.toml
+# Copia como .codex/config.toml si quieres defaults del proyecto.
+
+[workspace]
+name = "kargax"
+root_hint = "."
+
+[behavior]
+planning_first = true
+summarize_changes = true
+small_diffs = true
+
+[review]
+require_tests_summary = true
+require_risk_summary = true
+require_rollback_plan = true
+
+[project]
+important_paths = [
+  "AGENTS.md",
+  "GPT.md",
+  "AI_PROMPTS.md",
+  "README.md",
+  "frontend/AGENTS.md",
+  "supabase/AGENTS.md",
+  "frontend/package.json",
+  "package.json",
+  "scripts/repo-audit.mjs",
+  "scripts/check-role-policy.mjs",
+  "scripts/security-audit.mjs",
+  "frontend/src/app/planes/page.tsx",
+  "frontend/src/lib/billing/pricing.ts",
+  "frontend/src/lib/billing/plan-limits.ts",
+  "frontend/src/app/api/billing/paywall-events/route.ts",
+  "frontend/src/app/dashboard/control-margen/page.tsx",
+  "frontend/src/components/last-mile",
+  "frontend/src/lib/last-mile",
+  "frontend/src/app/api/last-mile",
+  "frontend/src/lib/server/role-policy.ts",
+  "supabase/migrations",
+  "COMMERCIAL",
+  "LAST-MILLA",
+  "SPTRINTS",
+  "docs/ai"
+]
+
+[commands]
+root_audit = "npm run repo:audit"
+role_policy = "npm run check:roles"
+security_audit = "npm run security:audit"
+root_check = "npm run check"
+root_release_check = "npm run check:release"
+frontend_lint = "npm --prefix frontend run lint"
+frontend_typecheck = "npm --prefix frontend run typecheck"
+frontend_build = "npm --prefix frontend run build"
+frontend_check = "npm --prefix frontend run check"
+frontend_release = "npm --prefix frontend run check:release"
+frontend_visual_qa = "npm --prefix frontend run visual:qa"
+frontend_smoke = "npm --prefix frontend run smoke:release"
+frontend_algorithms = "npm --prefix frontend run test:algorithms"
+frontend_payment_debug = "npm --prefix frontend run debug:payment"
+
+[risk]
+high_risk_paths = [
+  "frontend/src/app/api/billing",
+  "frontend/src/app/api/payments",
+  "frontend/src/app/api/last-mile",
+  "frontend/src/lib/server/role-policy.ts",
+  "frontend/src/lib/server/warehouses.ts",
+  "frontend/src/lib/billing",
+  "frontend/src/lib/last-mile",
+  "supabase/migrations",
+  "LAST-MILLA/sql",
+  "frontend/src/lib/wallet",
+  "frontend/src/app/api/wallet"
+]
+
+# Nota:
+# Adapta la sintaxis a tu cliente Codex si usa otro formato exacto.

@@ -22,6 +22,7 @@ const PUBLIC_ROUTES = [
     '/verificar-email',
     '/recuperar-contrasena',
     '/auth/callback',
+    '/auth/reset-password',
     '/api/auth/session',
     '/api/market/context',
     '/api/onboarding/status',
