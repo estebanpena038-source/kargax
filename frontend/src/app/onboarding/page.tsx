@@ -536,6 +536,12 @@ export default function OnboardingPage() {
         }
     }, [isInitialized, isAuthenticated, router]);
 
+    React.useEffect(() => {
+        if (user?.userType === 'admin') {
+            router.replace('/admin/ceo');
+        }
+    }, [router, user?.userType]);
+
     // Initialize auth if needed
     React.useEffect(() => {
         if (!isInitialized) void initialize();

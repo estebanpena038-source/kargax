@@ -117,7 +117,7 @@ export function AuthFlowGate() {
                 // ─────────────────────────────────────────────
                 if (cancelled) return;
 
-                const onboardingDone = user.onboardingCompleted === true;
+                const onboardingDone = user.userType === 'admin' || user.onboardingCompleted === true;
 
                 // User hasn't completed onboarding → force them there
                 // (unless they're already on /onboarding or an exempt path)
