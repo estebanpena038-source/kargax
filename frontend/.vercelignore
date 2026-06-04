@@ -1,0 +1,8 @@
+.env*
+.vercel
+.next
+node_modules
+*.log
+*.err.log
+lint-report.json
+tsconfig.tsbuildinfo
