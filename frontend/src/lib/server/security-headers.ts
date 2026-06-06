@@ -1,5 +1,6 @@
 export interface SecurityHeaderOptions {
     includeStrictTransportSecurity?: boolean;
+    includeContentSecurityPolicyReportOnly?: boolean;
 }
 
 const CONTENT_SECURITY_POLICY_DIRECTIVES = [
@@ -31,9 +32,19 @@ export function shouldIncludeStrictTransportSecurity() {
     return isStrictProductionEnvironment();
 }
 
+export function shouldIncludeContentSecurityPolicyReportOnly() {
+    return (
+        process.env.CSP_REPORT_ONLY === 'true'
+        || process.env.CONTENT_SECURITY_POLICY_REPORT_ONLY === 'true'
+        || process.env.VERCEL_ENV === 'preview'
+    );
+}
+
 export function getSecurityHeaderEntries(options: SecurityHeaderOptions = {}) {
     const includeStrictTransportSecurity =
         options.includeStrictTransportSecurity ?? shouldIncludeStrictTransportSecurity();
+    const includeContentSecurityPolicyReportOnly =
+        options.includeContentSecurityPolicyReportOnly ?? shouldIncludeContentSecurityPolicyReportOnly();
 
     const headers = [
         {
@@ -80,6 +91,13 @@ export function getSecurityHeaderEntries(options: SecurityHeaderOptions = {}) {
         headers.push({
             key: 'Strict-Transport-Security',
             value: 'max-age=63072000; includeSubDomains; preload',
+        });
+    }
+
+    if (includeContentSecurityPolicyReportOnly) {
+        headers.push({
+            key: 'Content-Security-Policy-Report-Only',
+            value: CONTENT_SECURITY_POLICY,
         });
     }
 

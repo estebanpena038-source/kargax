@@ -22,7 +22,6 @@ import {
     ChevronRight,
     Clock,
     Coins,
-    CreditCard,
     DollarSign,
     History,
     Landmark,
@@ -609,11 +608,32 @@ export default function WalletPage() {
         .filter((transaction) => !isPrivateFleetFinancialTransaction(transaction));
     const latestWithdrawal = pendingWithdrawals[0] || transactions.find((item) => item.type === 'withdrawal') || null;
     const canWithdraw = Boolean(marketplaceWallet?.canWithdraw ?? Number(withdrawableMarketplaceBalance || 0) >= MIN_WITHDRAWAL_AMOUNT);
-    const walletCardNumber = useMemo(() => {
-        const seed = (wallet?.id || authUser?.id || 'kargaxwallet').replace(/-/g, '').toUpperCase().padEnd(16, '0');
-        return `KX ${seed.slice(0, 4)} ${seed.slice(4, 8)} ${seed.slice(8, 12)}`;
-    }, [authUser?.id, wallet?.id]);
-
+    const operationalWalletTiles = [
+        {
+            label: 'Disponible para retiro',
+            value: formatCOP(withdrawableMarketplaceBalance || 0),
+            detail: 'Saldo marketplace confirmado para solicitud operativa.',
+            icon: Wallet,
+        },
+        {
+            label: 'Pendiente marketplace',
+            value: formatCOP(marketplaceWallet?.pendingReleaseCop || 0),
+            detail: 'Viajes confirmados en proceso de liberacion.',
+            icon: Clock,
+        },
+        {
+            label: 'En proceso de retiro',
+            value: formatCOP(marketplaceWallet?.payoutProcessingCop || 0),
+            detail: 'Saldo reservado por solicitudes activas.',
+            icon: ShieldCheck,
+        },
+        {
+            label: 'Pagado este mes',
+            value: formatCOP(marketplaceWallet?.paidThisMonthCop || 0),
+            detail: 'Retiros completados en el periodo.',
+            icon: BadgeCheck,
+        },
+    ];
     const summaryCards = [
         {
             label: 'Comprobantes privados',
@@ -685,7 +705,7 @@ export default function WalletPage() {
             value: 'checking' as const,
             title: 'Cuenta corriente',
             detail: 'Transferencia validada antes de procesar.',
-            icon: CreditCard,
+            icon: Landmark,
         },
     ];
 
@@ -829,109 +849,68 @@ export default function WalletPage() {
                 <motion.section
                     initial={{ opacity: 0, y: 18 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="mx-auto w-full max-w-3xl"
-                    aria-label="Tarjeta premium KargaX Wallet"
+                    className="rounded-lg border border-zinc-200 bg-white p-5 shadow-[0_18px_48px_-38px_rgba(10,10,10,.55)] sm:p-6"
+                    aria-label="Panel de saldo operativo KargaX Wallet"
                 >
-                    <div className="relative aspect-[1.586/1] min-h-[252px] overflow-hidden rounded-lg border border-zinc-700 bg-[#050505] p-6 text-white shadow-[0_42px_120px_-56px_rgba(0,0,0,.98)] sm:p-8">
-                        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_12%,rgba(255,255,255,.16),transparent_28%),linear-gradient(135deg,rgba(255,255,255,.12),transparent_31%,rgba(255,255,255,.055)_68%,transparent),repeating-linear-gradient(90deg,rgba(255,255,255,.045)_0,rgba(255,255,255,.045)_1px,transparent_1px,transparent_28px)]" />
-                        <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-white/50 to-transparent" />
-                        <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full border border-white/10" />
-                        <div className="pointer-events-none absolute -bottom-20 -left-16 h-56 w-56 rounded-full border border-white/10" />
-                        <div className="pointer-events-none absolute right-8 top-8 grid grid-cols-5 gap-1 opacity-25">
-                            {Array.from({ length: 25 }).map((_, index) => (
-                                <span key={index} className="h-1 w-1 rounded-full bg-white/70" />
-                            ))}
+                    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start">
+                        <div className="min-w-0">
+                            <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Saldo operativo KargaX</p>
+                            <h1 className="mt-2 text-2xl font-semibold text-zinc-950 sm:text-3xl">
+                                Ledger marketplace para retiros verificados
+                            </h1>
+                            <p className="mt-3 max-w-3xl text-sm leading-6 text-zinc-600">
+                                Este panel muestra saldo operativo de marketplace confirmado. No es medio de pago, cuenta bancaria,
+                                deposito ni producto de credito. Las liquidaciones privadas externas se registran como soporte
+                                y no aumentan el saldo disponible para retiro.
+                            </p>
+                            {marketplaceWallet && Math.abs(Number(marketplaceWallet.balanceMismatchCop || 0)) > 0 ? (
+                                <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-950">
+                                    Operaciones tiene una diferencia historica de {formatCOP(Math.abs(Number(marketplaceWallet.balanceMismatchCop || 0)))} entre saldo historico y saldo validado de marketplace. Tu retiro usa solo el saldo marketplace validado.
+                                </div>
+                            ) : null}
                         </div>
 
-                        <div className="relative flex h-full flex-col justify-between">
-                            <div className="flex items-start justify-between gap-4">
-                                <div>
-                                    <p className="font-sans text-[11px] uppercase tracking-[0.28em] text-white/48">KargaX Marketplace</p>
-                                    <p className="mt-1 font-display text-lg font-semibold text-white sm:text-xl">Saldo para retiro</p>
+                        <div className="rounded-lg border border-zinc-200 bg-zinc-950 p-4 text-white">
+                            <div className="flex items-start gap-3">
+                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/10">
+                                    <Wallet className="h-5 w-5" />
                                 </div>
-                                <div className="flex h-12 w-12 items-center justify-center rounded-lg border border-white/15 bg-white/[0.075] shadow-[inset_0_1px_0_rgba(255,255,255,.18)]">
-                                    <span className="font-display text-lg font-semibold">KX</span>
-                                </div>
-                            </div>
-
-                            <div className="grid gap-6 sm:grid-cols-[auto_1fr] sm:items-end">
-                                <div className="grid h-12 w-16 grid-cols-3 gap-1 rounded-md border border-white/20 bg-[linear-gradient(135deg,rgba(255,255,255,.30),rgba(255,255,255,.05))] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,.20)]">
-                                    {Array.from({ length: 6 }).map((_, index) => (
-                                        <span key={index} className="rounded-sm bg-white/20" />
-                                    ))}
-                                </div>
-                                <div className="min-w-0 sm:text-right">
-                                    <p className="font-sans text-[11px] uppercase tracking-[0.24em] text-white/45">Marketplace disponible</p>
-                                    <p className="font-money mt-1 text-4xl font-bold tracking-normal text-white sm:text-5xl">
+                                <div className="min-w-0">
+                                    <p className="text-xs uppercase tracking-[0.18em] text-white/50">Disponible para retiro</p>
+                                    <p className="font-money mt-2 break-words text-3xl font-semibold sm:text-4xl">
                                         {formatCOP(withdrawableMarketplaceBalance || 0)}
                                     </p>
                                 </div>
                             </div>
-
-                            <div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
-                                <div className="min-w-0">
-                                    <p className="font-money text-base font-semibold text-white/90 sm:text-lg">{walletCardNumber}</p>
-                                    <p className="mt-3 font-sans text-[11px] uppercase tracking-[0.24em] text-white/45">Titular</p>
-                                    <p className="mt-1 truncate font-display text-base font-semibold text-white sm:text-lg">
-                                        {authUser?.fullName || 'Conductor KargaX'}
-                                    </p>
-                                </div>
-                                <div className="text-left sm:text-right">
-                                    <p className="font-sans text-[10px] uppercase tracking-[0.24em] text-white/40">Control KX</p>
-                                    <p className="mt-1 font-display text-sm font-semibold text-white">KX Verified</p>
-                                </div>
-                            </div>
+                            <Button
+                                onClick={openWithdrawModal}
+                                disabled={!canWithdraw}
+                                variant="secondary"
+                                className="mt-4 h-12 w-full"
+                            >
+                                <ArrowUpCircle className="h-4 w-4" />
+                                Solicitar retiro
+                            </Button>
+                            <p className="mt-3 text-xs leading-5 text-white/55">
+                                Minimo visible: {formatCOP(MIN_WITHDRAWAL_AMOUNT)}.
+                            </p>
                         </div>
                     </div>
-                </motion.section>
 
-                <motion.section
-                    initial={{ opacity: 0, y: 18 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.02 }}
-                    className="grid gap-4 rounded-lg border border-zinc-200 bg-white p-5 shadow-[0_18px_48px_-38px_rgba(10,10,10,.55)] lg:grid-cols-[1fr_auto]"
-                >
-                    <div>
-                        <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Informacion de billetera</p>
-                        <h2 className="mt-2 text-xl font-semibold text-zinc-950">Saldo marketplace y liquidaciones</h2>
-                        <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-600">
-                            El saldo para retiro corresponde a marketplace confirmado. Las liquidaciones de flota privada
-                            se registran como comprobante externo y no aumentan el saldo de retiro.
-                        </p>
-                        {marketplaceWallet && Math.abs(Number(marketplaceWallet.balanceMismatchCop || 0)) > 0 ? (
-                            <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm leading-6 text-zinc-600">
-                                Operaciones tiene una diferencia historica de {formatCOP(Math.abs(Number(marketplaceWallet.balanceMismatchCop || 0)))} entre saldo historico y saldo validado de marketplace. Tu retiro usa solo el saldo marketplace validado.
-                            </div>
-                        ) : null}
-                        <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                            <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4">
-                                <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Pendiente marketplace</p>
-                                <p className="font-money mt-2 text-lg font-semibold text-zinc-950">{formatCOP(marketplaceWallet?.pendingReleaseCop || 0)}</p>
-                            </div>
-                            <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4">
-                                <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Pagado este mes</p>
-                                <p className="font-money mt-2 text-lg font-semibold text-zinc-950">{formatCOP(marketplaceWallet?.paidThisMonthCop || 0)}</p>
-                            </div>
-                            <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4">
-                                <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Base marketplace</p>
-                                <p className="font-money mt-2 text-lg font-semibold text-zinc-950">{formatCOP(marketplaceWallet?.derivedAvailableCop || 0)}</p>
-                            </div>
-                        </div>
-                    </div>
-                    <div className="flex flex-col justify-between gap-3 rounded-lg border border-zinc-200 bg-zinc-950 p-4 text-white lg:w-64">
-                        <div>
-                            <p className="text-xs uppercase tracking-[0.18em] text-white/50">Retiro minimo</p>
-                            <p className="font-money mt-2 text-2xl font-semibold">{formatCOP(MIN_WITHDRAWAL_AMOUNT)}</p>
-                        </div>
-                        <Button
-                            onClick={openWithdrawModal}
-                            disabled={!canWithdraw}
-                            variant="secondary"
-                            className="h-12 w-full"
-                        >
-                            <ArrowUpCircle className="h-4 w-4" />
-                            Solicitar retiro
-                        </Button>
+                    <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                        {operationalWalletTiles.map((item) => {
+                            const Icon = item.icon;
+                            return (
+                                <div key={item.label} className="min-w-0 rounded-lg border border-zinc-200 bg-zinc-50 p-4">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">{item.label}</p>
+                                        <Icon className="h-4 w-4 shrink-0 text-zinc-500" />
+                                    </div>
+                                    <p className="font-money mt-2 break-words text-lg font-semibold text-zinc-950">{item.value}</p>
+                                    <p className="mt-2 text-xs leading-5 text-zinc-500">{item.detail}</p>
+                                </div>
+                            );
+                        })}
                     </div>
                 </motion.section>
 
@@ -1046,7 +1025,7 @@ export default function WalletPage() {
                                 <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Metodo de retiro</p>
                                 <h2 className="mt-2 text-xl font-semibold text-zinc-950">Destino seguro</h2>
                             </div>
-                            <CreditCard className="h-5 w-5 text-zinc-500" />
+                            <ShieldCheck className="h-5 w-5 text-zinc-500" />
                         </div>
 
                         {defaultPaymentMethod ? (
@@ -1054,7 +1033,7 @@ export default function WalletPage() {
                                 <div className="flex items-start justify-between gap-4">
                                     <div className="flex gap-3">
                                         <div className="flex h-11 w-11 items-center justify-center rounded-lg border border-zinc-200 bg-white">
-                                            <CreditCard className="h-5 w-5 text-zinc-950" />
+                                            <Landmark className="h-5 w-5 text-zinc-950" />
                                         </div>
                                         <div>
                                             <p className="font-semibold text-zinc-950">

@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { apiError, apiSuccess, getRequestId } from '@/lib/server/api-response';
-import { getSupabaseAdmin } from '@/lib/server/route-auth';
+import { getSupabaseAdmin, requireInternalApiKeyRoute } from '@/lib/server/route-auth';
 import {
     getMonthRange,
     lastMileRecomputeSchema,
@@ -10,23 +10,12 @@ import {
 
 export async function POST(request: NextRequest) {
     const requestId = getRequestId(request);
-    const expectedKey = process.env.INTERNAL_API_KEY;
-    const providedKey = request.headers.get('x-internal-api-key')?.trim();
+    const internalAuth = requireInternalApiKeyRoute(request, {
+        code: 'LAST_MILE_JOB_UNAUTHORIZED',
+    });
 
-    if (!expectedKey) {
-        return apiError('INTERNAL_API_KEY no esta configurado para jobs internos', {
-            status: 500,
-            code: 'LAST_MILE_JOB_KEY_MISSING',
-            requestId,
-        });
-    }
-
-    if (providedKey !== expectedKey) {
-        return apiError('No autorizado para ejecutar job Last-Mile', {
-            status: 401,
-            code: 'LAST_MILE_JOB_UNAUTHORIZED',
-            requestId,
-        });
+    if ('response' in internalAuth) {
+        return internalAuth.response;
     }
 
     try {

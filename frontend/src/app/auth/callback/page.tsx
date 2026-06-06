@@ -14,12 +14,12 @@ async function waitForProfile(userId: string) {
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const { data, error } = await supabase
       .from('user_profiles')
-      .select('onboarding_completed')
+      .select('onboarding_completed, user_type')
       .eq('id', userId)
       .maybeSingle();
 
     if (!error && data) {
-      return data as { onboarding_completed?: boolean };
+      return data as { onboarding_completed?: boolean; user_type?: string };
     }
 
     await new Promise((resolve) => setTimeout(resolve, 350 * (attempt + 1)));
@@ -63,7 +63,11 @@ function AuthCallbackPageContent() {
             waitForProfile(session.user.id),
             getMfaStatus(),
           ]);
-          const target = !profile?.onboarding_completed ? '/onboarding' : '/dashboard';
+          const target = profile?.user_type === 'admin'
+            ? '/admin/ceo'
+            : !profile?.onboarding_completed
+              ? '/onboarding'
+              : '/dashboard';
           router.push(getPostAuthRoute(mfaStatus, target));
         }, 1200);
       } catch (error) {
@@ -126,4 +130,3 @@ export default function AuthCallbackPage() {
     </React.Suspense>
   );
 }
-

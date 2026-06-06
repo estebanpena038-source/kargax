@@ -19,6 +19,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { isNonStrictProductionEnvironment, isStrictProductionEnvironment } from '@/lib/server/runtime-env';
 import { normalizePhoneForNotification, type AndeanCountryCode } from '@/lib/phone/andean';
+import { getInternalApiKeyFromRequest, safelyCompareSecrets } from '@/lib/server/route-auth';
 
 // =============================================================================
 // TYPES
@@ -169,6 +170,11 @@ function getNotificationProvider(): NotificationProvider {
     }
 }
 
+function maskPhoneForLog(value: string) {
+    const digits = value.replace(/\D/g, '');
+    return digits ? `****${digits.slice(-4)}` : '****';
+}
+
 // =============================================================================
 // MESSAGE TEMPLATES
 // =============================================================================
@@ -225,14 +231,13 @@ function getMessage(req: InspectionNotificationRequest): string {
 export async function POST(request: NextRequest) {
     // Authentication: internal server-to-server calls may use INTERNAL_API_KEY.
     // User-triggered inspection events may use a Supabase Bearer token instead.
-    const authHeader = request.headers.get('x-internal-api-key');
     const bearerHeader = request.headers.get('authorization');
     const expectedKey = process.env.INTERNAL_API_KEY;
     const isDev = isNonStrictProductionEnvironment();
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-    const hasValidInternalKey = !!expectedKey && authHeader === expectedKey;
+    const hasValidInternalKey = safelyCompareSecrets(getInternalApiKeyFromRequest(request), expectedKey);
 
     let hasValidBearerToken = false;
     if (bearerHeader?.startsWith('Bearer ') && supabaseUrl && serviceRoleKey) {
@@ -266,7 +271,7 @@ export async function POST(request: NextRequest) {
     let body: InspectionNotificationRequest;
     try {
         body = await request.json();
-    } catch (e) {
+    } catch {
         return NextResponse.json(
             { success: false, error: 'Invalid JSON body' },
             { status: 400 }
@@ -298,7 +303,7 @@ export async function POST(request: NextRequest) {
 
     const message = getMessage(body);
 
-    console.log(`[Inspection Notification] Sending ${body.type} to ${body.businessPhone}`);
+    console.log(`[Inspection Notification] Sending ${body.type} to ${maskPhoneForLog(body.businessPhone)}`);
     const smsResult = await provider.sendSMS(body.businessPhone, message, body.countryCode || 'CO');
 
     // Log to database

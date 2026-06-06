@@ -25,6 +25,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { isNonStrictProductionEnvironment, isStrictProductionEnvironment } from '@/lib/server/runtime-env';
 import { normalizePhoneForNotification, type AndeanCountryCode } from '@/lib/phone/andean';
+import { requireInternalApiKeyRoute } from '@/lib/server/route-auth';
 
 // =============================================================================
 // TYPES
@@ -205,6 +206,11 @@ function getNotificationProvider(): NotificationProvider {
     }
 }
 
+function maskPhoneForLog(value: string) {
+    const digits = value.replace(/\D/g, '');
+    return digits ? `****${digits.slice(-4)}` : '****';
+}
+
 // =============================================================================
 // MESSAGE TEMPLATES
 // =============================================================================
@@ -241,24 +247,13 @@ export async function POST(request: NextRequest) {
     // For internal webhook calls, we use a shared secret
     // =========================================================================
 
-    const authHeader = request.headers.get('x-internal-api-key');
-    const expectedKey = process.env.INTERNAL_API_KEY;
-    const isDev = isNonStrictProductionEnvironment();
+    const internalAuth = requireInternalApiKeyRoute(request, {
+        allowInNonProduction: true,
+        code: 'PIN_NOTIFICATION_UNAUTHORIZED',
+    });
 
-    if (!isDev) {
-        if (!expectedKey) {
-            return NextResponse.json(
-                { success: false, error: 'INTERNAL_API_KEY is required in production' },
-                { status: 500 }
-            );
-        }
-
-        if (authHeader !== expectedKey) {
-            return NextResponse.json(
-                { success: false, error: 'Unauthorized' },
-                { status: 401 }
-            );
-        }
+    if ('response' in internalAuth) {
+        return internalAuth.response;
     }
 
     // =========================================================================
@@ -324,7 +319,7 @@ export async function POST(request: NextRequest) {
     const countryCode = body.countryCode || 'CO';
 
     // Send pickup notification
-    console.log(`[PIN Notification] Sending pickup PIN to ${body.pickupContactPhone}`);
+    console.log(`[PIN Notification] Sending pickup PIN to ${maskPhoneForLog(body.pickupContactPhone)}`);
     const pickupResult = await provider.sendSMS(
         body.pickupContactPhone,
         getPickupMessage(body.pickupContactName, body.pickupPin, body.cargoDescription),
@@ -336,7 +331,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Send delivery notification
-    console.log(`[PIN Notification] Sending delivery PIN to ${body.deliveryContactPhone}`);
+    console.log(`[PIN Notification] Sending delivery PIN to ${maskPhoneForLog(body.deliveryContactPhone)}`);
     const deliveryResult = await provider.sendSMS(
         body.deliveryContactPhone,
         getDeliveryMessage(body.deliveryContactName, body.deliveryPin, body.cargoDescription),

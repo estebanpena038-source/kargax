@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { applySecurityHeaders } from '@/lib/server/security-headers';
+import { isStrictProductionEnvironment } from '@/lib/server/runtime-env';
 
 const CORS_ALLOWED_METHODS = 'GET,POST,PUT,PATCH,DELETE,OPTIONS';
 const CORS_ALLOWED_HEADERS = [
@@ -24,14 +25,33 @@ function normalizeOrigin(candidate: string) {
     }
 }
 
+function isLocalOrigin(origin: string) {
+    try {
+        const { hostname } = new URL(origin);
+        return ['localhost', '127.0.0.1', '0.0.0.0'].includes(hostname);
+    } catch {
+        return false;
+    }
+}
+
 function getRuntimeCorsOriginCandidates() {
-    return [
+    const productionCandidates = [
         process.env.NEXT_PUBLIC_APP_URL,
+        process.env.VERCEL_PROJECT_PRODUCTION_URL,
+        'https://kargax.com',
+        'https://www.kargax.com',
+        'https://app.kargax.com',
+    ];
+
+    if (isStrictProductionEnvironment()) {
+        return productionCandidates;
+    }
+
+    return [
+        ...productionCandidates,
         process.env.VERCEL_URL,
         process.env.VERCEL_BRANCH_URL,
-        process.env.VERCEL_PROJECT_PRODUCTION_URL,
         'https://kargax-staging.vercel.app',
-        'https://app.kargax.com',
         'http://localhost:3000',
         'http://127.0.0.1:3000',
     ];
@@ -46,6 +66,7 @@ export function getAllowedCorsOrigins() {
             .filter((origin): origin is string => Boolean(origin))
             .map((origin) => normalizeOrigin(origin))
             .filter((origin): origin is string => Boolean(origin))
+            .filter((origin) => !isStrictProductionEnvironment() || !isLocalOrigin(origin))
     );
 }
 

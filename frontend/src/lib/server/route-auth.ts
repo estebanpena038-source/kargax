@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { SESSION_COOKIE_NAME } from '@/lib/auth/session-constants';
-import { apiError } from '@/lib/server/api-response';
+import { apiError, getRequestId } from '@/lib/server/api-response';
+import { isStrictProductionEnvironment } from '@/lib/server/runtime-env';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AdminClient = SupabaseClient<any, 'public', any>;
 type AuthAssuranceLevel = 'aal1' | 'aal2' | null;
@@ -33,6 +35,11 @@ type AuthResult =
 
 interface RequireAuthOptions {
     requireAal2?: boolean;
+}
+
+interface RequireInternalApiKeyOptions {
+    allowInNonProduction?: boolean;
+    code?: string;
 }
 
 interface ResolveScopedBusinessIdOptions {
@@ -132,6 +139,58 @@ function getRequestToken(request: NextRequest) {
     }
 
     return request.cookies.get(SESSION_COOKIE_NAME)?.value?.trim() || null;
+}
+
+export function safelyCompareSecrets(providedSecret: string | null | undefined, expectedSecret: string | null | undefined) {
+    const provided = providedSecret?.trim();
+    const expected = expectedSecret?.trim();
+
+    if (!provided || !expected) {
+        return false;
+    }
+
+    const providedHash = createHash('sha256').update(provided, 'utf8').digest();
+    const expectedHash = createHash('sha256').update(expected, 'utf8').digest();
+
+    return timingSafeEqual(providedHash, expectedHash);
+}
+
+export function getInternalApiKeyFromRequest(request: NextRequest) {
+    return request.headers.get('x-internal-api-key')?.trim() || null;
+}
+
+export function requireInternalApiKeyRoute(
+    request: NextRequest,
+    options: RequireInternalApiKeyOptions = {}
+) {
+    const requestId = getRequestId(request);
+    const expectedKey = process.env.INTERNAL_API_KEY?.trim();
+
+    if (!expectedKey) {
+        if (options.allowInNonProduction && !isStrictProductionEnvironment()) {
+            return { verified: true as const };
+        }
+
+        return {
+            response: apiError('Internal API key is not configured', {
+                requestId,
+                status: 500,
+                code: options.code || 'INTERNAL_API_KEY_MISSING',
+            }),
+        };
+    }
+
+    if (!safelyCompareSecrets(getInternalApiKeyFromRequest(request), expectedKey)) {
+        return {
+            response: apiError('No autorizado', {
+                requestId,
+                status: 401,
+                code: options.code || 'INTERNAL_API_KEY_INVALID',
+            }),
+        };
+    }
+
+    return { verified: true as const };
 }
 
 export function resolveScopedBusinessId({

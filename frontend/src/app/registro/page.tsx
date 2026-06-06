@@ -464,11 +464,16 @@ function StepCredentials({
           </div>
         </div>
 
-        <label className="flex items-start gap-3 rounded-lg border border-zinc-200 p-4 text-sm leading-6 text-zinc-600">
+        <label className="relative flex min-h-11 items-start gap-3 rounded-lg border border-zinc-200 p-4 text-sm leading-6 text-zinc-600">
           <input
             type="checkbox"
-            className="mt-1 h-4 w-4 rounded border-zinc-300 text-zinc-950 focus:ring-zinc-950"
+            aria-label="Aceptar terminos y politica de privacidad"
+            className="peer absolute left-4 top-3 h-11 w-11 cursor-pointer opacity-0"
             {...register('acceptTerms')}
+          />
+          <span
+            aria-hidden="true"
+            className="mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded border border-zinc-300 bg-white transition-colors after:h-2 after:w-2 after:rounded-sm after:bg-white after:opacity-0 after:transition-opacity peer-checked:border-zinc-950 peer-checked:bg-zinc-950 peer-checked:after:opacity-100 peer-focus-visible:ring-2 peer-focus-visible:ring-zinc-950/20"
           />
           <span>
             Acepto los{' '}
@@ -481,11 +486,16 @@ function StepCredentials({
           </span>
         </label>
 
-        <label className="flex items-start gap-3 text-sm leading-6 text-zinc-600">
+        <label className="relative flex min-h-11 items-start gap-3 text-sm leading-6 text-zinc-600">
           <input
             type="checkbox"
-            className="mt-1 h-4 w-4 rounded border-zinc-300 text-zinc-950 focus:ring-zinc-950"
+            aria-label="Recibir comunicaciones de operacion y producto"
+            className="peer absolute left-0 top-0 h-11 w-11 cursor-pointer opacity-0"
             {...register('acceptMarketing')}
+          />
+          <span
+            aria-hidden="true"
+            className="mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded border border-zinc-300 bg-white transition-colors after:h-2 after:w-2 after:rounded-sm after:bg-white after:opacity-0 after:transition-opacity peer-checked:border-zinc-950 peer-checked:bg-zinc-950 peer-checked:after:opacity-100 peer-focus-visible:ring-2 peer-focus-visible:ring-zinc-950/20"
           />
           <span>Quiero recibir comunicaciones útiles sobre operación y producto.</span>
         </label>
@@ -765,7 +775,7 @@ export default function RegisterPage() {
             <Link href="/">
               <KargaxLogo size="lg" />
             </Link>
-            <Link href="/login" className="text-sm font-semibold underline underline-offset-4">
+            <Link href="/login" className="inline-flex min-h-11 items-center justify-center px-3 text-sm font-semibold underline underline-offset-4">
               Entrar
             </Link>
           </div>
@@ -851,7 +861,7 @@ export default function RegisterPage() {
             {!isSuccess ? (
               <p className="mt-6 text-center text-sm text-zinc-600">
                 ¿Ya tienes cuenta?{' '}
-                <Link href="/login" className="font-semibold text-zinc-950 underline underline-offset-4">
+                <Link href="/login" className="inline-flex min-h-11 items-center justify-center px-3 font-semibold text-zinc-950 underline underline-offset-4">
                   Entrar
                 </Link>
               </p>

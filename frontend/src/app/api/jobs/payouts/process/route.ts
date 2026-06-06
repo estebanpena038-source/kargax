@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { apiError, apiSuccess, getRequestId } from '@/lib/server/api-response';
+import { requireInternalApiKeyRoute } from '@/lib/server/route-auth';
 import { claimAndProcessPayouts } from '@/lib/server/payouts/processor';
 import { getPayoutRuntimeConfig } from '@/lib/server/payouts/provider';
 
@@ -22,14 +23,12 @@ function getSupabaseAdmin() {
 
 export async function POST(request: NextRequest) {
     const requestId = getRequestId(request);
-    const internalKey = request.headers.get('x-internal-api-key');
+    const internalAuth = requireInternalApiKeyRoute(request, {
+        code: 'PAYOUT_JOB_UNAUTHORIZED',
+    });
 
-    if (!process.env.INTERNAL_API_KEY || internalKey !== process.env.INTERNAL_API_KEY) {
-        return apiError('No autorizado', {
-            requestId,
-            status: 401,
-            code: 'PAYOUT_JOB_UNAUTHORIZED',
-        });
+    if ('response' in internalAuth) {
+        return internalAuth.response;
     }
 
     const config = getPayoutRuntimeConfig();

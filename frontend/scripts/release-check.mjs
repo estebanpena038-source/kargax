@@ -139,6 +139,7 @@ const requiredStorageBuckets = [
   'warehouse-sku-images',
   'private-fleet-payment-proofs',
 ];
+const defaultCanonicalProductionAppUrl = 'https://kargax.com';
 const originalEnvKeys = new Set(Object.keys(process.env));
 const loadedEnvFiles = [];
 
@@ -238,6 +239,17 @@ function run(command, args) {
   };
 }
 
+function sleep(ms) {
+  return new Promise((resolveSleep) => {
+    setTimeout(resolveSleep, ms);
+  });
+}
+
+function isTransientFetchError(error) {
+  const message = error?.message || String(error || '');
+  return /fetch failed|network|timeout|ECONNRESET|ETIMEDOUT/i.test(message);
+}
+
 function sanitizeSupabaseUrl(url) {
   try {
     const parsed = new URL(url);
@@ -251,11 +263,103 @@ function sanitizeSupabaseUrl(url) {
   }
 }
 
+function normalizeUrlOrigin(value) {
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+}
+
+function validateProductionAppUrl(appUrl, strictProduction) {
+  const canonicalProductionAppUrl = process.env.KARGAX_CANONICAL_APP_URL || defaultCanonicalProductionAppUrl;
+  const appOrigin = normalizeUrlOrigin(appUrl);
+  const canonicalOrigin = normalizeUrlOrigin(canonicalProductionAppUrl);
+
+  if (!strictProduction) {
+    return pass('public-url-production', {
+      appUrl: appOrigin || appUrl || null,
+      strictProduction,
+      canonicalAppUrl: canonicalOrigin,
+    });
+  }
+
+  if (!appOrigin) {
+    return fail('public-url-production', {
+      appUrl: appUrl || null,
+      strictProduction,
+      canonicalAppUrl: canonicalOrigin,
+      reason: 'NEXT_PUBLIC_APP_URL is not a valid URL',
+    });
+  }
+
+  if (!appOrigin.startsWith('https://') || /localhost|127\.0\.0\.1|0\.0\.0\.0/i.test(appOrigin)) {
+    return fail('public-url-production', {
+      appUrl: appOrigin,
+      strictProduction,
+      canonicalAppUrl: canonicalOrigin,
+      reason: 'Production URL must use a public HTTPS domain',
+    });
+  }
+
+  if (appOrigin !== canonicalOrigin) {
+    return fail('public-url-production', {
+      appUrl: appOrigin,
+      strictProduction,
+      canonicalAppUrl: canonicalOrigin,
+      reason: 'Production canonical domain mismatch',
+    });
+  }
+
+  return pass('public-url-production', {
+    appUrl: appOrigin,
+    strictProduction,
+    canonicalAppUrl: canonicalOrigin,
+  });
+}
+
+function validateProductionObservability(strictProduction) {
+  const sentryConfigured = Boolean(
+    process.env.NEXT_PUBLIC_SENTRY_DSN?.trim()
+    || process.env.SENTRY_DSN?.trim()
+  );
+  const posthogConfigured = Boolean(
+    process.env.POSTHOG_CAPTURE_URL?.trim()
+    && (process.env.POSTHOG_API_KEY?.trim() || process.env.NEXT_PUBLIC_POSTHOG_KEY?.trim())
+  );
+
+  if (strictProduction && !sentryConfigured) {
+    return fail('observability-production', {
+      sentryConfigured,
+      posthogConfigured,
+      reason: 'Production requires error monitoring before public go-live',
+    });
+  }
+
+  return pass('observability-production', {
+    sentryConfigured,
+    posthogConfigured,
+    strictProduction,
+  });
+}
+
 async function probeDbShape(supabase, shape) {
-  const { error } = await supabase
-    .from(shape.table)
-    .select(shape.columns.join(','))
-    .limit(1);
+  let error = null;
+
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const result = await supabase
+      .from(shape.table)
+      .select(shape.columns.join(','))
+      .limit(1);
+
+    error = result.error;
+
+    if (!error || !isTransientFetchError(error)) {
+      break;
+    }
+
+    await sleep(250 * attempt);
+  }
 
   return error
     ? fail(shape.gate, {
@@ -284,8 +388,11 @@ async function runRemoteSupabaseChecks() {
 
   const remoteChecks = [
     pass('supabase-target', sanitizeSupabaseUrl(url)),
-    ...(await Promise.all(requiredDbShapes.map((shape) => probeDbShape(supabase, shape)))),
   ];
+
+  for (const shape of requiredDbShapes) {
+    remoteChecks.push(await probeDbShape(supabase, shape));
+  }
 
   const { data: flags, error: flagsError } = await supabase
     .from('feature_flags')
@@ -332,14 +439,12 @@ loadLocalEnv();
 
 const appUrl = process.env.NEXT_PUBLIC_APP_URL || '';
 const strictProduction = process.env.VERCEL_ENV === 'production' || (!process.env.VERCEL_ENV && process.env.NODE_ENV === 'production');
-const localUrl = /localhost|127\.0\.0\.1|0\.0\.0\.0/i.test(appUrl);
 
 checks.push(...requiredEnv.map((name) => (
   process.env[name] ? pass(`env:${name}`) : fail(`env:${name}`, { missing: true })
 )));
-checks.push(strictProduction && localUrl
-  ? fail('public-url-production', { appUrl })
-  : pass('public-url-production', { appUrl: appUrl || null, strictProduction }));
+checks.push(validateProductionAppUrl(appUrl, strictProduction));
+checks.push(validateProductionObservability(strictProduction));
 checks.push(existsSync(resolve(root, 'src/proxy.ts'))
   ? pass('rate-limit-proxy-present')
   : fail('rate-limit-proxy-present'));
