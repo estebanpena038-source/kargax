@@ -1,5 +1,22 @@
 #!/usr/bin/env node
-const baseUrl = process.env.SMOKE_BASE_URL || process.env.NEXT_PUBLIC_APP_URL;
+function getCliBaseUrl(argv) {
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+
+    if (arg === '--base-url') {
+      return argv[index + 1];
+    }
+
+    if (arg.startsWith('--base-url=')) {
+      return arg.slice('--base-url='.length);
+    }
+  }
+
+  return null;
+}
+
+const cliBaseUrl = getCliBaseUrl(process.argv.slice(2));
+const baseUrl = cliBaseUrl || process.env.SMOKE_BASE_URL || process.env.NEXT_PUBLIC_APP_URL;
 
 if (!baseUrl) {
   console.log(JSON.stringify({
@@ -7,6 +24,22 @@ if (!baseUrl) {
     reason: 'SMOKE_BASE_URL or NEXT_PUBLIC_APP_URL is required',
   }, null, 2));
   process.exit(0);
+}
+
+try {
+  const parsedBaseUrl = new URL(baseUrl);
+
+  if (!['http:', 'https:'].includes(parsedBaseUrl.protocol)) {
+    throw new Error('Base URL must use http or https');
+  }
+} catch (error) {
+  console.log(JSON.stringify({
+    generated_at: new Date().toISOString(),
+    baseUrl,
+    status: 'fail',
+    error: error instanceof Error ? error.message : 'Invalid base URL',
+  }, null, 2));
+  process.exit(1);
 }
 
 const checks = [

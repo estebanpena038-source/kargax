@@ -66,6 +66,12 @@ interface MercadoPagoPaymentLike {
     } | null;
 }
 
+function summarizeMetadata(metadata: Record<string, unknown> | null | undefined) {
+    return {
+        keys: metadata ? Object.keys(metadata) : [],
+    };
+}
+
 export async function POST(request: NextRequest) {
     const requestId = getRequestId(request);
 
@@ -86,13 +92,9 @@ export async function POST(request: NextRequest) {
 
         if (!validateWebhookSignature(xSignature, xRequestId, body.data?.id || '', dataIdFromQuery)) {
             console.warn('[WEBHOOK] firma invalida');
-            return apiSuccess({
-                received: true,
-                processed: false,
-                ignored: true,
-                reason: 'invalid_signature',
-            }, {
-                code: 'WEBHOOK_IGNORED_INVALID_SIGNATURE',
+            return apiError('Firma de webhook invalida', {
+                status: 401,
+                code: 'WEBHOOK_INVALID_SIGNATURE',
                 requestId,
             });
         }
@@ -154,7 +156,7 @@ export async function POST(request: NextRequest) {
             console.error('[WEBHOOK] no se pudo resolver payment/offer para freight', {
                 providerStatus: freightSync.providerStatus,
                 external_reference: mpPayment.external_reference,
-                metadata: mpPayment.metadata,
+                metadata_summary: summarizeMetadata(mpPayment.metadata),
             });
 
             return apiSuccess({

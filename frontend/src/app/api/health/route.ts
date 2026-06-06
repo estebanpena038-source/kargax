@@ -4,7 +4,13 @@ import { getSupabaseAdmin } from '@/lib/server/route-auth';
 import { getReliabilitySnapshot } from '@/lib/server/operations';
 import { isLocalAppUrl, isStrictProductionEnvironment, getConfiguredAppUrl } from '@/lib/server/runtime-env';
 
-const REQUIRED_STORAGE_BUCKETS = ['offer-photos', 'trip-photos', 'trip-signatures', 'warehouse-sku-images'];
+const REQUIRED_STORAGE_BUCKETS = [
+    'offer-photos',
+    'trip-photos',
+    'trip-signatures',
+    'warehouse-sku-images',
+    'private-fleet-payment-proofs',
+];
 const PUBLIC_HEALTH_REDACTIONS: Array<[RegExp, string]> = [
     [/MERCADOPAGO_WEBHOOK_SECRET/g, 'configuracion de firma del webhook de pagos'],
     [/SUPABASE_SERVICE_ROLE_KEY/g, 'credencial interna de base de datos'],

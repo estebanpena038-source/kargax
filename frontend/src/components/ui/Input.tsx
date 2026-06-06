@@ -141,13 +141,13 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
                     />
 
                     {/* Right Side Icons */}
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                    <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-2">
                         {/* Password Toggle */}
                         {showPasswordToggle && type === 'password' && (
                             <button
                                 type="button"
                                 onClick={() => setShowPassword(!showPassword)}
-                                className="rounded-md text-zinc-400 transition-colors hover:text-zinc-700 focus:outline-none focus:ring-2 focus:ring-zinc-950/20 disabled:cursor-not-allowed disabled:opacity-50"
+                                className="flex h-11 w-11 items-center justify-center rounded-md text-zinc-400 transition-colors hover:text-zinc-700 focus:outline-none focus:ring-2 focus:ring-zinc-950/20 disabled:cursor-not-allowed disabled:opacity-50"
                                 aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                                 aria-pressed={showPassword}
                                 disabled={disabled}

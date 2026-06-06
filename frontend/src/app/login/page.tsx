@@ -186,11 +186,16 @@ function LoginPageContent() {
             />
 
             <div className="flex flex-col gap-3 min-[430px]:flex-row min-[430px]:items-center min-[430px]:justify-between min-[430px]:gap-4">
-              <label className="flex cursor-pointer items-center gap-2">
+              <label className="relative flex min-h-11 cursor-pointer items-center gap-2">
                 <input
                   type="checkbox"
-                  className="h-4 w-4 rounded border-zinc-300 text-zinc-950 focus:ring-zinc-950"
+                  aria-label="Recordarme"
+                  className="peer absolute left-0 h-11 w-11 cursor-pointer opacity-0"
                   {...register('rememberMe')}
+                />
+                <span
+                  aria-hidden="true"
+                  className="flex h-5 w-5 items-center justify-center rounded border border-zinc-300 bg-white transition-colors after:h-2 after:w-2 after:rounded-sm after:bg-white after:opacity-0 after:transition-opacity peer-checked:border-zinc-950 peer-checked:bg-zinc-950 peer-checked:after:opacity-100 peer-focus-visible:ring-2 peer-focus-visible:ring-zinc-950/20"
                 />
                 <span className="text-sm text-zinc-600">Recordarme</span>
               </label>

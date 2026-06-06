@@ -13,6 +13,35 @@ const DEFAULT_ENV_FILES = [
   'frontend/.env.local',
 ];
 
+function parseArgs(argv) {
+  const args = {
+    baseUrl: null,
+  };
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+
+    if (arg === '--base-url') {
+      args.baseUrl = argv[++index];
+    } else if (arg.startsWith('--base-url=')) {
+      args.baseUrl = arg.slice('--base-url='.length);
+    } else if (arg === '--help' || arg === '-h') {
+      console.log(`Usage:
+  npm run supabase:auth-url-check
+  npm run supabase:auth-url-check -- --base-url https://kargax.com
+
+Options:
+  --base-url <url>  Expected public app URL for generated auth redirects
+`);
+      process.exit(0);
+    } else {
+      throw new Error(`Unknown argument: ${arg}`);
+    }
+  }
+
+  return args;
+}
+
 function parseEnvFile(filePath) {
   if (!fs.existsSync(filePath)) return {};
 
@@ -54,6 +83,20 @@ function isLocalhostUrl(value) {
   }
 }
 
+function normalizeBaseUrl(value) {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = new URL(value);
+
+  if (parsed.protocol !== 'https:') {
+    throw new Error('Auth redirect base URL must use HTTPS for production checks');
+  }
+
+  return parsed.origin;
+}
+
 async function requestJson(url, options) {
   const response = await fetch(url, options);
   const text = await response.text();
@@ -73,10 +116,13 @@ async function requestJson(url, options) {
 }
 
 async function main() {
+  const args = parseArgs(process.argv.slice(2));
   const env = loadEnv();
   const supabaseUrl = env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, '');
   const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY;
-  const expectedBaseUrl = (env.NEXT_PUBLIC_APP_URL || 'https://kargax-staging.vercel.app').replace(/\/$/, '');
+  const expectedBaseUrl = normalizeBaseUrl(
+    args.baseUrl || env.KARGAX_CANONICAL_APP_URL || env.NEXT_PUBLIC_APP_URL || 'https://kargax.com'
+  );
   const redirectChecks = [
     { type: 'magiclink', path: '/auth/invite/accept' },
     { type: 'magiclink', path: '/auth/callback' },
@@ -152,7 +198,10 @@ async function main() {
     });
   }
 
-  console.log(JSON.stringify({ checks: results }, null, 2));
+  console.log(JSON.stringify({
+    expectedBaseUrl,
+    checks: results,
+  }, null, 2));
 
   if (results.some((result) => result.redirectsToLocalhost || !result.matchesRequestedRedirect)) {
     console.error(

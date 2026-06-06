@@ -31,6 +31,8 @@ const PUBLIC_ROUTES = [
     '/api/notifications/inspection',
     '/api/payments/webhook',
     '/api/jobs/payouts/process',
+    '/api/jobs/last-mile/recompute',
+    '/api/cron/inactive-users',
     '/api/support/requests',
     '/api/health',
 ];

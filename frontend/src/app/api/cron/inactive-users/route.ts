@@ -1,14 +1,27 @@
 import { NextRequest } from 'next/server';
 import { apiError, apiSuccess, getRequestId } from '@/lib/server/api-response';
-import { getSupabaseAdmin } from '@/lib/server/route-auth';
+import { getInternalApiKeyFromRequest, getSupabaseAdmin, safelyCompareSecrets } from '@/lib/server/route-auth';
+import { isStrictProductionEnvironment } from '@/lib/server/runtime-env';
 
 export async function GET(request: NextRequest) {
     const requestId = getRequestId(request);
-    const expectedSecret = process.env.CRON_SECRET;
-    const providedSecret = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '')
+    const cronSecret = process.env.CRON_SECRET?.trim();
+    const internalApiKey = process.env.INTERNAL_API_KEY?.trim();
+    const providedCronSecret = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '')
         || request.nextUrl.searchParams.get('secret');
+    const hasConfiguredSecret = Boolean(cronSecret || internalApiKey);
+    const hasValidCronSecret = safelyCompareSecrets(providedCronSecret, cronSecret);
+    const hasValidInternalKey = safelyCompareSecrets(getInternalApiKeyFromRequest(request), internalApiKey);
 
-    if (expectedSecret && providedSecret !== expectedSecret) {
+    if (!hasConfiguredSecret && isStrictProductionEnvironment()) {
+        return apiError('Cron secret no configurado', {
+            status: 500,
+            code: 'CRON_SECRET_MISSING',
+            requestId,
+        });
+    }
+
+    if (hasConfiguredSecret && !hasValidCronSecret && !hasValidInternalKey) {
         return apiError('Cron no autorizado', {
             status: 401,
             code: 'CRON_UNAUTHORIZED',
