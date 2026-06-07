@@ -114,7 +114,7 @@ function getHelpTitle(issue: GpsIssue | null, permissionState: PermissionState |
 
 function getHelpMessage(issue: GpsIssue | null, error: string) {
     if (issue === 'low_accuracy') {
-        return 'Elegiste ubicacion aproximada o el celular entrego baja precision. Cambia el permiso del navegador a Precisa/Exacta y vuelve a intentar.';
+        return 'El punto esta cerca, pero el celular no esta entregando precision suficiente. Activa ubicacion precisa para Chrome/kargax.com y vuelve a intentar.';
     }
 
     if (issue === 'timeout') {
@@ -122,6 +122,16 @@ function getHelpMessage(issue: GpsIssue | null, error: string) {
     }
 
     return error || 'Debes estar dentro del radio permitido para continuar.';
+}
+
+function buildLowAccuracyMessage(accuracyMeters: number, distanceMeters: number, toleranceMeters: number, targetLabel: string) {
+    const roundedAccuracy = Math.round(accuracyMeters);
+
+    if (distanceMeters <= toleranceMeters) {
+        return `Estas en el punto, pero tu celular esta entregando ubicacion aproximada (+/- ${roundedAccuracy}m). Activa ubicacion precisa para Chrome/kargax.com y desactiva ahorro de bateria si no mejora.`;
+    }
+
+    return `Esperando ubicacion precisa. Precision actual: +/- ${roundedAccuracy}m. Acercate al ${targetLabel.toLowerCase()} y activa ubicacion Precisa/Exacta si no mejora.`;
 }
 
 function mapsEmbedUrl(latitude: number, longitude: number) {
@@ -174,6 +184,19 @@ function RouteMapPanel({
     distance: number | null;
     toleranceMeters: number;
 }) {
+    const isAtTarget = distance !== null && distance <= toleranceMeters;
+    const hasUsableAccuracy = current ? current.accuracy <= MAX_ACCEPTABLE_ACCURACY_METERS : false;
+    const distanceTone = distance === null
+        ? 'text-zinc-500'
+        : isAtTarget
+            ? 'text-emerald-700'
+            : 'text-amber-700';
+    const accuracyTone = !current
+        ? 'text-zinc-500'
+        : hasUsableAccuracy
+            ? 'text-emerald-700'
+            : 'text-red-700';
+
     return (
         <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white">
             <div className="grid gap-px bg-zinc-200 md:grid-cols-2">
@@ -197,6 +220,29 @@ function RouteMapPanel({
                 </div>
             </div>
 
+            {current ? (
+                <div className="grid gap-px border-t border-zinc-200 bg-zinc-200 sm:grid-cols-2">
+                    <div className="bg-white p-4">
+                        <p className="text-xs font-semibold uppercase text-zinc-500">Distancia al punto</p>
+                        <p className={cn('mt-2 text-sm font-semibold', distanceTone)}>
+                            {distance === null ? 'Pendiente' : `${formatDistance(distance)} - ${isAtTarget ? 'en el radio' : 'fuera del radio'}`}
+                        </p>
+                        <p className="mt-1 text-xs leading-5 text-zinc-500">
+                            Esta medida dice si estas parado cerca del origen o destino configurado.
+                        </p>
+                    </div>
+                    <div className="bg-white p-4">
+                        <p className="text-xs font-semibold uppercase text-zinc-500">Precision del dispositivo</p>
+                        <p className={cn('mt-2 text-sm font-semibold', accuracyTone)}>
+                            {formatAccuracy(current.accuracy)} (+/- {Math.round(current.accuracy)}m)
+                        </p>
+                        <p className="mt-1 text-xs leading-5 text-zinc-500">
+                            Maximo permitido: {MAX_ACCEPTABLE_ACCURACY_METERS} m. Si marca 2000 m, Android/Chrome esta usando ubicacion aproximada.
+                        </p>
+                    </div>
+                </div>
+            ) : null}
+
             <div className="relative h-60 bg-zinc-100">
                 <iframe
                     title={`Mapa ${targetLabel}`}
@@ -210,7 +256,11 @@ function RouteMapPanel({
                         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                             <div>
                                 <p className="text-sm font-semibold text-zinc-950">
-                                    {distance <= toleranceMeters ? 'Llegaste al punto correcto' : `No has llegado al ${targetLabel.toLowerCase()}`}
+                                    {isAtTarget && hasUsableAccuracy
+                                        ? 'Llegaste al punto correcto'
+                                        : isAtTarget
+                                            ? 'Estas en el punto, falta precision'
+                                            : `No has llegado al ${targetLabel.toLowerCase()}`}
                                 </p>
                                 <p className="text-xs text-zinc-500">Distancia actual: {formatDistance(distance)}</p>
                             </div>
@@ -345,7 +395,7 @@ export function GPSVerification({
                     if (nextCurrent.accuracy > MAX_ACCEPTABLE_ACCURACY_METERS) {
                         setStatus('checking');
                         setIssue('low_accuracy');
-                        setError(`Esperando ubicacion precisa. Precision actual: +/- ${Math.round(nextCurrent.accuracy)}m. En el permiso del navegador elige Precisa/Exacta si no mejora.`);
+                        setError(buildLowAccuracyMessage(nextCurrent.accuracy, nextDistance, toleranceMeters, targetLabel));
                         return;
                     }
 
@@ -404,7 +454,7 @@ export function GPSVerification({
                 if (lastAccuracy !== null && lastAccuracy > MAX_ACCEPTABLE_ACCURACY_METERS) {
                     setStatus('error');
                     setIssue('low_accuracy');
-                    setError(`La ultima lectura siguio con baja precision (+/- ${Math.round(lastAccuracy)}m). Cambia el permiso a Precisa/Exacta y vuelve a intentar.`);
+                    setError(buildLowAccuracyMessage(lastAccuracy, lastDistance ?? Number.POSITIVE_INFINITY, toleranceMeters, targetLabel));
                     return;
                 }
 
@@ -435,6 +485,7 @@ export function GPSVerification({
     const targetLng = Number(targetLongitude);
     const canShowMap = hasTargetCoordinates(targetLat, targetLng);
     const isCheckingTooFar = status === 'checking' && distance !== null && distance > toleranceMeters && issue !== 'low_accuracy';
+    const isLowAccuracyAtTarget = issue === 'low_accuracy' && distance !== null && distance <= toleranceMeters;
     const showPermissionWarning = permissionState === 'denied' || status === 'error' || issue === 'low_accuracy';
 
     return (
@@ -472,10 +523,10 @@ export function GPSVerification({
                         </div>
                         <p className="mt-4 font-semibold text-zinc-950">
                             {status === 'idle' && 'Activa GPS para continuar'}
-                            {status === 'checking' && (issue === 'low_accuracy' ? 'Mejorando precision GPS...' : isCheckingTooFar ? `Acercate al ${targetLabel.toLowerCase()}` : 'Leyendo GPS del celular...')}
+                            {status === 'checking' && (isLowAccuracyAtTarget ? 'Estas en el punto, falta precision' : issue === 'low_accuracy' ? 'Mejorando precision GPS...' : isCheckingTooFar ? `Acercate al ${targetLabel.toLowerCase()}` : 'Leyendo GPS del celular...')}
                             {status === 'verified' && 'Ubicacion registrada'}
                             {status === 'too_far' && `No has llegado al ${targetLabel.toLowerCase()}`}
-                            {status === 'error' && getErrorTitle(issue)}
+                            {status === 'error' && (isLowAccuracyAtTarget ? 'Estas en el punto, falta precision' : getErrorTitle(issue))}
                         </p>
                         <p className="mt-2 text-sm leading-6 text-zinc-600">
                             {status === 'idle' && 'El navegador pedira permiso de ubicacion. Elige Precisa/Exacta, no aproximada.'}
@@ -543,9 +594,29 @@ export function GPSVerification({
                 </div>
             ) : null}
 
+            {issue === 'low_accuracy' ? (
+                <div className="mt-5 rounded-lg border border-zinc-300 bg-white p-4">
+                    <p className="font-medium text-zinc-950">Como activar ubicacion precisa</p>
+                    <div className="mt-3 grid gap-3 text-sm leading-6 text-zinc-600 sm:grid-cols-3">
+                        <div>
+                            <p className="font-semibold text-zinc-800">Android</p>
+                            <p>Configuracion &gt; Apps &gt; Chrome &gt; Permisos &gt; Ubicacion &gt; activar Precisa.</p>
+                        </div>
+                        <div>
+                            <p className="font-semibold text-zinc-800">Chrome / kargax.com</p>
+                            <p>Candado o controles del sitio &gt; Ubicacion &gt; Permitir. Luego recarga la pagina.</p>
+                        </div>
+                        <div>
+                            <p className="font-semibold text-zinc-800">Si no mejora</p>
+                            <p>Desactiva ahorro de bateria, sal a un punto abierto y espera la lectura sin cerrar la pantalla.</p>
+                        </div>
+                    </div>
+                </div>
+            ) : null}
+
             <div className="mt-4 flex items-center justify-center gap-2 text-xs text-zinc-400">
                 <Wifi className="h-3.5 w-3.5" />
-                <span>GPS real requerido: ubicacion precisa, no aproximada</span>
+                <span>GPS real requerido: ubicacion precisa, no aproximada. Para operacion real usa celular con GPS preciso.</span>
             </div>
         </motion.div>
     );
