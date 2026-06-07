@@ -98,6 +98,8 @@ interface PreferenceResponse {
     idempotencyKey: string;
 }
 
+const PLATFORM_FEE_PERCENT = parseFloat(process.env.NEXT_PUBLIC_PLATFORM_FEE_PERCENT || '10');
+
 async function resolveValidBrowserSession() {
     const { session } = await getSessionWithRetry(3);
     let activeSession = session;
@@ -411,8 +413,7 @@ function PaymentCheckoutPageContent() {
             });
 
             // Calculate amounts
-            const platformFeePercent = parseFloat(process.env.NEXT_PUBLIC_PLATFORM_FEE_PERCENT || '10');
-            const platformFee = Math.round(offerData.total_amount * platformFeePercent / 100);
+            const platformFee = Math.round(offerData.total_amount * PLATFORM_FEE_PERCENT / 100);
             setAmounts({
                 freight: offerData.total_amount,
                 platformFee,
@@ -622,7 +623,7 @@ function PaymentCheckoutPageContent() {
                                     <span className="font-money text-right font-medium text-slate-900">{formatCOP(amounts?.freight || 0)}</span>
                                 </div>
                                 <div className="flex items-center justify-between gap-3">
-                                    <span className="text-slate-600">Comisión plataforma (8%)</span>
+                                    <span className="text-slate-600">Comisión plataforma ({PLATFORM_FEE_PERCENT}%)</span>
                                     <span className="font-money text-right font-medium text-slate-900">{formatCOP(amounts?.platformFee || 0)}</span>
                                 </div>
                                 <div className="h-px bg-slate-100" />

@@ -13,7 +13,7 @@
 
 import { NextRequest } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { isMercadoPagoTestMode, preferenceApi } from '@/lib/mercadopago/config';
+import { calculatePaymentAmounts, isMercadoPagoTestMode, PLATFORM_FEE_PERCENT, preferenceApi } from '@/lib/mercadopago/config';
 import { requireAal2Route } from '@/lib/server/route-auth';
 import { getPaymentRuntimeConfig } from '@/lib/server/runtime-env';
 import { apiError, apiSuccess, getRequestId } from '@/lib/server/api-response';
@@ -128,14 +128,13 @@ async function prepareFreightPaymentWithoutRpc(
     }
 
     const isPrivateFleet = Boolean(offer.is_private_fleet);
-    const totalAmount = Number(offer.total_amount || 0);
-    const platformFee = isPrivateFleet
-        ? 0
-        : Number(offer.platform_fee ?? Math.round(totalAmount * 8) / 100);
+    const freightAmount = Number(offer.total_amount || 0);
+    const marketplaceAmounts = calculatePaymentAmounts(freightAmount);
+    const platformFee = isPrivateFleet ? 0 : marketplaceAmounts.platformFee;
     const truckerAmount = isPrivateFleet
-        ? Number(offer.freight_payment_amount ?? offer.net_amount ?? totalAmount)
-        : Math.max(totalAmount - platformFee, 0);
-    const payableTotal = isPrivateFleet ? totalAmount : totalAmount;
+        ? Number(offer.freight_payment_amount ?? offer.net_amount ?? freightAmount)
+        : freightAmount;
+    const payableTotal = isPrivateFleet ? freightAmount : marketplaceAmounts.totalAmount;
 
     if (offer.status !== 'active') {
         const { data: existingPendingPayment } = await supabaseAdmin
@@ -508,19 +507,33 @@ export async function POST(request: NextRequest) {
             canonicalReference.offer_id,
             canonicalReference.payment_id,
             canonicalReference.application_id,
+            String(Math.round(amounts.totalAmount)),
+            String(Math.round(amounts.platformFee)),
         ]);
+        const preferenceItems: FreightPreferenceBody['items'] = [
+            {
+                id: offer.id,
+                title: `Flete: ${offer.origin_city} -> ${offer.destination_city}`,
+                description: `${offer.cargo_type}: ${offer.cargo_description}`.substring(0, 255),
+                quantity: 1,
+                currency_id: currencyCode,
+                unit_price: amounts.freightAmount,
+            },
+        ];
+
+        if (amounts.platformFee > 0) {
+            preferenceItems.push({
+                id: `${offer.id}-platform-fee`,
+                title: 'Comision operativa KargaX',
+                description: `Comision plataforma (${PLATFORM_FEE_PERCENT}%) para asegurar pago, soporte y conciliacion.`.substring(0, 255),
+                quantity: 1,
+                currency_id: currencyCode,
+                unit_price: amounts.platformFee,
+            });
+        }
 
         const preferenceBody: FreightPreferenceBody = {
-            items: [
-                {
-                    id: offer.id,
-                    title: `Flete: ${offer.origin_city} -> ${offer.destination_city}`,
-                    description: `${offer.cargo_type}: ${offer.cargo_description}`.substring(0, 255),
-                    quantity: 1,
-                    currency_id: currencyCode,
-                    unit_price: amounts.totalAmount,
-                },
-            ],
+            items: preferenceItems,
             payer: {
                 name: userProfile?.full_name || 'Usuario',
                 email: isMercadoPagoTestMode
