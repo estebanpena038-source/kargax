@@ -99,7 +99,7 @@ function getGpsIssue(error: GeolocationPositionError): GpsIssue {
 function getErrorTitle(issue: GpsIssue | null) {
     if (issue === 'permission_denied') return 'GPS bloqueado';
     if (issue === 'timeout') return 'GPS sin respuesta';
-    if (issue === 'low_accuracy') return 'Ubicacion aproximada';
+    if (issue === 'low_accuracy') return 'Falta precision';
     if (issue === 'missing_target') return 'Coordenadas faltantes';
     if (issue === 'unsupported') return 'GPS no disponible';
     return 'GPS pendiente';
@@ -107,14 +107,14 @@ function getErrorTitle(issue: GpsIssue | null) {
 
 function getHelpTitle(issue: GpsIssue | null, permissionState: PermissionState | 'unsupported') {
     if (permissionState === 'denied' || issue === 'permission_denied') return 'Permiso de ubicacion bloqueado';
-    if (issue === 'low_accuracy') return 'Ubicacion precisa requerida';
+    if (issue === 'low_accuracy') return 'Activa Ubicacion precisa';
     if (issue === 'timeout') return 'Lectura GPS agotada';
     return 'Verificacion pendiente';
 }
 
 function getHelpMessage(issue: GpsIssue | null, error: string) {
     if (issue === 'low_accuracy') {
-        return 'El punto esta cerca, pero el celular no esta entregando precision suficiente. Activa ubicacion precisa para Chrome/kargax.com y vuelve a intentar.';
+        return 'Tu celular esta usando una zona aproximada. Para registrar llegada, KargaX necesita un punto preciso.';
     }
 
     if (issue === 'timeout') {
@@ -128,10 +128,10 @@ function buildLowAccuracyMessage(accuracyMeters: number, distanceMeters: number,
     const roundedAccuracy = Math.round(accuracyMeters);
 
     if (distanceMeters <= toleranceMeters) {
-        return `Estas en el punto, pero tu celular esta entregando ubicacion aproximada (+/- ${roundedAccuracy}m). Activa ubicacion precisa para Chrome/kargax.com y desactiva ahorro de bateria si no mejora.`;
+        return `Estas en el punto. El celular sigue en ubicacion aproximada (+/- ${roundedAccuracy}m). Activa Ubicacion precisa para Chrome/kargax.com y vuelve a intentar.`;
     }
 
-    return `Esperando ubicacion precisa. Precision actual: +/- ${roundedAccuracy}m. Acercate al ${targetLabel.toLowerCase()} y activa ubicacion Precisa/Exacta si no mejora.`;
+    return `Acercate al ${targetLabel.toLowerCase()} y activa Ubicacion precisa. Precision actual: +/- ${roundedAccuracy}m.`;
 }
 
 function mapsEmbedUrl(latitude: number, longitude: number) {
@@ -228,7 +228,7 @@ function RouteMapPanel({
                             {distance === null ? 'Pendiente' : `${formatDistance(distance)} - ${isAtTarget ? 'en el radio' : 'fuera del radio'}`}
                         </p>
                         <p className="mt-1 text-xs leading-5 text-zinc-500">
-                            Esta medida dice si estas parado cerca del origen o destino configurado.
+                            Te dice si estas cerca de la direccion configurada.
                         </p>
                     </div>
                     <div className="bg-white p-4">
@@ -237,7 +237,7 @@ function RouteMapPanel({
                             {formatAccuracy(current.accuracy)} (+/- {Math.round(current.accuracy)}m)
                         </p>
                         <p className="mt-1 text-xs leading-5 text-zinc-500">
-                            Maximo permitido: {MAX_ACCEPTABLE_ACCURACY_METERS} m. Si marca 2000 m, Android/Chrome esta usando ubicacion aproximada.
+                            Debe ser {MAX_ACCEPTABLE_ACCURACY_METERS} m o menos. Si ves 2000 m, el celular esta en modo aproximado.
                         </p>
                     </div>
                 </div>
@@ -258,9 +258,9 @@ function RouteMapPanel({
                                 <p className="text-sm font-semibold text-zinc-950">
                                     {isAtTarget && hasUsableAccuracy
                                         ? 'Llegaste al punto correcto'
-                                        : isAtTarget
-                                            ? 'Estas en el punto, falta precision'
-                                            : `No has llegado al ${targetLabel.toLowerCase()}`}
+                                            : isAtTarget
+                                                ? 'Estas en el punto. Falta precision'
+                                                : `No has llegado al ${targetLabel.toLowerCase()}`}
                                 </p>
                                 <p className="text-xs text-zinc-500">Distancia actual: {formatDistance(distance)}</p>
                             </div>
@@ -523,10 +523,10 @@ export function GPSVerification({
                         </div>
                         <p className="mt-4 font-semibold text-zinc-950">
                             {status === 'idle' && 'Activa GPS para continuar'}
-                            {status === 'checking' && (isLowAccuracyAtTarget ? 'Estas en el punto, falta precision' : issue === 'low_accuracy' ? 'Mejorando precision GPS...' : isCheckingTooFar ? `Acercate al ${targetLabel.toLowerCase()}` : 'Leyendo GPS del celular...')}
+                            {status === 'checking' && (isLowAccuracyAtTarget ? 'Estas en el punto. Falta precision' : issue === 'low_accuracy' ? 'Esperando ubicacion precisa' : isCheckingTooFar ? `Acercate al ${targetLabel.toLowerCase()}` : 'Leyendo GPS del celular...')}
                             {status === 'verified' && 'Ubicacion registrada'}
                             {status === 'too_far' && `No has llegado al ${targetLabel.toLowerCase()}`}
-                            {status === 'error' && (isLowAccuracyAtTarget ? 'Estas en el punto, falta precision' : getErrorTitle(issue))}
+                            {status === 'error' && (isLowAccuracyAtTarget ? 'Estas en el punto. Falta precision' : getErrorTitle(issue))}
                         </p>
                         <p className="mt-2 text-sm leading-6 text-zinc-600">
                             {status === 'idle' && 'El navegador pedira permiso de ubicacion. Elige Precisa/Exacta, no aproximada.'}
@@ -596,27 +596,33 @@ export function GPSVerification({
 
             {issue === 'low_accuracy' ? (
                 <div className="mt-5 rounded-lg border border-zinc-300 bg-white p-4">
-                    <p className="font-medium text-zinc-950">Como activar ubicacion precisa</p>
+                    <p className="font-medium text-zinc-950">Activa Precisa en 3 pasos</p>
+                    <p className="mt-1 text-sm leading-6 text-zinc-600">
+                        La distancia puede estar bien, pero Android todavia puede estar ocultando tu punto exacto.
+                    </p>
                     <div className="mt-3 grid gap-3 text-sm leading-6 text-zinc-600 sm:grid-cols-3">
                         <div>
-                            <p className="font-semibold text-zinc-800">Android</p>
-                            <p>Configuracion &gt; Apps &gt; Chrome &gt; Permisos &gt; Ubicacion &gt; activar Precisa.</p>
+                            <p className="font-semibold text-zinc-800">1. Abre ajustes</p>
+                            <p>Configuracion &gt; Apps &gt; Chrome &gt; Permisos &gt; Ubicacion.</p>
                         </div>
                         <div>
-                            <p className="font-semibold text-zinc-800">Chrome / kargax.com</p>
-                            <p>Candado o controles del sitio &gt; Ubicacion &gt; Permitir. Luego recarga la pagina.</p>
+                            <p className="font-semibold text-zinc-800">2. Elige Precisa</p>
+                            <p>Activa Ubicacion precisa. No uses Aproximada.</p>
                         </div>
                         <div>
-                            <p className="font-semibold text-zinc-800">Si no mejora</p>
-                            <p>Desactiva ahorro de bateria, sal a un punto abierto y espera la lectura sin cerrar la pantalla.</p>
+                            <p className="font-semibold text-zinc-800">3. Vuelve a KargaX</p>
+                            <p>Recarga la pagina y toca Intentar de nuevo. Espera la lectura sin cerrar la pantalla.</p>
                         </div>
                     </div>
+                    <p className="mt-3 text-xs leading-5 text-zinc-500">
+                        Si no mejora, desactiva ahorro de bateria y prueba en un punto abierto durante 30 a 60 segundos.
+                    </p>
                 </div>
             ) : null}
 
             <div className="mt-4 flex items-center justify-center gap-2 text-xs text-zinc-400">
                 <Wifi className="h-3.5 w-3.5" />
-                <span>GPS real requerido: ubicacion precisa, no aproximada. Para operacion real usa celular con GPS preciso.</span>
+                <span>Para registrar llegada necesitas dos cosas: estar en el radio y tener precision de {MAX_ACCEPTABLE_ACCURACY_METERS} m o menos.</span>
             </div>
         </motion.div>
     );
