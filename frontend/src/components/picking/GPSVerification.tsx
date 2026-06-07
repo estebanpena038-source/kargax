@@ -57,6 +57,8 @@ type CurrentPosition = {
 
 const MAX_ACCEPTABLE_ACCURACY_METERS = 150;
 const GPS_READ_TIMEOUT_MS = 45000;
+const GPS_WATCH_TIMEOUT_MS = 60000;
+const GPS_POSITION_MAX_AGE_MS = 5000;
 
 function hasTargetCoordinates(latitude?: number | null, longitude?: number | null) {
     if (latitude === null || latitude === undefined || longitude === null || longitude === undefined) {
@@ -116,7 +118,7 @@ function getHelpMessage(issue: GpsIssue | null, error: string) {
     }
 
     if (issue === 'timeout') {
-        return 'Mantente en esta pantalla, activa GPS del sistema y prueba en un punto abierto. La lectura puede tardar hasta 45 segundos.';
+        return 'Mantente en esta pantalla, activa GPS del sistema y prueba en un punto abierto. La lectura puede tardar hasta un minuto.';
     }
 
     return error || 'Debes estar dentro del radio permitido para continuar.';
@@ -244,6 +246,10 @@ export function GPSVerification({
     const [error, setError] = React.useState('');
     const [issue, setIssue] = React.useState<GpsIssue | null>(null);
     const [permissionState, setPermissionState] = React.useState<PermissionState | 'unsupported'>('unsupported');
+    const watchIdRef = React.useRef<number | null>(null);
+    const watchTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+    const lastAccuracyRef = React.useRef<number | null>(null);
+    const lastDistanceRef = React.useRef<number | null>(null);
 
     const gpsSupported = isGeolocationSupported();
     const hasTarget = hasTargetCoordinates(targetLatitude, targetLongitude);
@@ -251,6 +257,18 @@ export function GPSVerification({
     const strictMessage = locationType === 'origin'
         ? 'No has llegado al origen. Debes estar dentro del radio permitido para iniciar carga.'
         : 'No has llegado al destino. Debes estar dentro del radio permitido para iniciar descarga.';
+
+    const clearGpsWatch = React.useCallback(() => {
+        if (watchIdRef.current !== null && typeof navigator !== 'undefined' && navigator.geolocation) {
+            navigator.geolocation.clearWatch(watchIdRef.current);
+            watchIdRef.current = null;
+        }
+
+        if (watchTimeoutRef.current !== null) {
+            clearTimeout(watchTimeoutRef.current);
+            watchTimeoutRef.current = null;
+        }
+    }, []);
 
     React.useEffect(() => {
         let cancelled = false;
@@ -277,9 +295,16 @@ export function GPSVerification({
         };
     }, []);
 
+    React.useEffect(() => () => clearGpsWatch(), [clearGpsWatch]);
+
     const handleVerify = React.useCallback(() => {
+        clearGpsWatch();
         setError('');
         setIssue(null);
+        setCurrent(null);
+        setDistance(null);
+        lastAccuracyRef.current = null;
+        lastDistanceRef.current = null;
 
         if (!gpsSupported) {
             setStatus('error');
@@ -297,69 +322,120 @@ export function GPSVerification({
 
         setStatus('checking');
 
-        navigator.geolocation.getCurrentPosition(
-            (position) => {
-                const nextCurrent = {
-                    latitude: position.coords.latitude,
-                    longitude: position.coords.longitude,
-                    accuracy: position.coords.accuracy,
-                };
-                const nextDistance = Math.round(calculateDistance(
-                    nextCurrent,
-                    { latitude: Number(targetLatitude), longitude: Number(targetLongitude) }
-                ));
+        const target = { latitude: Number(targetLatitude), longitude: Number(targetLongitude) };
 
-                setCurrent(nextCurrent);
-                setDistance(nextDistance);
+        try {
+            watchIdRef.current = navigator.geolocation.watchPosition(
+                (position) => {
+                    const nextCurrent = {
+                        latitude: position.coords.latitude,
+                        longitude: position.coords.longitude,
+                        accuracy: position.coords.accuracy,
+                    };
+                    const nextDistance = Math.round(calculateDistance(
+                        nextCurrent,
+                        target
+                    ));
 
-                if (nextCurrent.accuracy > MAX_ACCEPTABLE_ACCURACY_METERS) {
+                    lastAccuracyRef.current = nextCurrent.accuracy;
+                    lastDistanceRef.current = nextDistance;
+                    setCurrent(nextCurrent);
+                    setDistance(nextDistance);
+
+                    if (nextCurrent.accuracy > MAX_ACCEPTABLE_ACCURACY_METERS) {
+                        setStatus('checking');
+                        setIssue('low_accuracy');
+                        setError(`Esperando ubicacion precisa. Precision actual: +/- ${Math.round(nextCurrent.accuracy)}m. En el permiso del navegador elige Precisa/Exacta si no mejora.`);
+                        return;
+                    }
+
+                    if (nextDistance > toleranceMeters) {
+                        setStatus('checking');
+                        setIssue(null);
+                        setError(`Estas a ${formatDistance(nextDistance)} del ${targetLabel.toLowerCase()}. Acercate al punto y la app verificara automaticamente cuando entres al radio permitido.`);
+                        return;
+                    }
+
+                    clearGpsWatch();
+                    setStatus('verified');
+                    setIssue(null);
+                    setError('');
+                    onVerified?.({
+                        latitude: nextCurrent.latitude,
+                        longitude: nextCurrent.longitude,
+                        accuracy: nextCurrent.accuracy,
+                        distanceMeters: nextDistance,
+                    });
+                },
+                (gpsError) => {
+                    clearGpsWatch();
                     setStatus('error');
-                    setIssue('low_accuracy');
-                    setError(`La ubicacion llego con baja precision (+/- ${Math.round(nextCurrent.accuracy)}m). En el permiso del navegador elige ubicacion Precisa/Exacta y vuelve a intentar.`);
-                    return;
+                    setIssue(getGpsIssue(gpsError));
+                    setError(getPermissionErrorMessage(gpsError));
+                    if (gpsError.code === gpsError.PERMISSION_DENIED) {
+                        setPermissionState('denied');
+                    }
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: GPS_READ_TIMEOUT_MS,
+                    maximumAge: GPS_POSITION_MAX_AGE_MS,
                 }
+            );
 
-                if (nextDistance > toleranceMeters) {
+            watchTimeoutRef.current = setTimeout(() => {
+                const lastAccuracy = lastAccuracyRef.current;
+                const lastDistance = lastDistanceRef.current;
+
+                clearGpsWatch();
+
+                if (
+                    lastAccuracy !== null
+                    && lastAccuracy <= MAX_ACCEPTABLE_ACCURACY_METERS
+                    && lastDistance !== null
+                    && lastDistance > toleranceMeters
+                ) {
                     setStatus('too_far');
+                    setIssue(null);
                     setError(strictMessage);
                     return;
                 }
 
-                setStatus('verified');
-                onVerified?.({
-                    latitude: nextCurrent.latitude,
-                    longitude: nextCurrent.longitude,
-                    accuracy: nextCurrent.accuracy,
-                    distanceMeters: nextDistance,
-                });
-            },
-            (gpsError) => {
-                setStatus('error');
-                setIssue(getGpsIssue(gpsError));
-                setError(getPermissionErrorMessage(gpsError));
-                if (gpsError.code === gpsError.PERMISSION_DENIED) {
-                    setPermissionState('denied');
+                if (lastAccuracy !== null && lastAccuracy > MAX_ACCEPTABLE_ACCURACY_METERS) {
+                    setStatus('error');
+                    setIssue('low_accuracy');
+                    setError(`La ultima lectura siguio con baja precision (+/- ${Math.round(lastAccuracy)}m). Cambia el permiso a Precisa/Exacta y vuelve a intentar.`);
+                    return;
                 }
-            },
-            {
-                enableHighAccuracy: true,
-                timeout: GPS_READ_TIMEOUT_MS,
-                maximumAge: 0,
-            }
-        );
-    }, [gpsSupported, hasTarget, onVerified, strictMessage, targetLatitude, targetLongitude, toleranceMeters]);
+
+                setStatus('error');
+                setIssue('timeout');
+                setError('No logramos una lectura precisa en 60 segundos. Mantente en punto abierto, activa ubicacion precisa y vuelve a intentar.');
+            }, GPS_WATCH_TIMEOUT_MS);
+        } catch {
+            clearGpsWatch();
+            setStatus('error');
+            setIssue('unknown');
+            setError('No se pudo iniciar el GPS del navegador. Verifica permisos y vuelve a intentar.');
+        }
+    }, [clearGpsWatch, gpsSupported, hasTarget, onVerified, strictMessage, targetLabel, targetLatitude, targetLongitude, toleranceMeters]);
 
     const handleRetry = React.useCallback(() => {
+        clearGpsWatch();
         setStatus('idle');
+        setCurrent(null);
         setDistance(null);
         setError('');
         setIssue(null);
-    }, []);
+        lastAccuracyRef.current = null;
+        lastDistanceRef.current = null;
+    }, [clearGpsWatch]);
 
     const targetLat = Number(targetLatitude);
     const targetLng = Number(targetLongitude);
     const canShowMap = hasTargetCoordinates(targetLat, targetLng);
-    const showPermissionWarning = permissionState === 'denied' || status === 'error';
+    const isCheckingTooFar = status === 'checking' && distance !== null && distance > toleranceMeters && issue !== 'low_accuracy';
+    const showPermissionWarning = permissionState === 'denied' || status === 'error' || issue === 'low_accuracy';
 
     return (
         <motion.div
@@ -396,14 +472,14 @@ export function GPSVerification({
                         </div>
                         <p className="mt-4 font-semibold text-zinc-950">
                             {status === 'idle' && 'Activa GPS para continuar'}
-                            {status === 'checking' && 'Leyendo GPS del celular...'}
+                            {status === 'checking' && (issue === 'low_accuracy' ? 'Mejorando precision GPS...' : isCheckingTooFar ? `Acercate al ${targetLabel.toLowerCase()}` : 'Leyendo GPS del celular...')}
                             {status === 'verified' && 'Ubicacion registrada'}
                             {status === 'too_far' && `No has llegado al ${targetLabel.toLowerCase()}`}
                             {status === 'error' && getErrorTitle(issue)}
                         </p>
                         <p className="mt-2 text-sm leading-6 text-zinc-600">
                             {status === 'idle' && 'El navegador pedira permiso de ubicacion. Elige Precisa/Exacta, no aproximada.'}
-                            {status === 'checking' && 'Mantente en esta pantalla hasta que termine la lectura. Puede tardar hasta 45 segundos.'}
+                            {status === 'checking' && ((issue === 'low_accuracy' || isCheckingTooFar) && error ? error : 'Mantente en esta pantalla. Veras tu posicion, precision y distancia mientras el GPS se estabiliza.')}
                             {status === 'verified' && (verifiedAt ? `Verificado a las ${new Date(verifiedAt).toLocaleTimeString()}` : 'Ya puedes continuar con el checklist.')}
                             {status === 'too_far' && strictMessage}
                             {status === 'error' && (error || 'No se pudo verificar tu ubicacion.')}
