@@ -169,9 +169,7 @@ async function main() {
       body: JSON.stringify({
         type: check.type,
         email: targetEmail,
-        options: {
-          redirectTo: expectedRedirectTo,
-        },
+        redirect_to: expectedRedirectTo,
       }),
     });
 
