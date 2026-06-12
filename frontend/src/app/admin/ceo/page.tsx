@@ -541,7 +541,8 @@ export default function AdminCeoPage() {
                         />
                         <div className="mt-5">
                             <CountRow label="Free" value={overview.plans.freeBusinesses} />
-                            <CountRow label="Growth" value={overview.plans.proBusinesses} />
+                            <CountRow label="Starter" value={overview.plans.starterBusinesses} />
+                            <CountRow label="Growth" value={overview.plans.growthBusinesses ?? overview.plans.proBusinesses} />
                             <CountRow label="Scale" value={overview.plans.scaleBusinesses} />
                             <CountRow label="Enterprise" value={overview.plans.enterpriseBusinesses} />
                             <CountRow label="Trialing pagos" value={overview.plans.trialingPaidBusinesses} />

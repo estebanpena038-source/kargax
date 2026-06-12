@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { BillingPlan, CommercialActivationSnapshot, WarehouseCapabilities, WarehouseRole } from '@/lib/warehouses/types';
 import { createAdminNotification } from '@/lib/server/route-auth';
 import type { BusinessTeamRole } from '@/lib/business-roles';
@@ -456,10 +456,7 @@ export interface BusinessAccessContext {
 }
 
 const CHECKOUT_PATH = '/planes';
-
-function getPlanPrice(plan: BillingPlan | null | undefined) {
-    return Number(plan?.price_monthly_cop ?? 0) || Math.round(Number(plan?.price_monthly_usd || 0) * 4000);
-}
+const DEFAULT_BILLING_PLAN_USD_TO_COP_RATE = 3650;
 
 type RawBillingPlanRecord = Partial<BillingPlan> & Record<string, unknown>;
 
@@ -485,15 +482,97 @@ function coerceSupportTier(value: unknown): BillingPlan['support_tier'] {
     return ['email', 'priority', 'premium'].includes(String(value)) ? String(value) as BillingPlan['support_tier'] : 'email';
 }
 
+export function getBillingPlanUsdToCopRate() {
+    const parsed = Number(process.env.BILLING_PLAN_USD_TO_COP_RATE);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_BILLING_PLAN_USD_TO_COP_RATE;
+}
+
+function readFeatureNumber(featureMatrix: Record<string, unknown>, keys: string[]) {
+    for (const key of keys) {
+        const value = featureMatrix[key];
+        const parsed = Number(value);
+
+        if (Number.isFinite(parsed) && parsed > 0) {
+            return parsed;
+        }
+    }
+
+    return 0;
+}
+
+function roundCopPrice(value: number) {
+    return Math.max(0, Math.round(value / 1000) * 1000);
+}
+
+export function getBillingPlanUsdAnchor(plan: Pick<BillingPlan, 'price_monthly_usd' | 'feature_matrix'> | null | undefined) {
+    if (!plan) {
+        return 0;
+    }
+
+    const featureMatrix = plan.feature_matrix && typeof plan.feature_matrix === 'object'
+        ? plan.feature_matrix
+        : {};
+    const mode = String(featureMatrix.billing_price_mode || '').toLowerCase();
+    const featureAnchor = readFeatureNumber(featureMatrix, ['usd_anchor', 'price_monthly_usd_anchor', 'public_price_usd']);
+
+    if (mode === 'usd_anchor' && featureAnchor > 0) {
+        return featureAnchor;
+    }
+
+    return mode === 'usd_anchor' ? coerceFiniteNumber(plan.price_monthly_usd, 0) : 0;
+}
+
+export function resolveBillingPlanPriceCop(
+    plan: Pick<BillingPlan, 'price_monthly_usd' | 'price_monthly_cop' | 'feature_matrix'> | null | undefined
+) {
+    if (!plan) {
+        return 0;
+    }
+
+    const usdAnchor = getBillingPlanUsdAnchor(plan);
+
+    if (usdAnchor > 0) {
+        return roundCopPrice(usdAnchor * getBillingPlanUsdToCopRate());
+    }
+
+    return coerceFiniteNumber(
+        plan.price_monthly_cop,
+        Math.round(coerceFiniteNumber(plan.price_monthly_usd, 0) * 4000)
+    );
+}
+
+export function isBillingPlanContactSalesOnly(plan: Pick<BillingPlan, 'code' | 'feature_matrix'> | null | undefined) {
+    if (!plan) {
+        return false;
+    }
+
+    const featureMatrix = plan.feature_matrix && typeof plan.feature_matrix === 'object'
+        ? plan.feature_matrix
+        : {};
+
+    return plan.code === 'enterprise' || featureMatrix.contact_sales_only === true;
+}
+
+function getPlanPrice(plan: BillingPlan | null | undefined) {
+    return resolveBillingPlanPriceCop(plan);
+}
+
 export function normalizeBillingPlan(plan: RawBillingPlanRecord): BillingPlan {
     const priceMonthlyUsd = coerceFiniteNumber(plan.price_monthly_usd, 0);
+    const featureMatrix = plan.feature_matrix && typeof plan.feature_matrix === 'object'
+        ? plan.feature_matrix as Record<string, unknown>
+        : {};
 
     return {
         code: String(plan.code || 'free'),
         name: String(plan.name || plan.code || 'Free'),
         tagline: typeof plan.tagline === 'string' ? plan.tagline : null,
         price_monthly_usd: priceMonthlyUsd,
-        price_monthly_cop: coerceFiniteNumber(plan.price_monthly_cop, Math.round(priceMonthlyUsd * 4000)),
+        price_monthly_cop: resolveBillingPlanPriceCop({
+            price_monthly_usd: priceMonthlyUsd,
+            price_monthly_cop: coerceFiniteNumber(plan.price_monthly_cop, Math.round(priceMonthlyUsd * 4000)),
+            feature_matrix: featureMatrix,
+        }),
         billing_currency_code: coerceBillingCurrency(plan.billing_currency_code),
         max_warehouses: coerceNullableInteger(plan.max_warehouses),
         max_internal_users: coerceNullableInteger(plan.max_internal_users),
@@ -508,9 +587,7 @@ export function normalizeBillingPlan(plan: RawBillingPlanRecord): BillingPlan {
         includes_multi_client_3pl: Boolean(plan.includes_multi_client_3pl),
         is_public: plan.is_public !== false,
         support_tier: coerceSupportTier(plan.support_tier),
-        feature_matrix: plan.feature_matrix && typeof plan.feature_matrix === 'object'
-            ? plan.feature_matrix as Record<string, unknown>
-            : {},
+        feature_matrix: featureMatrix,
         created_at: typeof plan.created_at === 'string' ? plan.created_at : new Date(0).toISOString(),
         updated_at: typeof plan.updated_at === 'string' ? plan.updated_at : new Date(0).toISOString(),
     };
@@ -523,10 +600,39 @@ export function normalizeBillingPlans(plans: RawBillingPlanRecord[] | null | und
         .sort((left, right) => getPlanPrice(left) - getPlanPrice(right));
 }
 
-export async function loadBillingPlans(supabaseAdmin: AdminClient) {
-    const plansResponse = await supabaseAdmin
+function getSupabasePublicReadClient() {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+        throw new Error('Supabase public credentials are required to load public billing plans.');
+    }
+
+    return createClient(supabaseUrl, supabaseAnonKey, {
+        auth: {
+            persistSession: false,
+            autoRefreshToken: false,
+            detectSessionInUrl: false,
+        },
+        global: {
+            headers: {
+                'x-app-name': 'KargaX-public-pricing',
+                'x-app-version': process.env.NEXT_PUBLIC_APP_VERSION || '1.0.0',
+            },
+        },
+    }) as AdminClient;
+}
+
+export async function loadBillingPlans(supabaseAdmin: AdminClient, options: { publicOnly?: boolean } = {}) {
+    let query = supabaseAdmin
         .from('billing_plans')
         .select('*');
+
+    if (options.publicOnly) {
+        query = query.eq('is_public', true);
+    }
+
+    const plansResponse = await query;
 
     if (plansResponse.error) {
         if (isBillingPlansTableMissing(plansResponse.error)) {
@@ -537,6 +643,10 @@ export async function loadBillingPlans(supabaseAdmin: AdminClient) {
     }
 
     return normalizeBillingPlans(plansResponse.data as RawBillingPlanRecord[] | null);
+}
+
+export async function loadPublicBillingPlans() {
+    return loadBillingPlans(getSupabasePublicReadClient(), { publicOnly: true });
 }
 
 function formatPlanLimitMessage(limit: number, subject: string) {
