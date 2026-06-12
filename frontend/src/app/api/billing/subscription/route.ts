@@ -1,11 +1,23 @@
 import { NextRequest } from 'next/server';
+import { isBillingMercadoPagoCheckoutConfigured } from '@/lib/mercadopago/config';
 import { requireAal2Route } from '@/lib/server/route-auth';
 import { apiError, apiSuccess, getRequestId } from '@/lib/server/api-response';
 import {
+    decorateBillingPlansForCountry,
     getBillingCheckoutInfrastructureStatus,
     getBusinessPlanSnapshot,
+    normalizeBillingCheckoutCountryCode,
 } from '@/lib/server/warehouses';
 import { resolveBusinessRolePolicy } from '@/lib/server/role-policy';
+
+function withCheckoutConfiguration(plans: ReturnType<typeof decorateBillingPlansForCountry>, countryCode: string | null) {
+    const checkoutConfigured = isBillingMercadoPagoCheckoutConfigured(countryCode);
+
+    return plans.map((plan) => ({
+        ...plan,
+        self_serve_checkout_enabled: Boolean(plan.self_serve_checkout_enabled && checkoutConfigured),
+    }));
+}
 
 export async function GET(request: NextRequest) {
     const requestId = getRequestId(request);
@@ -52,16 +64,25 @@ export async function GET(request: NextRequest) {
             getBusinessPlanSnapshot(supabaseAdmin, businessId),
             getBillingCheckoutInfrastructureStatus(supabaseAdmin),
         ]);
+        const { data: businessProfile } = await supabaseAdmin
+            .from('business_profiles')
+            .select('country_code')
+            .eq('user_id', businessId)
+            .maybeSingle();
+        const billingCountryCode = normalizeBillingCheckoutCountryCode(
+            businessProfile?.country_code || (profile as { country_code?: string | null } | null)?.country_code || 'CO'
+        );
 
         return apiSuccess({
             subscription: snapshot.subscription,
-            plans: snapshot.plans,
+            plans: withCheckoutConfiguration(decorateBillingPlansForCountry(snapshot.plans, billingCountryCode), billingCountryCode),
             limits: snapshot.limits,
             teamSchemaReady: snapshot.teamSchemaReady,
             teamSchemaMessage: snapshot.teamSchemaMessage,
             billingCheckoutReady: billingCheckoutStatus.ready,
             billingCheckoutMessage: billingCheckoutStatus.message,
             canManageBilling: policy.capabilities.canManageBilling,
+            billingCountryCode,
         }, {
             code: 'BILLING_SUBSCRIPTION_LOADED',
             requestId,
@@ -137,6 +158,14 @@ export async function PATCH(request: NextRequest) {
             getBusinessPlanSnapshot(supabaseAdmin, businessId),
             getBillingCheckoutInfrastructureStatus(supabaseAdmin),
         ]);
+        const { data: businessProfile } = await supabaseAdmin
+            .from('business_profiles')
+            .select('country_code')
+            .eq('user_id', businessId)
+            .maybeSingle();
+        const billingCountryCode = normalizeBillingCheckoutCountryCode(
+            businessProfile?.country_code || (profile as { country_code?: string | null } | null)?.country_code || 'CO'
+        );
         const plan = currentSnapshot.plans.find((candidate) => candidate.code === body.planCode);
 
         if (!plan) {
@@ -150,13 +179,14 @@ export async function PATCH(request: NextRequest) {
         if (plan.action_state === 'current') {
             return apiSuccess({
                 subscription: currentSnapshot.subscription,
-                plans: currentSnapshot.plans,
+                plans: withCheckoutConfiguration(decorateBillingPlansForCountry(currentSnapshot.plans, billingCountryCode), billingCountryCode),
                 limits: currentSnapshot.limits,
                 teamSchemaReady: currentSnapshot.teamSchemaReady,
                 teamSchemaMessage: currentSnapshot.teamSchemaMessage,
                 billingCheckoutReady: billingCheckout.ready,
                 billingCheckoutMessage: billingCheckout.message,
                 canManageBilling: policy.capabilities.canManageBilling,
+                billingCountryCode,
             }, {
                 code: 'PLAN_ALREADY_ACTIVE',
                 requestId,
@@ -229,13 +259,14 @@ export async function PATCH(request: NextRequest) {
 
         return apiSuccess({
             subscription: snapshot.subscription,
-            plans: snapshot.plans,
+            plans: withCheckoutConfiguration(decorateBillingPlansForCountry(snapshot.plans, billingCountryCode), billingCountryCode),
             limits: snapshot.limits,
             teamSchemaReady: snapshot.teamSchemaReady,
             teamSchemaMessage: snapshot.teamSchemaMessage,
             billingCheckoutReady: billingCheckoutAfterUpdate.ready,
             billingCheckoutMessage: billingCheckoutAfterUpdate.message,
             canManageBilling: policy.capabilities.canManageBilling,
+            billingCountryCode,
         }, {
             code: 'PLAN_UPDATED',
             requestId,

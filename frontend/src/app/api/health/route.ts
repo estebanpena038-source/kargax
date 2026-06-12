@@ -60,6 +60,16 @@ export async function GET(request: NextRequest) {
         const sentryConfigured = Boolean(process.env.NEXT_PUBLIC_SENTRY_DSN || process.env.SENTRY_DSN);
         const upstashConfigured = Boolean(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
         const paymentWebhookConfigured = Boolean(process.env.MERCADOPAGO_WEBHOOK_SECRET);
+        const billingPlanWebhookCountries = ['CO', 'PE', 'BR'];
+        const billingPlanCountryWebhooksConfigured = Object.fromEntries(
+            billingPlanWebhookCountries.map((country) => [
+                country,
+                Boolean(
+                    process.env[`MERCADOPAGO_WEBHOOK_SECRET_${country}`]
+                    || (country === 'CO' && process.env.MERCADOPAGO_WEBHOOK_SECRET)
+                ),
+            ])
+        );
         const degradedFlags = snapshot.flags.filter((flag) =>
             flag.enabled && ['degraded_mode_wallet', 'degraded_mode_warehouse'].includes(flag.key)
         );
@@ -86,6 +96,7 @@ export async function GET(request: NextRequest) {
                 sentry_configured: sentryConfigured,
                 upstash_configured: upstashConfigured,
                 payment_webhook_signature_configured: paymentWebhookConfigured,
+                billing_plan_country_webhooks_configured: billingPlanCountryWebhooksConfigured,
                 payout_automatic_enabled: snapshot.flags.some((flag) => flag.key === 'automatic_payouts_enabled' && flag.enabled),
             },
             degraded_flags: degradedFlags.map((flag) => flag.key),

@@ -1,5 +1,9 @@
 import { NextRequest } from 'next/server';
-import { preferenceApi } from '@/lib/mercadopago/config';
+import {
+    getBillingMercadoPagoApis,
+    getBillingMercadoPagoWebhookSecret,
+    getBillingMercadoPagoWebhookSecretEnvName,
+} from '@/lib/mercadopago/config';
 import { requireAal2Route } from '@/lib/server/route-auth';
 import { getPaymentRuntimeConfig } from '@/lib/server/runtime-env';
 import { apiError, apiSuccess, getRequestId } from '@/lib/server/api-response';
@@ -9,7 +13,9 @@ import {
     getBusinessPlanSnapshot,
     isBillingPlanContactSalesOnly,
     isBillingPlanPaymentAttemptsTableMissing,
+    normalizeBillingCheckoutCountryCode,
     resolveBillingPlanPriceCop,
+    resolveBillingPlanPriceForCountry,
 } from '@/lib/server/warehouses';
 import { resolveBusinessRolePolicy } from '@/lib/server/role-policy';
 import {
@@ -17,18 +23,6 @@ import {
     buildPaymentIdempotencyKey,
     serializePaymentReference,
 } from '@/lib/contracts/payments';
-
-function getBillingCheckoutConfig(planCurrency?: string | null) {
-    const currencyId = (
-        process.env.BILLING_PLAN_CURRENCY_ID
-        || planCurrency
-        || 'COP'
-    ).trim().toUpperCase();
-
-    return {
-        currencyId,
-    };
-}
 
 interface BillingCheckoutPreferenceBody {
     items: Array<{
@@ -55,8 +49,12 @@ interface BillingCheckoutPreferenceBody {
         business_id: string;
         current_plan: string;
         price_monthly_cop: number;
+        price_monthly_usd: number;
+        amount_usd_anchor: number;
+        fx_rate_usd_to_local: number;
         gateway_currency: string;
         gateway_amount: number;
+        pricing_source: string;
         country_code?: string;
     };
     auto_return?: 'approved';
@@ -177,9 +175,43 @@ export async function POST(request: NextRequest) {
         .select('company_name, country_code')
         .eq('user_id', businessId)
         .maybeSingle();
-    const countryCode = businessProfile?.country_code || (auth.context.profile as { country_code?: string } | null)?.country_code || 'CO';
-    const checkoutConfig = getBillingCheckoutConfig(plan.billing_currency_code);
-    const gatewayAmount = Math.round(priceMonthlyCop);
+    const rawCountryCode = businessProfile?.country_code || (auth.context.profile as { country_code?: string } | null)?.country_code || 'CO';
+    const countryCode = normalizeBillingCheckoutCountryCode(rawCountryCode);
+
+    if (!countryCode) {
+        return apiError('El checkout automatico de planes solo esta activo en Colombia, Peru y Brasil. Habla con ventas para activar tu empresa.', {
+            status: 409,
+            code: 'BILLING_COUNTRY_NOT_SUPPORTED',
+            requestId,
+            details: {
+                countryCode: rawCountryCode,
+            },
+        });
+    }
+
+    let localPrice: ReturnType<typeof resolveBillingPlanPriceForCountry>;
+    let countryPreferenceApi: ReturnType<typeof getBillingMercadoPagoApis>['preferenceApi'];
+
+    try {
+        localPrice = resolveBillingPlanPriceForCountry(plan, countryCode);
+        countryPreferenceApi = getBillingMercadoPagoApis(countryCode).preferenceApi;
+    } catch (error) {
+        return apiError(error instanceof Error ? error.message : 'Checkout no disponible para este pais', {
+            status: 503,
+            code: 'BILLING_COUNTRY_CHECKOUT_NOT_CONFIGURED',
+            requestId,
+        });
+    }
+
+    if (!isLocalhost && !getBillingMercadoPagoWebhookSecret(countryCode)) {
+        return apiError(`Define ${getBillingMercadoPagoWebhookSecretEnvName(countryCode)} antes de abrir checkout de planes en este pais.`, {
+            status: 503,
+            code: 'BILLING_WEBHOOK_SECRET_NOT_CONFIGURED',
+            requestId,
+        });
+    }
+
+    const gatewayAmount = localPrice.amountLocal;
 
     // Cancel ALL previous pending attempts for this business (prevent race conditions)
     await supabaseAdmin
@@ -195,6 +227,12 @@ export async function POST(request: NextRequest) {
             plan_code: plan.code,
             status: 'pending',
             amount: gatewayAmount,
+            country_code: localPrice.countryCode,
+            currency_code: localPrice.currencyCode,
+            amount_local: localPrice.amountLocal,
+            amount_usd_anchor: localPrice.amountUsdAnchor || null,
+            fx_rate_usd_to_local: localPrice.fxRateUsdToLocal,
+            pricing_source: localPrice.pricingSource,
             created_by: authUser.id,
             expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
         })
@@ -238,7 +276,7 @@ export async function POST(request: NextRequest) {
                 title: `KargaX ${plan.name}`,
                 description: `Plan mensual ${plan.name} para ${businessProfile?.company_name || 'empresa KargaX'}`,
                 quantity: 1,
-                currency_id: checkoutConfig.currencyId,
+                currency_id: localPrice.currencyCode,
                 unit_price: gatewayAmount,
             },
         ],
@@ -258,20 +296,24 @@ export async function POST(request: NextRequest) {
             business_id: businessId,
             current_plan: snapshot.subscription?.plan_code || 'free',
             price_monthly_cop: priceMonthlyCop,
-            gateway_currency: checkoutConfig.currencyId,
+            price_monthly_usd: Number(plan.price_monthly_usd || 0),
+            amount_usd_anchor: localPrice.amountUsdAnchor,
+            fx_rate_usd_to_local: localPrice.fxRateUsdToLocal,
+            gateway_currency: localPrice.currencyCode,
             gateway_amount: gatewayAmount,
-            country_code: countryCode,
+            pricing_source: localPrice.pricingSource,
+            country_code: localPrice.countryCode,
         },
     };
 
     if (!isLocalhost) {
         preferenceBody.auto_return = 'approved';
-        preferenceBody.notification_url = `${baseUrl}/api/payments/webhook`;
+        preferenceBody.notification_url = `${baseUrl}/api/payments/webhook?country=${localPrice.countryCode}`;
         preferenceBody.expires = true;
         preferenceBody.expiration_date_to = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
     }
 
-    const preference = await preferenceApi.create({
+    const preference = await countryPreferenceApi.create({
         body: preferenceBody,
         requestOptions: {
             idempotencyKey,
@@ -295,7 +337,10 @@ export async function POST(request: NextRequest) {
         attemptId: attempt.id,
         planCode: plan.code,
         gatewayAmount,
-        gatewayCurrency: checkoutConfig.currencyId,
+        gatewayCurrency: localPrice.currencyCode,
+        countryCode: localPrice.countryCode,
+        amountUsdAnchor: localPrice.amountUsdAnchor,
+        fxRateUsdToLocal: localPrice.fxRateUsdToLocal,
         externalReference: canonicalReference,
         idempotencyKey,
     }, {

@@ -2,6 +2,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { BillingPlan, CommercialActivationSnapshot, WarehouseCapabilities, WarehouseRole } from '@/lib/warehouses/types';
 import { createAdminNotification } from '@/lib/server/route-auth';
 import type { BusinessTeamRole } from '@/lib/business-roles';
+import { isStrictProductionEnvironment } from '@/lib/server/runtime-env';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AdminClient = SupabaseClient<any, 'public', any>;
@@ -21,6 +22,7 @@ type SupabaseErrorLike = {
 export const BUSINESS_OPERATIONS_MIGRATION = '025_business_team_mfa_and_plan_checkout.sql';
 export const BUSINESS_WAREHOUSE_BILLING_MIGRATION = '023_warehouse_management_and_saas.sql';
 export const BUSINESS_PRIVATE_FLEET_MIGRATION = '035_private_fleet_b2b.sql';
+export const BUSINESS_BILLING_LOCAL_CURRENCY_MIGRATION = '20260612_billing_usd_local_currency_countries.sql';
 
 function getSupabaseErrorText(error: unknown) {
     if (!error || typeof error !== 'object') {
@@ -65,6 +67,23 @@ export function isBillingPlanPaymentAttemptsTableMissing(error: unknown) {
     return isMissingSupabaseTable(error, 'billing_plan_payment_attempts');
 }
 
+function isMissingBillingPlanPaymentAttemptPricingColumns(error: unknown) {
+    const errorText = getSupabaseErrorText(error);
+
+    return (
+        errorText.includes('billing_plan_payment_attempts') &&
+        (
+            errorText.includes('country_code') ||
+            errorText.includes('currency_code') ||
+            errorText.includes('amount_local') ||
+            errorText.includes('amount_usd_anchor') ||
+            errorText.includes('fx_rate_usd_to_local') ||
+            errorText.includes('pricing_source') ||
+            errorText.includes('schema cache')
+        )
+    );
+}
+
 export function isBillingPlansTableMissing(error: unknown) {
     return isMissingSupabaseTable(error, 'billing_plans');
 }
@@ -87,6 +106,10 @@ export function getWarehouseBillingSetupMessage() {
 
 export function getBusinessPrivateFleetSetupMessage() {
     return `Aplica la migracion ${BUSINESS_PRIVATE_FLEET_MIGRATION} desde supabase/migrations para habilitar flota privada B2B, custodias y firmas.`;
+}
+
+export function getBillingLocalCurrencySetupMessage() {
+    return `Aplica la migracion ${BUSINESS_BILLING_LOCAL_CURRENCY_MIGRATION} desde supabase/migrations para habilitar auditoria de checkout por pais y moneda local.`;
 }
 
 interface BusinessPlanSubscriptionRecord {
@@ -150,7 +173,7 @@ export async function getBusinessTeamInfrastructureStatus(supabaseAdmin: AdminCl
 export async function getBillingCheckoutInfrastructureStatus(supabaseAdmin: AdminClient) {
     const { error } = await supabaseAdmin
         .from('billing_plan_payment_attempts')
-        .select('id', { count: 'exact', head: true });
+        .select('id,country_code,currency_code,amount_local,amount_usd_anchor,fx_rate_usd_to_local,pricing_source', { count: 'exact', head: true });
 
     if (!error) {
         return {
@@ -163,6 +186,13 @@ export async function getBillingCheckoutInfrastructureStatus(supabaseAdmin: Admi
         return {
             ready: false,
             message: getBusinessOperationsSetupMessage(),
+        };
+    }
+
+    if (isMissingBillingPlanPaymentAttemptPricingColumns(error)) {
+        return {
+            ready: false,
+            message: getBillingLocalCurrencySetupMessage(),
         };
     }
 
@@ -457,6 +487,26 @@ export interface BusinessAccessContext {
 
 const CHECKOUT_PATH = '/planes';
 const DEFAULT_BILLING_PLAN_USD_TO_COP_RATE = 3650;
+const DEFAULT_NON_PRODUCTION_USD_TO_LOCAL_RATE = {
+    COP: DEFAULT_BILLING_PLAN_USD_TO_COP_RATE,
+    PEN: 3.75,
+    BRL: 5.25,
+} as const;
+const BILLING_CHECKOUT_COUNTRY_TO_CURRENCY = {
+    CO: 'COP',
+    PE: 'PEN',
+    BR: 'BRL',
+} as const;
+const BILLING_COUNTRY_LABELS = {
+    CO: 'Colombia',
+    PE: 'Peru',
+    BR: 'Brasil',
+} as const;
+
+export type BillingCheckoutCountryCode = keyof typeof BILLING_CHECKOUT_COUNTRY_TO_CURRENCY;
+export type BillingLocalCurrencyCode = typeof BILLING_CHECKOUT_COUNTRY_TO_CURRENCY[BillingCheckoutCountryCode];
+
+export const SUPPORTED_BILLING_CHECKOUT_COUNTRIES = Object.keys(BILLING_CHECKOUT_COUNTRY_TO_CURRENCY) as BillingCheckoutCountryCode[];
 
 type RawBillingPlanRecord = Partial<BillingPlan> & Record<string, unknown>;
 
@@ -487,6 +537,41 @@ export function getBillingPlanUsdToCopRate() {
     return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_BILLING_PLAN_USD_TO_COP_RATE;
 }
 
+export function normalizeBillingCheckoutCountryCode(value: unknown): BillingCheckoutCountryCode | null {
+    const normalized = String(value || '').trim().toUpperCase();
+
+    return SUPPORTED_BILLING_CHECKOUT_COUNTRIES.includes(normalized as BillingCheckoutCountryCode)
+        ? normalized as BillingCheckoutCountryCode
+        : null;
+}
+
+export function getBillingCountryLabel(countryCode: BillingCheckoutCountryCode) {
+    return BILLING_COUNTRY_LABELS[countryCode];
+}
+
+export function getBillingCurrencyForCountry(countryCode: BillingCheckoutCountryCode): BillingLocalCurrencyCode {
+    return BILLING_CHECKOUT_COUNTRY_TO_CURRENCY[countryCode];
+}
+
+function getBillingPlanUsdRateEnvName(currencyCode: BillingLocalCurrencyCode) {
+    return `BILLING_PLAN_USD_TO_${currencyCode}_RATE`;
+}
+
+export function getBillingPlanUsdToLocalRate(currencyCode: BillingLocalCurrencyCode) {
+    const envName = getBillingPlanUsdRateEnvName(currencyCode);
+    const parsed = Number(process.env[envName]);
+
+    if (Number.isFinite(parsed) && parsed > 0) {
+        return parsed;
+    }
+
+    if (isStrictProductionEnvironment()) {
+        throw new Error(`Missing required production env vars: ${envName}`);
+    }
+
+    return DEFAULT_NON_PRODUCTION_USD_TO_LOCAL_RATE[currencyCode];
+}
+
 function readFeatureNumber(featureMatrix: Record<string, unknown>, keys: string[]) {
     for (const key of keys) {
         const value = featureMatrix[key];
@@ -502,6 +587,14 @@ function readFeatureNumber(featureMatrix: Record<string, unknown>, keys: string[
 
 function roundCopPrice(value: number) {
     return Math.max(0, Math.round(value / 1000) * 1000);
+}
+
+function roundBillingLocalPrice(value: number, currencyCode: BillingLocalCurrencyCode) {
+    if (currencyCode === 'COP') {
+        return roundCopPrice(value);
+    }
+
+    return Math.max(0, Math.round(value * 100) / 100);
 }
 
 export function getBillingPlanUsdAnchor(plan: Pick<BillingPlan, 'price_monthly_usd' | 'feature_matrix'> | null | undefined) {
@@ -539,6 +632,73 @@ export function resolveBillingPlanPriceCop(
         plan.price_monthly_cop,
         Math.round(coerceFiniteNumber(plan.price_monthly_usd, 0) * 4000)
     );
+}
+
+export function resolveBillingPlanPriceForCountry(
+    plan: Pick<BillingPlan, 'price_monthly_usd' | 'price_monthly_cop' | 'feature_matrix'> | null | undefined,
+    countryCodeInput: unknown
+) {
+    const countryCode = normalizeBillingCheckoutCountryCode(countryCodeInput);
+
+    if (!countryCode) {
+        throw new Error('Checkout de planes no disponible para este pais. Habla con ventas para activacion asistida.');
+    }
+
+    const currencyCode = getBillingCurrencyForCountry(countryCode);
+    const usdAnchor = getBillingPlanUsdAnchor(plan);
+    const fxRate = getBillingPlanUsdToLocalRate(currencyCode);
+    const legacyCopPrice = resolveBillingPlanPriceCop(plan);
+    const fallbackUsdPrice = coerceFiniteNumber(plan?.price_monthly_usd, 0);
+    const amountLocal = usdAnchor > 0
+        ? roundBillingLocalPrice(usdAnchor * fxRate, currencyCode)
+        : currencyCode === 'COP'
+            ? legacyCopPrice
+            : legacyCopPrice > 0
+                ? roundBillingLocalPrice((legacyCopPrice / getBillingPlanUsdToCopRate()) * fxRate, currencyCode)
+                : roundBillingLocalPrice(fallbackUsdPrice * fxRate, currencyCode);
+
+    return {
+        countryCode,
+        countryLabel: getBillingCountryLabel(countryCode),
+        currencyCode,
+        amountLocal,
+        amountUsdAnchor: usdAnchor,
+        fxRateUsdToLocal: fxRate,
+        pricingSource: usdAnchor > 0 ? 'usd_anchor_env_rate' : 'legacy_plan_price',
+        selfServeCheckoutEnabled: true,
+    };
+}
+
+export function decorateBillingPlanForCountry(plan: BillingPlan, countryCodeInput: unknown): BillingPlan {
+    const countryCode = normalizeBillingCheckoutCountryCode(countryCodeInput);
+
+    if (!countryCode) {
+        return {
+            ...plan,
+            billing_country_code: null,
+            local_currency_code: null,
+            price_monthly_local: null,
+            usd_anchor: getBillingPlanUsdAnchor(plan),
+            fx_rate_usd_to_local: null,
+            self_serve_checkout_enabled: false,
+        };
+    }
+
+    const price = resolveBillingPlanPriceForCountry(plan, countryCode);
+
+    return {
+        ...plan,
+        billing_country_code: price.countryCode,
+        local_currency_code: price.currencyCode,
+        price_monthly_local: price.amountLocal,
+        usd_anchor: price.amountUsdAnchor,
+        fx_rate_usd_to_local: price.fxRateUsdToLocal,
+        self_serve_checkout_enabled: !isBillingPlanContactSalesOnly(plan),
+    };
+}
+
+export function decorateBillingPlansForCountry(plans: BillingPlan[], countryCodeInput: unknown) {
+    return plans.map((plan) => decorateBillingPlanForCountry(plan, countryCodeInput));
 }
 
 export function isBillingPlanContactSalesOnly(plan: Pick<BillingPlan, 'code' | 'feature_matrix'> | null | undefined) {
