@@ -23,6 +23,7 @@ import type {
 } from '@/lib/platform/types';
 import { getAdminAdvancePortfolioSnapshot } from '@/lib/server/advances';
 import { getFeatureFlags } from '@/lib/server/feature-flags';
+import { resolveBillingPlanPriceCop } from '@/lib/server/warehouses';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AdminClient = SupabaseClient<any, 'public', any>;
@@ -946,10 +947,14 @@ type CeoBusinessSubscriptionRow = {
         code?: string | null;
         name?: string | null;
         price_monthly_cop?: number | null;
+        price_monthly_usd?: number | null;
+        feature_matrix?: Record<string, unknown> | null;
     } | Array<{
         code?: string | null;
         name?: string | null;
         price_monthly_cop?: number | null;
+        price_monthly_usd?: number | null;
+        feature_matrix?: Record<string, unknown> | null;
     }> | null;
 };
 
@@ -1109,7 +1114,7 @@ export async function getCeoOverviewSnapshot(
         safeSelectAll<CeoBusinessSubscriptionRow>(() =>
             supabaseAdmin
                 .from('business_plan_subscriptions')
-                .select('business_id, plan_code, status, plan:billing_plans(code, name, price_monthly_cop)')
+                .select('business_id, plan_code, status, plan:billing_plans(code, name, price_monthly_cop, price_monthly_usd, feature_matrix)')
                 .in('status', ['active', 'trialing'])
                 .order('created_at', { ascending: false })
         ),
@@ -1154,7 +1159,8 @@ export async function getCeoOverviewSnapshot(
     const planCounts = paidSubscriptions.reduce((counts, row) => {
         const planCode = (row.plan_code || 'other').toLowerCase();
 
-        if (planCode === 'pro') counts.pro += 1;
+        if (planCode === 'starter') counts.starter += 1;
+        else if (planCode === 'growth' || planCode === 'pro') counts.growth += 1;
         else if (planCode === 'scale') counts.scale += 1;
         else if (planCode === 'enterprise') counts.enterprise += 1;
         else counts.other += 1;
@@ -1162,10 +1168,14 @@ export async function getCeoOverviewSnapshot(
         if (row.status === 'trialing') counts.trialing += 1;
 
         return counts;
-    }, { pro: 0, scale: 0, enterprise: 0, other: 0, trialing: 0 });
+    }, { starter: 0, growth: 0, scale: 0, enterprise: 0, other: 0, trialing: 0 });
     const activeMrrCop = paidSubscriptions.reduce((total, row) => {
         const plan = Array.isArray(row.plan) ? row.plan[0] : row.plan;
-        return total + Number(plan?.price_monthly_cop || 0);
+        return total + resolveBillingPlanPriceCop({
+            price_monthly_cop: Number(plan?.price_monthly_cop || 0),
+            price_monthly_usd: Number(plan?.price_monthly_usd || 0),
+            feature_matrix: plan?.feature_matrix || {},
+        });
     }, 0);
     const statusCounts = offerRows.reduce((counts, row) => {
         const status = String(row.status || '').toLowerCase();
@@ -1216,7 +1226,9 @@ export async function getCeoOverviewSnapshot(
         },
         plans: {
             freeBusinesses: Math.max(Number(businessProfiles || businessUsers || 0) - payingBusinessIds.size, 0),
-            proBusinesses: planCounts.pro,
+            starterBusinesses: planCounts.starter,
+            growthBusinesses: planCounts.growth,
+            proBusinesses: planCounts.growth,
             scaleBusinesses: planCounts.scale,
             enterpriseBusinesses: planCounts.enterprise,
             otherPaidBusinesses: planCounts.other,

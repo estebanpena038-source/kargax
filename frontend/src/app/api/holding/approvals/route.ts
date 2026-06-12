@@ -10,6 +10,7 @@ import {
     getHoldingBusinesses,
     resolveHoldingAccessContext,
 } from '@/lib/server/holding';
+import { resolveBillingPlanPriceCop } from '@/lib/server/warehouses';
 
 export async function GET(request: NextRequest) {
     const auth = await requireAuthenticatedRoute(request);
@@ -180,7 +181,7 @@ export async function POST(request: NextRequest) {
 
             const { data: plan, error: planError } = await supabaseAdmin
                 .from('billing_plans')
-                .select('code, name, price_monthly_cop, price_monthly_usd')
+                .select('code, name, price_monthly_cop, price_monthly_usd, feature_matrix')
                 .eq('code', planCode)
                 .maybeSingle();
 
@@ -198,7 +199,11 @@ export async function POST(request: NextRequest) {
             requestPayload.businessId = businessId;
             requestPayload.planCode = plan.code;
             requestPayload.targetPlanName = plan.name;
-            requestPayload.monthlyPriceCop = Number(plan.price_monthly_cop || Math.round(Number(plan.price_monthly_usd || 0) * 4000));
+            requestPayload.monthlyPriceCop = resolveBillingPlanPriceCop({
+                price_monthly_cop: Number(plan.price_monthly_cop || 0),
+                price_monthly_usd: Number(plan.price_monthly_usd || 0),
+                feature_matrix: typeof plan.feature_matrix === 'object' && plan.feature_matrix ? plan.feature_matrix : {},
+            });
             requestPayload.monthlyPriceUsd = Number(plan.price_monthly_usd || 0);
         }
 

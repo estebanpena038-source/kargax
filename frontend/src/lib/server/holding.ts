@@ -11,7 +11,7 @@ import type {
     HoldingSummaryResponse,
     HoldingApprovalsResponse,
 } from '@/lib/warehouses/types';
-import { getBillingCheckoutInfrastructureStatus, isBusinessTeamMembersTableMissing } from '@/lib/server/warehouses';
+import { getBillingCheckoutInfrastructureStatus, isBusinessTeamMembersTableMissing, resolveBillingPlanPriceCop } from '@/lib/server/warehouses';
 import { createAdminNotification } from '@/lib/server/route-auth';
 import { isStrictProductionEnvironment } from '@/lib/server/runtime-env';
 
@@ -2387,7 +2387,7 @@ async function activateBusinessPlanSubscription(
 ) {
     const { data: plan, error: planError } = await supabaseAdmin
         .from('billing_plans')
-        .select('code, name, price_monthly_cop, price_monthly_usd')
+        .select('code, name, price_monthly_cop, price_monthly_usd, feature_matrix')
         .eq('code', payload.planCode)
         .maybeSingle();
 
@@ -2448,7 +2448,11 @@ async function activateBusinessPlanSubscription(
     return {
         subscription: response.data,
         planName: plan.name,
-        priceMonthlyCop: Number(plan.price_monthly_cop || Math.round(Number(plan.price_monthly_usd || 0) * 4000)),
+        priceMonthlyCop: resolveBillingPlanPriceCop({
+            price_monthly_cop: Number(plan.price_monthly_cop || 0),
+            price_monthly_usd: Number(plan.price_monthly_usd || 0),
+            feature_matrix: typeof plan.feature_matrix === 'object' && plan.feature_matrix ? plan.feature_matrix : {},
+        }),
         priceMonthlyUsd: Number(plan.price_monthly_usd || 0),
     };
 }

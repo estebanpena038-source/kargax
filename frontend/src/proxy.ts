@@ -15,6 +15,7 @@ import { handleCorsRequest, secureResponse } from '@/lib/server/cors';
 const PUBLIC_ROUTES = [
     '/',
     '/ayuda',
+    '/planes',
     '/soporte',
     '/onboarding',
     '/login',
@@ -23,6 +24,7 @@ const PUBLIC_ROUTES = [
     '/recuperar-contrasena',
     '/auth/callback',
     '/api/auth/session',
+    '/api/billing/plans/public',
     '/api/market/context',
     '/api/onboarding/status',
     '/api/onboarding/checklist',

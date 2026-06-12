@@ -378,6 +378,9 @@ export interface AdminCeoOverviewResponse {
     };
     plans: {
         freeBusinesses: number;
+        starterBusinesses: number;
+        growthBusinesses: number;
+        /** @deprecated Use growthBusinesses. Kept for old clients during rollout. */
         proBusinesses: number;
         scaleBusinesses: number;
         enterpriseBusinesses: number;

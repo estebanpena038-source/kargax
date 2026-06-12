@@ -4,10 +4,10 @@ import { requireAuthenticatedRoute, resolveScopedBusinessId } from '@/lib/server
 import { getBusinessPlanSnapshot, resolveBusinessAccessContext } from '@/lib/server/warehouses';
 
 const RECOMMENDED_PLAN_BY_FEATURE: Record<string, string> = {
-    warehouse_limit: 'growth',
-    team_limit: 'growth',
-    private_fleet_limit: 'growth',
-    monthly_trip_limit: 'growth',
+    warehouse_limit: 'starter',
+    team_limit: 'starter',
+    private_fleet_limit: 'starter',
+    monthly_trip_limit: 'starter',
     report_exports: 'growth',
     api_access: 'scale',
 };
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
     const snapshot = await getBusinessPlanSnapshot(supabaseAdmin, businessId);
     const recommendedPlan = typeof body.metadata?.recommendedPlan === 'string'
         ? body.metadata.recommendedPlan
-        : RECOMMENDED_PLAN_BY_FEATURE[body.featureKey] || 'growth';
+        : RECOMMENDED_PLAN_BY_FEATURE[body.featureKey] || 'starter';
     const limitText = body.limitValue == null ? 'sin limite definido' : String(body.limitValue);
     const usageText = body.currentUsage == null ? 'uso actual no informado' : String(body.currentUsage);
     const message = body.message
