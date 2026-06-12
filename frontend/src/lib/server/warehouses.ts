@@ -647,11 +647,15 @@ export function resolveBillingPlanPriceForCountry(
     const currencyCode = getBillingCurrencyForCountry(countryCode);
     const usdAnchor = getBillingPlanUsdAnchor(plan);
     const fxRate = getBillingPlanUsdToLocalRate(currencyCode);
+    const legacyCopPrice = resolveBillingPlanPriceCop(plan);
+    const fallbackUsdPrice = coerceFiniteNumber(plan?.price_monthly_usd, 0);
     const amountLocal = usdAnchor > 0
         ? roundBillingLocalPrice(usdAnchor * fxRate, currencyCode)
         : currencyCode === 'COP'
-            ? resolveBillingPlanPriceCop(plan)
-            : roundBillingLocalPrice(coerceFiniteNumber(plan?.price_monthly_usd, 0) * fxRate, currencyCode);
+            ? legacyCopPrice
+            : legacyCopPrice > 0
+                ? roundBillingLocalPrice((legacyCopPrice / getBillingPlanUsdToCopRate()) * fxRate, currencyCode)
+                : roundBillingLocalPrice(fallbackUsdPrice * fxRate, currencyCode);
 
     return {
         countryCode,
