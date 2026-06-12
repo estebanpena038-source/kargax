@@ -315,6 +315,7 @@ export const warehouseClient = {
         teamSchemaMessage?: WarehouseListResponse['teamSchemaMessage'];
         billingCheckoutReady?: WarehouseListResponse['billingCheckoutReady'];
         billingCheckoutMessage?: WarehouseListResponse['billingCheckoutMessage'];
+        billingCountryCode?: string | null;
     }>('/api/billing/subscription'),
     getBillingUsage: () => request<{
         subscription: WarehouseListResponse['subscription'];
@@ -334,6 +335,7 @@ export const warehouseClient = {
             teamSchemaMessage?: WarehouseListResponse['teamSchemaMessage'];
             billingCheckoutReady?: WarehouseListResponse['billingCheckoutReady'];
             billingCheckoutMessage?: WarehouseListResponse['billingCheckoutMessage'];
+            billingCountryCode?: string | null;
         }>('/api/billing/subscription', {
             method: 'PATCH',
             body: JSON.stringify(payload),
@@ -347,6 +349,12 @@ export const warehouseClient = {
                 sandbox_init_point?: string | null;
             };
             attemptId: string;
+            planCode?: string;
+            gatewayAmount?: number;
+            gatewayCurrency?: string;
+            countryCode?: string;
+            amountUsdAnchor?: number;
+            fxRateUsdToLocal?: number;
         }>('/api/billing/subscription/checkout', {
             method: 'POST',
             body: JSON.stringify(payload),

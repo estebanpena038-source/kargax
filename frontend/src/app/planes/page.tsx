@@ -16,17 +16,33 @@ import { DashboardLayout } from '@/components/layouts/DashboardLayout';
 import { Button, Card, toast } from '@/components/ui';
 import { EnterpriseHero, InlineNotice, SectionHeader, StatusPill, UsageMeter } from '@/components/enterprise/EnterpriseLuxury';
 import warehouseClient from '@/lib/warehouses/client';
-import type { BillingPlan, BusinessPlanSubscription, WarehouseListResponse } from '@/lib/warehouses/types';
+import type { BillingCheckoutCountryCode, BillingLocalCurrencyCode, BillingPlan, BusinessPlanSubscription, WarehouseListResponse } from '@/lib/warehouses/types';
 import { useAuthStore } from '@/features/auth/store/authStore';
 import { MARKETPLACE_COMMISSION_PERCENT } from '@/lib/billing/pricing';
 
-const BILLING_PLAN_USD_TO_COP_RATE = 3650;
+const BILLING_COUNTRY_OPTIONS: Array<{ code: BillingCheckoutCountryCode; label: string; currency: BillingLocalCurrencyCode }> = [
+    { code: 'CO', label: 'Colombia', currency: 'COP' },
+    { code: 'PE', label: 'Peru', currency: 'PEN' },
+    { code: 'BR', label: 'Brasil', currency: 'BRL' },
+];
 
-function formatPriceCop(value: number) {
-    return new Intl.NumberFormat('es-CO', {
+function resolveBillingCountry(value: unknown): BillingCheckoutCountryCode {
+    const normalized = String(value || '').trim().toUpperCase();
+    return BILLING_COUNTRY_OPTIONS.some((country) => country.code === normalized)
+        ? normalized as BillingCheckoutCountryCode
+        : 'CO';
+}
+
+function getBillingCountryLabel(value: unknown) {
+    const countryCode = resolveBillingCountry(value);
+    return BILLING_COUNTRY_OPTIONS.find((country) => country.code === countryCode)?.label || 'Colombia';
+}
+
+function formatLocalPrice(value: number, currency: BillingLocalCurrencyCode) {
+    return new Intl.NumberFormat(currency === 'COP' ? 'es-CO' : currency === 'PEN' ? 'es-PE' : 'pt-BR', {
         style: 'currency',
-        currency: 'COP',
-        maximumFractionDigits: 0,
+        currency,
+        maximumFractionDigits: currency === 'COP' ? 0 : 2,
     }).format(Number(value || 0));
 }
 
@@ -43,38 +59,48 @@ function getSupportLabel(plan: BillingPlan) {
 }
 
 function getNumericPrice(plan: BillingPlan | BusinessPlanSubscription['plan'] | null | undefined) {
-    return Number(plan?.price_monthly_cop ?? 0) || Math.round(Number(plan?.price_monthly_usd || 0) * BILLING_PLAN_USD_TO_COP_RATE);
+    return Number(plan?.price_monthly_local ?? plan?.price_monthly_cop ?? 0) || Number(plan?.price_monthly_usd || 0);
 }
 
 function getPlanUsdAnchor(plan: BillingPlan) {
     const featureMatrix = plan.feature_matrix || {};
     const featureAnchor = Number(featureMatrix.usd_anchor || featureMatrix.price_monthly_usd_anchor || featureMatrix.public_price_usd || 0);
+    const apiAnchor = Number(plan.usd_anchor || 0);
+    if (Number.isFinite(apiAnchor) && apiAnchor > 0) return apiAnchor;
     return Number.isFinite(featureAnchor) && featureAnchor > 0 ? featureAnchor : Number(plan.price_monthly_usd || 0);
 }
 
-function formatUsdReference(value: number) {
-    return new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: 'USD',
+function formatUsdAmount(value: number) {
+    const formatted = new Intl.NumberFormat('en-US', {
         maximumFractionDigits: 0,
     }).format(Number(value || 0));
+
+    return `USD ${formatted}`;
 }
 
 function getPlanPriceLabel(plan: BillingPlan) {
-    const price = formatPriceCop(getNumericPrice(plan));
+    const usdAnchor = getPlanUsdAnchor(plan);
+    const price = formatUsdAmount(usdAnchor || Number(plan.price_monthly_usd || 0));
+
     return plan.code === 'enterprise' ? `Desde ${price}` : price;
 }
 
-function getPlanReferenceLabel(plan: BillingPlan) {
-    const usdAnchor = getPlanUsdAnchor(plan);
-
-    if (!usdAnchor) {
-        return plan.code === 'free' ? 'Sin mensualidad' : null;
+function getPlanLocalPaymentLabel(plan: BillingPlan) {
+    if (plan.code === 'free') {
+        return 'Sin mensualidad';
     }
 
-    return plan.code === 'enterprise'
-        ? `desde ${formatUsdReference(usdAnchor)} de referencia`
-        : `${formatUsdReference(usdAnchor)} de referencia`;
+    if (!plan.local_currency_code || plan.price_monthly_local === null || plan.price_monthly_local === undefined) {
+        return plan.self_serve_checkout_enabled === false
+            ? 'Checkout automatico pendiente de activacion para este pais.'
+            : 'Pagas en moneda local al activar.';
+    }
+
+    const estimate = `Pagas aprox. ${formatLocalPrice(plan.price_monthly_local, plan.local_currency_code)} en ${getBillingCountryLabel(plan.billing_country_code)}.`;
+
+    return plan.self_serve_checkout_enabled === false
+        ? `${estimate} Checkout automatico pendiente de activacion.`
+        : estimate;
 }
 
 function getPlanHighlights(plan: BillingPlan) {
@@ -275,11 +301,13 @@ function PlansPageContent() {
                                     const needsCheckout = plan.action_state === 'checkout';
                                     const isBlocked = plan.action_state === 'blocked_by_usage';
                                     const isEnterpriseSales = plan.code === 'enterprise' && !isCurrentPlan;
+                                    const isUnsupportedCountryCheckout = needsCheckout && plan.self_serve_checkout_enabled === false;
+                                    const isSalesAssisted = isEnterpriseSales || isUnsupportedCountryCheckout;
                                     const isDowngradeWithoutCheckout =
                                         plan.action_state === 'switch_now' &&
                                         getNumericPrice(plan) < getNumericPrice(subscription?.plan);
-                                    const canClick = canManageBilling && !isCurrentPlan && !isBlocked && !isEnterpriseSales && (!needsCheckout || billingCheckoutReady);
-                                    const referenceLabel = getPlanReferenceLabel(plan);
+                                    const canClick = canManageBilling && !isCurrentPlan && !isBlocked && !isSalesAssisted && (!needsCheckout || billingCheckoutReady);
+                                    const localPaymentLabel = getPlanLocalPaymentLabel(plan);
 
                                     return (
                                         <Card
@@ -302,8 +330,8 @@ function PlansPageContent() {
                                                     {getPlanPriceLabel(plan)}
                                                 </p>
                                                 <p className={`mt-2 text-xs ${plan.code === 'enterprise' ? 'text-white/50' : 'text-zinc-500'}`}>/ mes + IVA si aplica</p>
-                                                {referenceLabel ? (
-                                                    <p className={`mt-1 text-xs ${plan.code === 'enterprise' ? 'text-white/50' : 'text-zinc-500'}`}>{referenceLabel}</p>
+                                                {localPaymentLabel ? (
+                                                    <p className={`mt-1 text-xs ${plan.code === 'enterprise' ? 'text-white/50' : 'text-zinc-500'}`}>{localPaymentLabel}</p>
                                                 ) : null}
                                             </div>
 
@@ -316,13 +344,13 @@ function PlansPageContent() {
                                                 ))}
                                             </div>
 
-                                            {isEnterpriseSales ? (
+                                            {isSalesAssisted ? (
                                                 <Button
                                                     className="mt-6 w-full"
                                                     variant="secondary"
                                                     asChild
                                                 >
-                                                    <Link href="/soporte?tema=enterprise">Hablar con ventas</Link>
+                                                    <Link href={isEnterpriseSales ? '/soporte?tema=enterprise' : '/soporte?tema=planes-pais'}>Hablar con ventas</Link>
                                                 </Button>
                                             ) : (
                                                 <Button
@@ -419,16 +447,20 @@ function PlansPageFallback() {
 }
 
 function PublicPricingPage() {
+    const [selectedCountry, setSelectedCountry] = React.useState<BillingCheckoutCountryCode>(() => (
+        resolveBillingCountry(process.env.NEXT_PUBLIC_DEFAULT_COUNTRY)
+    ));
     const [publicPlans, setPublicPlans] = React.useState<BillingPlan[]>([]);
     const [loadingPlans, setLoadingPlans] = React.useState(true);
     const [loadError, setLoadError] = React.useState<string | null>(null);
 
     React.useEffect(() => {
         let mounted = true;
+        setLoadingPlans(true);
 
         (async () => {
             try {
-                const response = await fetch('/api/billing/plans/public', {
+                const response = await fetch(`/api/billing/plans/public?country=${encodeURIComponent(selectedCountry)}`, {
                     headers: {
                         Accept: 'application/json',
                     },
@@ -458,7 +490,7 @@ function PublicPricingPage() {
         return () => {
             mounted = false;
         };
-    }, []);
+    }, [selectedCountry]);
 
     return (
         <main className="min-h-screen bg-[var(--color-background)]">
@@ -466,7 +498,7 @@ function PublicPricingPage() {
                 <EnterpriseHero
                     eyebrow="Planes de produccion"
                     title="Planes KargaX"
-                    description={`Free valida, Starter convierte, Growth es el recomendado, Scale automatiza y Enterprise se vende con contrato. Cobro en COP por Mercado Pago con referencia USD. Marketplace mantiene ${MARKETPLACE_COMMISSION_PERCENT}% solo en viajes externos.`}
+                    description={`Free valida, Starter convierte, Growth es el recomendado, Scale automatiza y Enterprise se vende con contrato. Precio oficial en USD y cobro local por Mercado Pago segun pais. Marketplace mantiene ${MARKETPLACE_COMMISSION_PERCENT}% solo en viajes externos.`}
                     icon={Crown}
                     actions={(
                         <div className="grid w-full gap-3 sm:flex sm:w-auto sm:flex-wrap">
@@ -475,6 +507,19 @@ function PublicPricingPage() {
                         </div>
                     )}
                 />
+
+                <div className="mt-6 flex flex-wrap items-center gap-2">
+                    {BILLING_COUNTRY_OPTIONS.map((country) => (
+                        <button
+                            key={country.code}
+                            type="button"
+                            className={`rounded-lg border px-3 py-2 text-sm font-semibold transition ${selectedCountry === country.code ? 'border-zinc-950 bg-zinc-950 text-white' : 'border-zinc-200 bg-white text-zinc-700 hover:border-zinc-400'}`}
+                            onClick={() => setSelectedCountry(country.code)}
+                        >
+                            {country.label} - {country.currency}
+                        </button>
+                    ))}
+                </div>
 
                 {loadingPlans ? (
                     <div className="flex min-h-[32vh] items-center justify-center">
@@ -489,7 +534,7 @@ function PublicPricingPage() {
                 ) : (
                     <div className="mt-8 grid kx-enterprise-grid gap-5">
                         {publicPlans.map((plan) => {
-                            const referenceLabel = getPlanReferenceLabel(plan);
+                            const localPaymentLabel = getPlanLocalPaymentLabel(plan);
 
                             return (
                                 <Card key={plan.code} className={`kx-enterprise-card p-4 min-[380px]:p-5 sm:p-6 ${plan.code === 'enterprise' ? 'bg-zinc-950 text-white border-zinc-900' : 'bg-white border-zinc-200'}`}>
@@ -501,8 +546,8 @@ function PublicPricingPage() {
                                     <p className={`mt-3 min-h-[48px] text-sm leading-6 ${plan.code === 'enterprise' ? 'text-white/60' : 'text-zinc-500'}`}>{plan.tagline}</p>
                                     <p className={`mt-5 break-words font-money text-3xl font-semibold leading-tight min-[420px]:text-4xl ${plan.code === 'enterprise' ? 'text-white' : 'text-zinc-950'}`}>{getPlanPriceLabel(plan)}</p>
                                     <p className={`mt-2 text-xs ${plan.code === 'enterprise' ? 'text-white/50' : 'text-zinc-500'}`}>/ mes + IVA si aplica</p>
-                                    {referenceLabel ? (
-                                        <p className={`mt-1 text-xs ${plan.code === 'enterprise' ? 'text-white/50' : 'text-zinc-500'}`}>{referenceLabel}</p>
+                                    {localPaymentLabel ? (
+                                        <p className={`mt-1 text-xs ${plan.code === 'enterprise' ? 'text-white/50' : 'text-zinc-500'}`}>{localPaymentLabel}</p>
                                     ) : null}
                                     <div className="mt-6 space-y-3">
                                         {getPlanHighlights(plan).map((item) => (
@@ -513,7 +558,7 @@ function PublicPricingPage() {
                                         ))}
                                     </div>
                                     <Button className="mt-6 w-full" variant={plan.code === 'enterprise' ? 'secondary' : 'primary'} asChild>
-                                        <Link href={plan.code === 'enterprise' ? '/soporte?tema=enterprise' : `/registro?tipo=business&plan=${encodeURIComponent(plan.code)}`}>
+                                        <Link href={plan.code === 'enterprise' ? '/soporte?tema=enterprise' : `/registro?tipo=business&plan=${encodeURIComponent(plan.code)}&country=${selectedCountry}`}>
                                             {plan.code === 'enterprise' ? 'Hablar con equipo comercial' : 'Comenzar'}
                                         </Link>
                                     </Button>

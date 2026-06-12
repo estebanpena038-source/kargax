@@ -623,8 +623,14 @@ export default function RegisterPage() {
     const params = new URLSearchParams(window.location.search);
     const inviteCode = params.get('invite')?.trim().toUpperCase() || '';
     const typeFromQuery = params.get('tipo');
+    const countryFromQuery = params.get('country')?.trim().toUpperCase();
 
     setInviteCodeFromQuery(inviteCode);
+
+    if (countryFromQuery && ['CO', 'PE', 'BR'].includes(countryFromQuery)) {
+      setValue('country', countryFromQuery as SupportedCountry, { shouldValidate: false });
+      setCountry(countryFromQuery as SupportedCountry);
+    }
 
     if (inviteCode) {
       setValue('corporateInviteCode', inviteCode, { shouldValidate: false });
@@ -637,7 +643,7 @@ export default function RegisterPage() {
       setValue('userType', typeFromQuery, { shouldValidate: false });
       setUserType(typeFromQuery);
     }
-  }, [setValue]);
+  }, [setCountry, setValue]);
 
   React.useEffect(() => {
     void setLocale(resolveLocaleForCountry(form.getValues('country') || 'CO'));

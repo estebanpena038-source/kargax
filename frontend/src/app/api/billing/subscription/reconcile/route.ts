@@ -1,11 +1,15 @@
 import { NextRequest } from 'next/server';
-import { paymentApi } from '@/lib/mercadopago/config';
+import {
+    getBillingMercadoPagoApis,
+    normalizeBillingMercadoPagoCountryCode,
+} from '@/lib/mercadopago/config';
 import { requireAal2Route, createAdminNotification } from '@/lib/server/route-auth';
 import { apiError, apiSuccess, getRequestId } from '@/lib/server/api-response';
 import {
     getBusinessPlanSnapshot,
 } from '@/lib/server/warehouses';
 import { resolveBusinessRolePolicy } from '@/lib/server/role-policy';
+import { isStrictProductionEnvironment } from '@/lib/server/runtime-env';
 
 /**
  * POST /api/billing/subscription/reconcile
@@ -130,6 +134,17 @@ export async function POST(request: NextRequest) {
         for (const attempt of pendingAttempts) {
             if (!attempt.mp_preference_id) continue;
             try {
+                const countryCode = normalizeBillingMercadoPagoCountryCode((attempt as { country_code?: string | null }).country_code || 'CO');
+
+                if (!countryCode) {
+                    console.error('[BillingReconcile] Unsupported billing attempt country', {
+                        attemptId: attempt.id,
+                        countryCode: (attempt as { country_code?: string | null }).country_code,
+                    });
+                    continue;
+                }
+
+                const paymentApi = getBillingMercadoPagoApis(countryCode).paymentApi;
                 const searchResult = await paymentApi.search({
                     options: { preference_id: attempt.mp_preference_id, sort: 'date_created', criteria: 'desc' },
                 });
@@ -145,11 +160,8 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // Strategy 2: Trust MP redirect fallback
-        // Mercado Pago ONLY redirects to back_urls.success when payment is approved.
-        // If MP search returned nothing (sandbox delay, API lag), trust the redirect
-        // and activate the most recent pending attempt created within last 30 minutes.
-        if (!activatedPlan && latestAttempt) {
+        // Strategy 2: trust redirect only outside strict production for sandbox/API lag.
+        if (!activatedPlan && latestAttempt && !isStrictProductionEnvironment()) {
             const attemptAge = Date.now() - new Date(latestAttempt.created_at).getTime();
             const maxAge = 30 * 60 * 1000; // 30 minutes
             if (attemptAge < maxAge) {

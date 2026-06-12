@@ -23,7 +23,7 @@ import type {
 } from '@/lib/platform/types';
 import { getAdminAdvancePortfolioSnapshot } from '@/lib/server/advances';
 import { getFeatureFlags } from '@/lib/server/feature-flags';
-import { resolveBillingPlanPriceCop } from '@/lib/server/warehouses';
+import { getBillingPlanUsdToCopRate, resolveBillingPlanPriceCop } from '@/lib/server/warehouses';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AdminClient = SupabaseClient<any, 'public', any>;
@@ -933,6 +933,9 @@ type CeoFreightPaymentRow = {
 
 type CeoPlanPaymentAttemptRow = {
     amount: number | null;
+    amount_local?: number | null;
+    amount_usd_anchor?: number | null;
+    currency_code?: string | null;
     plan_code: string | null;
     status: string | null;
     paid_at: string | null;
@@ -1108,7 +1111,7 @@ export async function getCeoOverviewSnapshot(
         safeSelectAll<CeoPlanPaymentAttemptRow>(() =>
             supabaseAdmin
                 .from('billing_plan_payment_attempts')
-                .select('amount, plan_code, status, paid_at, created_at')
+                .select('amount, amount_local, amount_usd_anchor, currency_code, plan_code, status, paid_at, created_at')
                 .order('created_at', { ascending: false })
         ),
         safeSelectAll<CeoBusinessSubscriptionRow>(() =>
@@ -1146,7 +1149,17 @@ export async function getCeoOverviewSnapshot(
     const successfulPlanPaymentRows = planPaymentAttemptRows.filter((row) =>
         CEO_SUCCESSFUL_PLAN_PAYMENT_STATUSES.has(String(row.status || '').toLowerCase())
     );
-    const collectedPlanRevenueCop = successfulPlanPaymentRows.reduce((total, row) => total + Number(row.amount || 0), 0);
+    const getPlanRevenueCop = (row: CeoPlanPaymentAttemptRow) => {
+        if ((row.currency_code || 'COP') === 'COP') {
+            return Number(row.amount_local ?? row.amount ?? 0);
+        }
+
+        const amountUsdAnchor = Number(row.amount_usd_anchor || 0);
+        return amountUsdAnchor > 0
+            ? Math.round(amountUsdAnchor * getBillingPlanUsdToCopRate())
+            : Number(row.amount || 0);
+    };
+    const collectedPlanRevenueCop = successfulPlanPaymentRows.reduce((total, row) => total + getPlanRevenueCop(row), 0);
     const subscriptionByBusiness = subscriptionRows.reduce((map, row) => {
         if (row.business_id && !map.has(row.business_id)) {
             map.set(row.business_id, row);
@@ -1256,14 +1269,14 @@ export async function getCeoOverviewSnapshot(
                 marketplaceGmvCop: sumRowsSince(marketplaceOffers, thirtyDaysAgo, getOfferAmount, (row) => row.created_at),
                 privateFleetGmvCop: sumRowsSince(privateFleetOffers, thirtyDaysAgo, getOfferAmount, (row) => row.created_at),
                 marketplaceCommissionCop: sumRowsSince(marketplaceOffers, thirtyDaysAgo, getMarketplaceCommission, (row) => row.created_at),
-                collectedPlanRevenueCop: sumRowsSince(successfulPlanPaymentRows, thirtyDaysAgo, (row) => Number(row.amount || 0), (row) => row.paid_at || row.created_at),
+                collectedPlanRevenueCop: sumRowsSince(successfulPlanPaymentRows, thirtyDaysAgo, getPlanRevenueCop, (row) => row.paid_at || row.created_at),
             },
             monthToDate: {
                 trips: countRowsSince(offerRows, monthToDate),
                 marketplaceGmvCop: sumRowsSince(marketplaceOffers, monthToDate, getOfferAmount, (row) => row.created_at),
                 privateFleetGmvCop: sumRowsSince(privateFleetOffers, monthToDate, getOfferAmount, (row) => row.created_at),
                 marketplaceCommissionCop: sumRowsSince(marketplaceOffers, monthToDate, getMarketplaceCommission, (row) => row.created_at),
-                collectedPlanRevenueCop: sumRowsSince(successfulPlanPaymentRows, monthToDate, (row) => Number(row.amount || 0), (row) => row.paid_at || row.created_at),
+                collectedPlanRevenueCop: sumRowsSince(successfulPlanPaymentRows, monthToDate, getPlanRevenueCop, (row) => row.paid_at || row.created_at),
             },
         },
     };

@@ -14,7 +14,20 @@ import {
     isStrictProductionEnvironment,
 } from '@/lib/server/runtime-env';
 
+type BillingMercadoPagoCountryCode = 'CO' | 'PE' | 'BR';
+
 const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN;
+const BILLING_MERCADO_PAGO_COUNTRIES = ['CO', 'PE', 'BR'] as const;
+const BILLING_ACCESS_TOKEN_ENV_BY_COUNTRY: Record<BillingMercadoPagoCountryCode, string> = {
+    CO: 'MERCADOPAGO_ACCESS_TOKEN_CO',
+    PE: 'MERCADOPAGO_ACCESS_TOKEN_PE',
+    BR: 'MERCADOPAGO_ACCESS_TOKEN_BR',
+};
+const BILLING_WEBHOOK_SECRET_ENV_BY_COUNTRY: Record<BillingMercadoPagoCountryCode, string> = {
+    CO: 'MERCADOPAGO_WEBHOOK_SECRET_CO',
+    PE: 'MERCADOPAGO_WEBHOOK_SECRET_PE',
+    BR: 'MERCADOPAGO_WEBHOOK_SECRET_BR',
+};
 
 if (!accessToken) {
     console.error('MERCADOPAGO_ACCESS_TOKEN no esta configurado en las variables de entorno');
@@ -31,6 +44,117 @@ export const preferenceApi = new Preference(mercadoPagoClient);
 export const paymentApi = new Payment(mercadoPagoClient);
 export const merchantOrderApi = new MerchantOrder(mercadoPagoClient);
 export const isMercadoPagoTestMode = Boolean(accessToken && /^TEST[-_]/i.test(accessToken));
+
+interface MercadoPagoApis {
+    preferenceApi: Preference;
+    paymentApi: Payment;
+    merchantOrderApi: MerchantOrder;
+    isTestMode: boolean;
+}
+
+const billingApisByCountry = new Map<BillingMercadoPagoCountryCode, MercadoPagoApis>();
+
+export function normalizeBillingMercadoPagoCountryCode(value: unknown): BillingMercadoPagoCountryCode | null {
+    const normalized = String(value || '').trim().toUpperCase();
+
+    return BILLING_MERCADO_PAGO_COUNTRIES.includes(normalized as BillingMercadoPagoCountryCode)
+        ? normalized as BillingMercadoPagoCountryCode
+        : null;
+}
+
+function getBillingAccessToken(countryCode: BillingMercadoPagoCountryCode) {
+    const envName = BILLING_ACCESS_TOKEN_ENV_BY_COUNTRY[countryCode];
+    const countryToken = process.env[envName]?.trim();
+
+    if (countryToken) {
+        return countryToken;
+    }
+
+    if (countryCode === 'CO' && accessToken) {
+        return accessToken;
+    }
+
+    if (isStrictProductionEnvironment()) {
+        throw new Error(`Missing required production env vars: ${envName}`);
+    }
+
+    throw new Error(`Mercado Pago billing no esta configurado para ${countryCode}. Define ${envName}.`);
+}
+
+export function hasBillingMercadoPagoAccessToken(countryCodeInput: unknown) {
+    const countryCode = normalizeBillingMercadoPagoCountryCode(countryCodeInput);
+
+    if (!countryCode) {
+        return false;
+    }
+
+    return Boolean(
+        process.env[BILLING_ACCESS_TOKEN_ENV_BY_COUNTRY[countryCode]]?.trim()
+        || (countryCode === 'CO' && accessToken)
+    );
+}
+
+export function getBillingMercadoPagoApis(countryCodeInput: unknown): MercadoPagoApis {
+    const countryCode = normalizeBillingMercadoPagoCountryCode(countryCodeInput);
+
+    if (!countryCode) {
+        throw new Error('Mercado Pago billing no esta disponible para este pais.');
+    }
+
+    const existing = billingApisByCountry.get(countryCode);
+
+    if (existing) {
+        return existing;
+    }
+
+    const countryAccessToken = getBillingAccessToken(countryCode);
+    const client = new MercadoPagoConfig({
+        accessToken: countryAccessToken,
+        options: {
+            timeout: 30000,
+        },
+    });
+    const apis = {
+        preferenceApi: new Preference(client),
+        paymentApi: new Payment(client),
+        merchantOrderApi: new MerchantOrder(client),
+        isTestMode: /^TEST[-_]/i.test(countryAccessToken),
+    };
+
+    billingApisByCountry.set(countryCode, apis);
+    return apis;
+}
+
+export function getBillingMercadoPagoWebhookSecret(countryCodeInput: unknown) {
+    const countryCode = normalizeBillingMercadoPagoCountryCode(countryCodeInput);
+
+    if (!countryCode) {
+        return process.env.MERCADOPAGO_WEBHOOK_SECRET?.trim() || '';
+    }
+
+    const envName = BILLING_WEBHOOK_SECRET_ENV_BY_COUNTRY[countryCode];
+    const countrySecret = process.env[envName]?.trim();
+
+    if (countrySecret) {
+        return countrySecret;
+    }
+
+    if (countryCode === 'CO') {
+        return process.env.MERCADOPAGO_WEBHOOK_SECRET?.trim() || '';
+    }
+
+    return '';
+}
+
+export function getBillingMercadoPagoWebhookSecretEnvName(countryCodeInput: unknown) {
+    const countryCode = normalizeBillingMercadoPagoCountryCode(countryCodeInput);
+
+    return countryCode ? BILLING_WEBHOOK_SECRET_ENV_BY_COUNTRY[countryCode] : 'MERCADOPAGO_WEBHOOK_SECRET';
+}
+
+export function isBillingMercadoPagoCheckoutConfigured(countryCodeInput: unknown) {
+    return hasBillingMercadoPagoAccessToken(countryCodeInput) && Boolean(getBillingMercadoPagoWebhookSecret(countryCodeInput));
+}
 
 export const PLATFORM_FEE_PERCENT = parseFloat(
     process.env.NEXT_PUBLIC_PLATFORM_FEE_PERCENT || '10'
@@ -69,14 +193,15 @@ export function validateWebhookSignature(
     xSignature: string | null,
     xRequestId: string | null,
     dataId: string,
-    dataIdFromQuery?: string | null
+    dataIdFromQuery?: string | null,
+    countryCode?: string | null
 ): boolean {
     if (!xSignature) {
         console.warn('Webhook sin firma valida');
         return false;
     }
 
-    const webhookSecret = process.env.MERCADOPAGO_WEBHOOK_SECRET;
+    const webhookSecret = getBillingMercadoPagoWebhookSecret(countryCode);
 
     if (!webhookSecret) {
         const allowUnsignedPreviewWebhooks =
@@ -93,7 +218,7 @@ export function validateWebhookSignature(
             return true;
         }
 
-        console.warn('MERCADOPAGO_WEBHOOK_SECRET no configurado');
+        console.warn(`${getBillingMercadoPagoWebhookSecretEnvName(countryCode)} no configurado`);
         return false;
     }
 

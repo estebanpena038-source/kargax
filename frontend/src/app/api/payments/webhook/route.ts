@@ -13,7 +13,12 @@
 
 import { NextRequest } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { paymentApi, validateWebhookSignature } from '@/lib/mercadopago/config';
+import {
+    getBillingMercadoPagoApis,
+    normalizeBillingMercadoPagoCountryCode,
+    paymentApi,
+    validateWebhookSignature,
+} from '@/lib/mercadopago/config';
 import { reconcileFreightPaymentFromMercadoPagoPayment } from '@/lib/server/payments/freight-settlement';
 import { releasePrivateFleetPayrollRun } from '@/lib/server/private-fleet-payroll';
 import { createAdminNotification } from '@/lib/server/route-auth';
@@ -82,15 +87,28 @@ export async function POST(request: NextRequest) {
         const dataIdFromQuery =
             request.nextUrl.searchParams.get('data.id')
             || request.nextUrl.searchParams.get('id');
+        const countryFromQuery = request.nextUrl.searchParams.get('country');
+        const billingCountryCode = countryFromQuery
+            ? normalizeBillingMercadoPagoCountryCode(countryFromQuery)
+            : null;
+
+        if (countryFromQuery && !billingCountryCode) {
+            return apiError('Pais de webhook de Mercado Pago no soportado para billing.', {
+                status: 400,
+                code: 'WEBHOOK_UNSUPPORTED_BILLING_COUNTRY',
+                requestId,
+            });
+        }
 
         console.log('[WEBHOOK] recibido:', {
             type: body.type,
             action: body.action,
             dataId: body.data?.id,
             queryDataId: dataIdFromQuery,
+            billingCountryCode,
         });
 
-        if (!validateWebhookSignature(xSignature, xRequestId, body.data?.id || '', dataIdFromQuery)) {
+        if (!validateWebhookSignature(xSignature, xRequestId, body.data?.id || '', dataIdFromQuery, billingCountryCode)) {
             console.warn('[WEBHOOK] firma invalida');
             return apiError('Firma de webhook invalida', {
                 status: 401,
@@ -114,7 +132,10 @@ export async function POST(request: NextRequest) {
 
         const supabaseAdmin = getSupabaseAdmin();
         const providerPaymentId = body.data.id;
-        const mpPayment = await paymentApi.get({ id: providerPaymentId });
+        const paymentClient = billingCountryCode
+            ? getBillingMercadoPagoApis(billingCountryCode).paymentApi
+            : paymentApi;
+        const mpPayment = await paymentClient.get({ id: providerPaymentId });
 
         console.log('[WEBHOOK] payment status:', {
             id: providerPaymentId,

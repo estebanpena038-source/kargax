@@ -426,6 +426,12 @@ export interface Database {
                     mp_preference_id: string | null;
                     mp_external_reference: string | null;
                     amount: number;
+                    country_code: 'CO' | 'PE' | 'BR' | null;
+                    currency_code: 'COP' | 'PEN' | 'BRL' | null;
+                    amount_local: number | null;
+                    amount_usd_anchor: number | null;
+                    fx_rate_usd_to_local: number | null;
+                    pricing_source: 'legacy_cop' | 'usd_anchor_env_rate' | 'legacy_plan_price';
                     gateway_response: Record<string, unknown> | null;
                     paid_at: string | null;
                     expires_at: string | null;

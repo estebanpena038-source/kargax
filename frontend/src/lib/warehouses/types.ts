@@ -2,6 +2,8 @@ import type { BusinessRole, BusinessTeamRole } from '@/lib/business-roles';
 
 export type WarehouseFlowMode = 'manual' | 'warehouse_managed' | '3pl';
 export type BillingPlanActionState = 'current' | 'switch_now' | 'checkout' | 'blocked_by_usage';
+export type BillingCheckoutCountryCode = 'CO' | 'PE' | 'BR';
+export type BillingLocalCurrencyCode = 'COP' | 'PEN' | 'BRL';
 export type HoldingRole = 'holding_owner' | 'finance_admin' | 'ops_admin' | 'analyst' | 'admin';
 
 export type WarehouseRole = BusinessRole;
@@ -45,6 +47,12 @@ export interface BillingPlan {
     price_monthly_usd: number;
     price_monthly_cop: number;
     billing_currency_code: 'COP' | 'USD' | 'PEN' | 'BRL';
+    billing_country_code?: BillingCheckoutCountryCode | null;
+    local_currency_code?: BillingLocalCurrencyCode | null;
+    price_monthly_local?: number | null;
+    usd_anchor?: number | null;
+    fx_rate_usd_to_local?: number | null;
+    self_serve_checkout_enabled?: boolean;
     max_warehouses: number | null;
     max_internal_users: number | null;
     max_monthly_trips: number | null;

@@ -1,8 +1,14 @@
 import { NextRequest } from 'next/server';
+import { isBillingMercadoPagoCheckoutConfigured } from '@/lib/mercadopago/config';
 import { apiError, apiSuccess, getRequestId } from '@/lib/server/api-response';
 import {
-    getBillingPlanUsdToCopRate,
+    decorateBillingPlanForCountry,
+    getBillingCountryLabel,
+    getBillingCurrencyForCountry,
+    getBillingPlanUsdToLocalRate,
     loadPublicBillingPlans,
+    normalizeBillingCheckoutCountryCode,
+    SUPPORTED_BILLING_CHECKOUT_COUNTRIES,
 } from '@/lib/server/warehouses';
 import type { BillingPlan } from '@/lib/warehouses/types';
 
@@ -32,6 +38,12 @@ function serializePublicPlan(plan: BillingPlan) {
         price_monthly_usd: plan.price_monthly_usd,
         price_monthly_cop: plan.price_monthly_cop,
         billing_currency_code: plan.billing_currency_code,
+        billing_country_code: plan.billing_country_code ?? null,
+        local_currency_code: plan.local_currency_code ?? null,
+        price_monthly_local: plan.price_monthly_local ?? null,
+        usd_anchor: plan.usd_anchor ?? null,
+        fx_rate_usd_to_local: plan.fx_rate_usd_to_local ?? null,
+        self_serve_checkout_enabled: plan.self_serve_checkout_enabled ?? false,
         max_warehouses: plan.max_warehouses,
         max_internal_users: plan.max_internal_users,
         max_monthly_trips: plan.max_monthly_trips,
@@ -53,14 +65,43 @@ function serializePublicPlan(plan: BillingPlan) {
 
 export async function GET(request: NextRequest) {
     const requestId = getRequestId(request);
+    const requestedCountry = request.nextUrl.searchParams.get('country') || process.env.NEXT_PUBLIC_DEFAULT_COUNTRY || 'CO';
+    const countryCode = normalizeBillingCheckoutCountryCode(requestedCountry);
+
+    if (!countryCode) {
+        return apiError('El checkout automatico de planes solo esta activo en Colombia, Peru y Brasil.', {
+            requestId,
+            status: 400,
+            code: 'PUBLIC_BILLING_COUNTRY_NOT_SUPPORTED',
+            details: {
+                requestedCountry,
+                supportedCountries: SUPPORTED_BILLING_CHECKOUT_COUNTRIES,
+            },
+        });
+    }
 
     try {
         const plans = await loadPublicBillingPlans();
+        const checkoutConfigured = isBillingMercadoPagoCheckoutConfigured(countryCode);
+        const localizedPlans = plans.map((plan) => ({
+            ...decorateBillingPlanForCountry(plan, countryCode),
+            self_serve_checkout_enabled: checkoutConfigured,
+        }));
+        const billingCurrencyCode = getBillingCurrencyForCountry(countryCode);
 
         return apiSuccess({
-            plans: plans.map(serializePublicPlan),
-            billingCurrencyCode: 'COP',
-            usdToCopRate: getBillingPlanUsdToCopRate(),
+            plans: localizedPlans.map(serializePublicPlan),
+            billingCountryCode: countryCode,
+            billingCountryLabel: getBillingCountryLabel(countryCode),
+            billingCurrencyCode,
+            usdToLocalRate: getBillingPlanUsdToLocalRate(billingCurrencyCode),
+            checkoutConfigured,
+            supportedCountries: SUPPORTED_BILLING_CHECKOUT_COUNTRIES.map((code) => ({
+                code,
+                label: getBillingCountryLabel(code),
+                currencyCode: getBillingCurrencyForCountry(code),
+                checkoutConfigured: isBillingMercadoPagoCheckoutConfigured(code),
+            })),
         }, {
             requestId,
             code: 'PUBLIC_BILLING_PLANS_LOADED',
