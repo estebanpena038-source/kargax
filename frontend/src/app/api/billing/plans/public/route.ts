@@ -83,10 +83,14 @@ export async function GET(request: NextRequest) {
     try {
         const plans = await loadPublicBillingPlans();
         const checkoutConfigured = isBillingMercadoPagoCheckoutConfigured(countryCode);
-        const localizedPlans = plans.map((plan) => ({
-            ...decorateBillingPlanForCountry(plan, countryCode),
-            self_serve_checkout_enabled: checkoutConfigured,
-        }));
+        const localizedPlans = plans.map((plan) => {
+            const localizedPlan = decorateBillingPlanForCountry(plan, countryCode);
+
+            return {
+                ...localizedPlan,
+                self_serve_checkout_enabled: Boolean(localizedPlan.self_serve_checkout_enabled && checkoutConfigured),
+            };
+        });
         const billingCurrencyCode = getBillingCurrencyForCountry(countryCode);
 
         return apiSuccess({

@@ -689,7 +689,7 @@ export function decorateBillingPlanForCountry(plan: BillingPlan, countryCodeInpu
         price_monthly_local: price.amountLocal,
         usd_anchor: price.amountUsdAnchor,
         fx_rate_usd_to_local: price.fxRateUsdToLocal,
-        self_serve_checkout_enabled: true,
+        self_serve_checkout_enabled: !isBillingPlanContactSalesOnly(plan),
     };
 }
 
