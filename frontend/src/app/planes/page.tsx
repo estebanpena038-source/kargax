@@ -20,6 +20,8 @@ import type { BillingPlan, BusinessPlanSubscription, WarehouseListResponse } fro
 import { useAuthStore } from '@/features/auth/store/authStore';
 import { MARKETPLACE_COMMISSION_PERCENT } from '@/lib/billing/pricing';
 
+const BILLING_PLAN_USD_TO_COP_RATE = 3650;
+
 function formatPriceCop(value: number) {
     return new Intl.NumberFormat('es-CO', {
         style: 'currency',
@@ -33,7 +35,7 @@ function formatPlanCapacity(limit: number | null, limitedLabel: string, unlimite
 }
 
 function getPlanStage(plan: BillingPlan) {
-    return ({ free: 'Arranque', growth: 'Despachos diarios', scale: 'Alto volumen', enterprise: 'Corporativo' } as Record<string, string>)[plan.code] || 'Plan';
+    return ({ free: 'Arranque', starter: 'Primer equipo', growth: 'Recomendado', scale: 'Alto volumen', enterprise: 'Corporativo' } as Record<string, string>)[plan.code] || 'Plan';
 }
 
 function getSupportLabel(plan: BillingPlan) {
@@ -41,12 +43,38 @@ function getSupportLabel(plan: BillingPlan) {
 }
 
 function getNumericPrice(plan: BillingPlan | BusinessPlanSubscription['plan'] | null | undefined) {
-    return Number(plan?.price_monthly_cop ?? 0) || Math.round(Number(plan?.price_monthly_usd || 0) * 4000);
+    return Number(plan?.price_monthly_cop ?? 0) || Math.round(Number(plan?.price_monthly_usd || 0) * BILLING_PLAN_USD_TO_COP_RATE);
+}
+
+function getPlanUsdAnchor(plan: BillingPlan) {
+    const featureMatrix = plan.feature_matrix || {};
+    const featureAnchor = Number(featureMatrix.usd_anchor || featureMatrix.price_monthly_usd_anchor || featureMatrix.public_price_usd || 0);
+    return Number.isFinite(featureAnchor) && featureAnchor > 0 ? featureAnchor : Number(plan.price_monthly_usd || 0);
+}
+
+function formatUsdReference(value: number) {
+    return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        maximumFractionDigits: 0,
+    }).format(Number(value || 0));
 }
 
 function getPlanPriceLabel(plan: BillingPlan) {
     const price = formatPriceCop(getNumericPrice(plan));
     return plan.code === 'enterprise' ? `Desde ${price}` : price;
+}
+
+function getPlanReferenceLabel(plan: BillingPlan) {
+    const usdAnchor = getPlanUsdAnchor(plan);
+
+    if (!usdAnchor) {
+        return plan.code === 'free' ? 'Sin mensualidad' : null;
+    }
+
+    return plan.code === 'enterprise'
+        ? `desde ${formatUsdReference(usdAnchor)} de referencia`
+        : `${formatUsdReference(usdAnchor)} de referencia`;
 }
 
 function getPlanHighlights(plan: BillingPlan) {
@@ -58,9 +86,10 @@ function getPlanHighlights(plan: BillingPlan) {
     ];
     const byCode: Record<string, string[]> = {
         free: ['50 viajes/mes para validar operacion real', 'PIN/POD, receptor, hora, foto/firma y novedad', `Marketplace con ${MARKETPLACE_COMMISSION_PERCENT}% solo en viajes externos`, getSupportLabel(plan)],
-        growth: ['500 viajes/mes para operacion B2B inicial', 'Inventario visual, recibos, despachos y analitica base', 'Equipo interno por empresa y por bodega', 'Paywall comercial hacia Control de margen Enterprise', getSupportLabel(plan)],
-        scale: ['2.000 viajes/mes para 3PL y equipos en crecimiento', 'API/webhooks, control tower y flota privada avanzada', 'Reportes, exportaciones, novedades y soporte premium', 'Scorecards basicos de rutas y proveedores', getSupportLabel(plan)],
-        enterprise: ['Volumen personalizado bajo contrato', 'Control de margen logistico por ruta, proveedor y zona', 'Contratos, scorecards y alertas de sobrecosto', 'Enterprise Margin OS desde $4.500.000 COP/mes', 'Aprobaciones, auditoria, treasury y soporte premium', getSupportLabel(plan)],
+        starter: ['Entrada paga para micro-operacion recurrente', 'Inventario visual, recibos, despachos y analitica base', 'Hasta 150 viajes/mes antes de pasar a Growth', getSupportLabel(plan)],
+        growth: ['Plan recomendado para equipos con despachos diarios', '750 viajes/mes, 5 bodegas y 25 conductores privados', 'Reportes operativos y paywalls claros hacia Scale/Enterprise', getSupportLabel(plan)],
+        scale: ['3.000 viajes/mes para redes en crecimiento', 'API/webhooks, control tower y flota privada avanzada', 'Reportes, exportaciones, novedades y soporte premium', 'Scorecards basicos de rutas y proveedores', getSupportLabel(plan)],
+        enterprise: ['Volumen personalizado bajo contrato', 'Control de margen logistico por ruta, proveedor y zona', 'Contratos, scorecards y alertas de sobrecosto', 'Aprobaciones, auditoria, treasury y SLA operativo', getSupportLabel(plan)],
     };
     return [...shared, ...(byCode[plan.code] || [getSupportLabel(plan)])];
 }
@@ -245,10 +274,12 @@ function PlansPageContent() {
                                     const isCurrentPlan = plan.action_state === 'current';
                                     const needsCheckout = plan.action_state === 'checkout';
                                     const isBlocked = plan.action_state === 'blocked_by_usage';
+                                    const isEnterpriseSales = plan.code === 'enterprise' && !isCurrentPlan;
                                     const isDowngradeWithoutCheckout =
                                         plan.action_state === 'switch_now' &&
                                         getNumericPrice(plan) < getNumericPrice(subscription?.plan);
-                                    const canClick = canManageBilling && !isCurrentPlan && !isBlocked && (!needsCheckout || billingCheckoutReady);
+                                    const canClick = canManageBilling && !isCurrentPlan && !isBlocked && !isEnterpriseSales && (!needsCheckout || billingCheckoutReady);
+                                    const referenceLabel = getPlanReferenceLabel(plan);
 
                                     return (
                                         <Card
@@ -260,6 +291,7 @@ function PlansPageContent() {
                                                     {getPlanStage(plan)}
                                                 </p>
                                                 {isCurrentPlan ? <StatusPill tone={plan.code === 'enterprise' ? 'inverse' : 'neutral'}>Actual</StatusPill> : null}
+                                                {!isCurrentPlan && plan.code === 'growth' ? <StatusPill>Recomendado</StatusPill> : null}
                                             </div>
 
                                             <h3 className={`text-2xl font-semibold ${plan.code === 'enterprise' ? 'text-white' : 'text-zinc-950'}`}>{plan.name}</h3>
@@ -270,6 +302,9 @@ function PlansPageContent() {
                                                     {getPlanPriceLabel(plan)}
                                                 </p>
                                                 <p className={`mt-2 text-xs ${plan.code === 'enterprise' ? 'text-white/50' : 'text-zinc-500'}`}>/ mes + IVA si aplica</p>
+                                                {referenceLabel ? (
+                                                    <p className={`mt-1 text-xs ${plan.code === 'enterprise' ? 'text-white/50' : 'text-zinc-500'}`}>{referenceLabel}</p>
+                                                ) : null}
                                             </div>
 
                                             <div className="mt-6 flex-1 space-y-3">
@@ -281,55 +316,65 @@ function PlansPageContent() {
                                                 ))}
                                             </div>
 
-                                            <Button
-                                                className="mt-6 w-full"
-                                                variant={plan.code === 'enterprise' ? 'secondary' : isCurrentPlan ? 'outline' : 'primary'}
-                                                disabled={!canClick}
-                                                isLoading={actionLoading === plan.code}
-                                                rightIcon={needsCheckout && !isCurrentPlan ? <ArrowUpRight className="h-4 w-4" /> : undefined}
-                                                onClick={async () => {
-                                                    setActionLoading(plan.code);
-                                                    try {
-                                                        if (plan.action_state === 'switch_now') {
-                                                            const next = await warehouseClient.updatePlan({ planCode: plan.code });
-                                                            setSubscription(next.subscription ?? null);
-                                                            setPlans(next.plans ?? []);
-                                                            setLimits(next.limits);
-                                                            setTeamSchemaReady(next.teamSchemaReady ?? true);
-                                                            setTeamSchemaMessage(next.teamSchemaMessage ?? null);
-                                                            setBillingCheckoutReady(next.billingCheckoutReady ?? true);
-                                                            setBillingCheckoutMessage(next.billingCheckoutMessage ?? null);
-                                                            toast.success(
-                                                                'Plan actualizado',
-                                                                isDowngradeWithoutCheckout
-                                                                    ? `Tu empresa ahora opera con ${plan.name}. No se requirio checkout porque el uso actual cabe en el plan.`
-                                                                    : `Tu empresa ahora opera con ${plan.name}`
-                                                            );
-                                                            return;
+                                            {isEnterpriseSales ? (
+                                                <Button
+                                                    className="mt-6 w-full"
+                                                    variant="secondary"
+                                                    asChild
+                                                >
+                                                    <Link href="/soporte?tema=enterprise">Hablar con ventas</Link>
+                                                </Button>
+                                            ) : (
+                                                <Button
+                                                    className="mt-6 w-full"
+                                                    variant={plan.code === 'enterprise' ? 'secondary' : isCurrentPlan ? 'outline' : 'primary'}
+                                                    disabled={!canClick}
+                                                    isLoading={actionLoading === plan.code}
+                                                    rightIcon={needsCheckout && !isCurrentPlan ? <ArrowUpRight className="h-4 w-4" /> : undefined}
+                                                    onClick={async () => {
+                                                        setActionLoading(plan.code);
+                                                        try {
+                                                            if (plan.action_state === 'switch_now') {
+                                                                const next = await warehouseClient.updatePlan({ planCode: plan.code });
+                                                                setSubscription(next.subscription ?? null);
+                                                                setPlans(next.plans ?? []);
+                                                                setLimits(next.limits);
+                                                                setTeamSchemaReady(next.teamSchemaReady ?? true);
+                                                                setTeamSchemaMessage(next.teamSchemaMessage ?? null);
+                                                                setBillingCheckoutReady(next.billingCheckoutReady ?? true);
+                                                                setBillingCheckoutMessage(next.billingCheckoutMessage ?? null);
+                                                                toast.success(
+                                                                    'Plan actualizado',
+                                                                    isDowngradeWithoutCheckout
+                                                                        ? `Tu empresa ahora opera con ${plan.name}. No se requirio checkout porque el uso actual cabe en el plan.`
+                                                                        : `Tu empresa ahora opera con ${plan.name}`
+                                                                );
+                                                                return;
+                                                            }
+                                                            if (plan.action_state === 'checkout') {
+                                                                const checkout = await warehouseClient.createPlanCheckout({ planCode: plan.code });
+                                                                const checkoutUrl = checkout.preference.init_point || checkout.preference.sandbox_init_point;
+                                                                if (!checkoutUrl) throw new Error('No se recibio la URL de activacion del plan');
+                                                                window.location.href = checkoutUrl;
+                                                                return;
+                                                            }
+                                                            if (plan.action_disabled_reason) throw new Error(plan.action_disabled_reason);
+                                                        } catch (error) {
+                                                            toast.error('Facturacion', error instanceof Error ? error.message : 'No se pudo procesar el cambio de plan');
+                                                        } finally {
+                                                            setActionLoading(null);
                                                         }
-                                                        if (plan.action_state === 'checkout') {
-                                                            const checkout = await warehouseClient.createPlanCheckout({ planCode: plan.code });
-                                                            const checkoutUrl = checkout.preference.init_point || checkout.preference.sandbox_init_point;
-                                                            if (!checkoutUrl) throw new Error('No se recibio la URL de activacion del plan');
-                                                            window.location.href = checkoutUrl;
-                                                            return;
-                                                        }
-                                                        if (plan.action_disabled_reason) throw new Error(plan.action_disabled_reason);
-                                                    } catch (error) {
-                                                        toast.error('Facturacion', error instanceof Error ? error.message : 'No se pudo procesar el cambio de plan');
-                                                    } finally {
-                                                        setActionLoading(null);
-                                                    }
-                                                }}
-                                            >
-                                                {!canManageBilling
-                                                    ? 'Solo owner/admin'
-                                                    : !billingCheckoutReady && needsCheckout
-                                                        ? 'Checkout pendiente'
-                                                        : needsCheckout
-                                                            ? 'Continuar a Mercado Pago'
-                                                            : plan.action_label || 'Activar plan'}
-                                            </Button>
+                                                    }}
+                                                >
+                                                    {!canManageBilling
+                                                        ? 'Solo owner/admin'
+                                                        : !billingCheckoutReady && needsCheckout
+                                                            ? 'Checkout pendiente'
+                                                            : needsCheckout
+                                                                ? 'Continuar a Mercado Pago'
+                                                                : plan.action_label || 'Activar plan'}
+                                                </Button>
+                                            )}
 
                                             {isBlocked && plan.action_disabled_reason ? (
                                                 <p className={`mt-3 text-xs ${plan.code === 'enterprise' ? 'text-white/60' : 'text-zinc-500'}`}>
@@ -374,55 +419,46 @@ function PlansPageFallback() {
 }
 
 function PublicPricingPage() {
-    const publicPlans = [
-        {
-            code: 'free',
-            name: 'Free',
-            price: '$0 COP',
-            tagline: 'Para probar el cierre operativo',
-            highlights: [
-                '1 bodega, 2 usuarios, 3 conductores',
-                '50 viajes/mes',
-                'PIN/POD, receptor, hora, foto/firma y novedad',
-            ],
-        },
-        {
-            code: 'growth',
-            name: 'Growth',
-            price: '$299.000 COP',
-            tagline: 'Para despachos diarios',
-            highlights: [
-                '3 bodegas, 10 usuarios, 15 conductores',
-                '500 viajes/mes',
-                'Inventario visual, recibos, despachos y analitica base',
-            ],
-        },
-        {
-            code: 'scale',
-            name: 'Scale',
-            price: '$799.000 COP',
-            tagline: 'Para flota, bodega y alto volumen',
-            highlights: [
-                '10 bodegas, 30 usuarios, 50 conductores',
-                '2.000 viajes/mes',
-                'API/webhooks, control tower y scorecards basicos',
-                'Reportes, exportaciones, novedades y soporte premium',
-            ],
-        },
-        {
-            code: 'enterprise',
-            name: 'Enterprise',
-            price: 'Desde $4.500.000 COP',
-            tagline: 'Margin OS, 3PL y governance',
-            highlights: [
-                'Volumen personalizado segun operacion',
-                'API/webhooks, control tower y 3PL multi-cliente',
-                'Control de margen por ruta y proveedor',
-                'Contratos, alertas y renegociaciones sugeridas',
-                'Aprobaciones, auditoria, treasury y soporte premium',
-            ],
-        },
-    ];
+    const [publicPlans, setPublicPlans] = React.useState<BillingPlan[]>([]);
+    const [loadingPlans, setLoadingPlans] = React.useState(true);
+    const [loadError, setLoadError] = React.useState<string | null>(null);
+
+    React.useEffect(() => {
+        let mounted = true;
+
+        (async () => {
+            try {
+                const response = await fetch('/api/billing/plans/public', {
+                    headers: {
+                        Accept: 'application/json',
+                    },
+                });
+                const payload = await response.json();
+                const data = payload?.data || payload;
+
+                if (!response.ok) {
+                    throw new Error(payload?.error?.message || 'No se pudieron cargar los planes');
+                }
+
+                if (mounted) {
+                    setPublicPlans(Array.isArray(data?.plans) ? data.plans : []);
+                    setLoadError(null);
+                }
+            } catch (error) {
+                if (mounted) {
+                    setLoadError(error instanceof Error ? error.message : 'No se pudieron cargar los planes');
+                }
+            } finally {
+                if (mounted) {
+                    setLoadingPlans(false);
+                }
+            }
+        })();
+
+        return () => {
+            mounted = false;
+        };
+    }, []);
 
     return (
         <main className="min-h-screen bg-[var(--color-background)]">
@@ -430,7 +466,7 @@ function PublicPricingPage() {
                 <EnterpriseHero
                     eyebrow="Planes de produccion"
                     title="Planes KargaX"
-                    description={`Free, Growth y Scale entran por uso inmediato en COP. Enterprise entra por Control de margen, operacion multiempresa, treasury, governance y soporte operativo serio. Marketplace mantiene ${MARKETPLACE_COMMISSION_PERCENT}% solo en viajes externos.`}
+                    description={`Free valida, Starter convierte, Growth es el recomendado, Scale automatiza y Enterprise se vende con contrato. Cobro en COP por Mercado Pago con referencia USD. Marketplace mantiene ${MARKETPLACE_COMMISSION_PERCENT}% solo en viajes externos.`}
                     icon={Crown}
                     actions={(
                         <div className="grid w-full gap-3 sm:flex sm:w-auto sm:flex-wrap">
@@ -440,28 +476,52 @@ function PublicPricingPage() {
                     )}
                 />
 
-                <div className="mt-8 grid kx-enterprise-grid gap-5">
-                    {publicPlans.map((plan) => (
-                        <Card key={plan.code} className={`kx-enterprise-card p-4 min-[380px]:p-5 sm:p-6 ${plan.code === 'enterprise' ? 'bg-zinc-950 text-white border-zinc-900' : 'bg-white border-zinc-200'}`}>
-                            <p className={`text-xs uppercase tracking-[0.18em] ${plan.code === 'enterprise' ? 'text-white/50' : 'text-zinc-500'}`}>{plan.tagline}</p>
-                            <h2 className={`mt-4 text-2xl font-semibold ${plan.code === 'enterprise' ? 'text-white' : 'text-zinc-950'}`}>{plan.name}</h2>
-                            <p className={`mt-3 break-words font-money text-3xl font-semibold leading-tight min-[420px]:text-4xl ${plan.code === 'enterprise' ? 'text-white' : 'text-zinc-950'}`}>{plan.price}</p>
-                            <div className="mt-6 space-y-3">
-                                {plan.highlights.map((item) => (
-                                    <div key={item} className="flex items-start gap-2">
-                                        <Check className={`mt-0.5 h-4 w-4 ${plan.code === 'enterprise' ? 'text-white/70' : 'text-zinc-700'}`} />
-                                        <p className={`text-sm leading-6 ${plan.code === 'enterprise' ? 'text-white/70' : 'text-zinc-600'}`}>{item}</p>
+                {loadingPlans ? (
+                    <div className="flex min-h-[32vh] items-center justify-center">
+                        <Loader2 className="h-8 w-8 animate-spin text-zinc-950" />
+                    </div>
+                ) : loadError ? (
+                    <Card className="mt-8 p-5 text-center sm:p-8">
+                        <Building2 className="mx-auto h-10 w-10 text-zinc-700" />
+                        <h2 className="mt-4 text-xl font-semibold text-zinc-950">No pudimos cargar los planes</h2>
+                        <p className="mt-2 text-sm text-zinc-500">{loadError}</p>
+                    </Card>
+                ) : (
+                    <div className="mt-8 grid kx-enterprise-grid gap-5">
+                        {publicPlans.map((plan) => {
+                            const referenceLabel = getPlanReferenceLabel(plan);
+
+                            return (
+                                <Card key={plan.code} className={`kx-enterprise-card p-4 min-[380px]:p-5 sm:p-6 ${plan.code === 'enterprise' ? 'bg-zinc-950 text-white border-zinc-900' : 'bg-white border-zinc-200'}`}>
+                                    <div className="flex items-center justify-between gap-3">
+                                        <p className={`text-xs uppercase tracking-[0.18em] ${plan.code === 'enterprise' ? 'text-white/50' : 'text-zinc-500'}`}>{getPlanStage(plan)}</p>
+                                        {plan.code === 'growth' ? <StatusPill>Recomendado</StatusPill> : null}
                                     </div>
-                                ))}
-                            </div>
-                            <Button className="mt-6 w-full" variant={plan.code === 'enterprise' ? 'secondary' : 'primary'} asChild>
-                                <Link href={plan.code === 'enterprise' ? '/soporte' : '/registro'}>
-                                    {plan.code === 'enterprise' ? 'Hablar con equipo comercial' : 'Comenzar'}
-                                </Link>
-                            </Button>
-                        </Card>
-                    ))}
-                </div>
+                                    <h2 className={`mt-4 text-2xl font-semibold ${plan.code === 'enterprise' ? 'text-white' : 'text-zinc-950'}`}>{plan.name}</h2>
+                                    <p className={`mt-3 min-h-[48px] text-sm leading-6 ${plan.code === 'enterprise' ? 'text-white/60' : 'text-zinc-500'}`}>{plan.tagline}</p>
+                                    <p className={`mt-5 break-words font-money text-3xl font-semibold leading-tight min-[420px]:text-4xl ${plan.code === 'enterprise' ? 'text-white' : 'text-zinc-950'}`}>{getPlanPriceLabel(plan)}</p>
+                                    <p className={`mt-2 text-xs ${plan.code === 'enterprise' ? 'text-white/50' : 'text-zinc-500'}`}>/ mes + IVA si aplica</p>
+                                    {referenceLabel ? (
+                                        <p className={`mt-1 text-xs ${plan.code === 'enterprise' ? 'text-white/50' : 'text-zinc-500'}`}>{referenceLabel}</p>
+                                    ) : null}
+                                    <div className="mt-6 space-y-3">
+                                        {getPlanHighlights(plan).map((item) => (
+                                            <div key={item} className="flex items-start gap-2">
+                                                <Check className={`mt-0.5 h-4 w-4 shrink-0 ${plan.code === 'enterprise' ? 'text-white/70' : 'text-zinc-700'}`} />
+                                                <p className={`text-sm leading-6 ${plan.code === 'enterprise' ? 'text-white/70' : 'text-zinc-600'}`}>{item}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <Button className="mt-6 w-full" variant={plan.code === 'enterprise' ? 'secondary' : 'primary'} asChild>
+                                        <Link href={plan.code === 'enterprise' ? '/soporte?tema=enterprise' : `/registro?tipo=business&plan=${encodeURIComponent(plan.code)}`}>
+                                            {plan.code === 'enterprise' ? 'Hablar con equipo comercial' : 'Comenzar'}
+                                        </Link>
+                                    </Button>
+                                </Card>
+                            );
+                        })}
+                    </div>
+                )}
             </section>
         </main>
     );

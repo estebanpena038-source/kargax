@@ -25,6 +25,7 @@ const FEATURE_LABELS: Record<string, string> = {
 
 const PLAN_LABELS: Record<string, string> = {
     free: 'Free',
+    starter: 'Starter',
     growth: 'Growth',
     pro: 'Growth',
     scale: 'Scale',

@@ -7,7 +7,9 @@ import {
     getBillingCheckoutInfrastructureStatus,
     getBusinessOperationsSetupMessage,
     getBusinessPlanSnapshot,
+    isBillingPlanContactSalesOnly,
     isBillingPlanPaymentAttemptsTableMissing,
+    resolveBillingPlanPriceCop,
 } from '@/lib/server/warehouses';
 import { resolveBusinessRolePolicy } from '@/lib/server/role-policy';
 import {
@@ -149,7 +151,15 @@ export async function POST(request: NextRequest) {
         });
     }
 
-    const priceMonthlyCop = Number(plan.price_monthly_cop ?? 0) || Math.round(Number(plan.price_monthly_usd || 0) * 4000);
+    if (isBillingPlanContactSalesOnly(plan)) {
+        return apiError('Enterprise se activa con venta asistida para validar volumen, SLA, multiempresa y gobierno.', {
+            status: 409,
+            code: 'PLAN_CONTACT_SALES_REQUIRED',
+            requestId,
+        });
+    }
+
+    const priceMonthlyCop = resolveBillingPlanPriceCop(plan);
 
     if (priceMonthlyCop <= 0) {
         return apiError('Free plan does not require checkout', {
