@@ -290,6 +290,7 @@ export async function proxy(request: NextRequest) {
         (route) =>
             pathname === route ||
             pathname.startsWith('/_next') ||
+            pathname.startsWith('/api/geo') ||
             pathname.startsWith('/api/public') ||
             pathname.startsWith('/locales')
     );
