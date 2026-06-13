@@ -39,6 +39,7 @@ import { useAuthStore } from '@/features/auth/store/authStore';
 import { validateAndeanPhoneValue } from '@/lib/phone/andean';
 import { cn } from '@/lib/utils';
 import { WarehouseOfferFields } from '@/components/warehouses/WarehouseOfferFields';
+import LocationSelector from '@/components/location/LocationSelector';
 import {
     COLOMBIAN_DEPARTMENTS,
     getCitiesByDepartment,
@@ -51,6 +52,7 @@ import {
 import warehouseClient from '@/lib/warehouses/client';
 import { coercePlanLimitDetails, type PlanLimitErrorDetails } from '@/lib/billing/plan-limits';
 import type { BusinessFleetMember } from '@/lib/warehouses/types';
+import type { GeoZoneType, LocationSelectorValue } from '@/lib/geo/types';
 import { useUserCountry } from '@/lib/platform/useUserCountry';
 
 // =============================================================================
@@ -87,6 +89,12 @@ interface CargoOfferFormData {
     originDepartment: string;
     originCity: string;
     originAddress: string;
+    originDepartmentId?: string | null;
+    originMunicipalityId?: string | null;
+    originLocalZoneId?: string | null;
+    originLocalZoneName?: string;
+    originLocalZoneType?: GeoZoneType | '';
+    originAddressReference?: string;
     originLatitude?: number | null;
     originLongitude?: number | null;
     // Pickup Contact (NEW - for PIN delivery)
@@ -96,6 +104,12 @@ interface CargoOfferFormData {
     destinationDepartment: string;
     destinationCity: string;
     destinationAddress: string;
+    destinationDepartmentId?: string | null;
+    destinationMunicipalityId?: string | null;
+    destinationLocalZoneId?: string | null;
+    destinationLocalZoneName?: string;
+    destinationLocalZoneType?: GeoZoneType | '';
+    destinationAddressReference?: string;
     destinationLatitude?: number | null;
     destinationLongitude?: number | null;
     // Delivery Contact (NEW - for PIN delivery)
@@ -191,6 +205,12 @@ const offerSchema = z.object({
     originDepartment: z.string().min(1, 'Selecciona un departamento'),
     originCity: z.string().min(1, 'Selecciona una ciudad'),
     originAddress: z.string().min(5, 'Dirección muy corta'),
+    originDepartmentId: z.string().nullable().optional(),
+    originMunicipalityId: z.string().nullable().optional(),
+    originLocalZoneId: z.string().nullable().optional(),
+    originLocalZoneName: z.string().max(120).optional(),
+    originLocalZoneType: z.string().optional(),
+    originAddressReference: z.string().max(240).optional(),
     originLatitude: z.number().nullable().optional(),
     originLongitude: z.number().nullable().optional(),
     pickupContactName: z.string().min(2, 'Ingresa el nombre del contacto'),
@@ -201,6 +221,12 @@ const offerSchema = z.object({
     destinationDepartment: z.string().min(1, 'Selecciona un departamento'),
     destinationCity: z.string().min(1, 'Selecciona una ciudad'),
     destinationAddress: z.string().min(5, 'Dirección muy corta'),
+    destinationDepartmentId: z.string().nullable().optional(),
+    destinationMunicipalityId: z.string().nullable().optional(),
+    destinationLocalZoneId: z.string().nullable().optional(),
+    destinationLocalZoneName: z.string().max(120).optional(),
+    destinationLocalZoneType: z.string().optional(),
+    destinationAddressReference: z.string().max(240).optional(),
     destinationLatitude: z.number().nullable().optional(),
     destinationLongitude: z.number().nullable().optional(),
     deliveryContactName: z.string().min(2, 'Ingresa el nombre del contacto'),
@@ -1025,6 +1051,20 @@ function StepRouteInfo({
     const destinationCity = watch('destinationCity');
     const originAddressField = register('originAddress');
     const destinationAddressField = register('destinationAddress');
+    const originDepartmentId = watch('originDepartmentId');
+    const originMunicipalityId = watch('originMunicipalityId');
+    const originLocalZoneId = watch('originLocalZoneId');
+    const originLocalZoneName = watch('originLocalZoneName');
+    const originLocalZoneType = watch('originLocalZoneType');
+    const originAddress = watch('originAddress');
+    const originAddressReference = watch('originAddressReference');
+    const destinationDepartmentId = watch('destinationDepartmentId');
+    const destinationMunicipalityId = watch('destinationMunicipalityId');
+    const destinationLocalZoneId = watch('destinationLocalZoneId');
+    const destinationLocalZoneName = watch('destinationLocalZoneName');
+    const destinationLocalZoneType = watch('destinationLocalZoneType');
+    const destinationAddress = watch('destinationAddress');
+    const destinationAddressReference = watch('destinationAddressReference');
 
     const departmentOptions = COLOMBIAN_DEPARTMENTS.map((d) => ({
         value: d.code,
@@ -1047,6 +1087,82 @@ function StepRouteInfo({
             label: c.name,
         }));
     }, [destinationDepartment]);
+
+    const originLocationValue = React.useMemo<LocationSelectorValue>(() => ({
+        countryCode: 'CO',
+        departmentId: originDepartmentId || null,
+        departmentName: getDepartmentName(originDepartment || ''),
+        municipalityId: originMunicipalityId || null,
+        municipalityName: getCityName(originCity || ''),
+        localZoneId: originLocalZoneId || null,
+        localZoneName: originLocalZoneName || '',
+        localZoneType: originLocalZoneType || '',
+        exactAddress: originAddress || '',
+        reference: originAddressReference || '',
+        isManualZone: Boolean(originLocalZoneName && !originLocalZoneId),
+    }), [
+        originAddress,
+        originAddressReference,
+        originCity,
+        originDepartment,
+        originDepartmentId,
+        originLocalZoneId,
+        originLocalZoneName,
+        originLocalZoneType,
+        originMunicipalityId,
+    ]);
+
+    const destinationLocationValue = React.useMemo<LocationSelectorValue>(() => ({
+        countryCode: 'CO',
+        departmentId: destinationDepartmentId || null,
+        departmentName: getDepartmentName(destinationDepartment || ''),
+        municipalityId: destinationMunicipalityId || null,
+        municipalityName: getCityName(destinationCity || ''),
+        localZoneId: destinationLocalZoneId || null,
+        localZoneName: destinationLocalZoneName || '',
+        localZoneType: destinationLocalZoneType || '',
+        exactAddress: destinationAddress || '',
+        reference: destinationAddressReference || '',
+        isManualZone: Boolean(destinationLocalZoneName && !destinationLocalZoneId),
+    }), [
+        destinationAddress,
+        destinationAddressReference,
+        destinationCity,
+        destinationDepartment,
+        destinationDepartmentId,
+        destinationLocalZoneId,
+        destinationLocalZoneName,
+        destinationLocalZoneType,
+        destinationMunicipalityId,
+    ]);
+
+    const handleOriginLocationChange = React.useCallback((location: LocationSelectorValue) => {
+        setValue('originDepartment', location.departmentName || '', { shouldValidate: true, shouldDirty: true });
+        setValue('originCity', location.municipalityName || '', { shouldValidate: true, shouldDirty: true });
+        setValue('originAddress', location.exactAddress || '', { shouldValidate: true, shouldDirty: true });
+        setValue('originDepartmentId', location.departmentId || null, { shouldDirty: true });
+        setValue('originMunicipalityId', location.municipalityId || null, { shouldDirty: true });
+        setValue('originLocalZoneId', location.localZoneId || null, { shouldDirty: true });
+        setValue('originLocalZoneName', location.localZoneName || '', { shouldDirty: true });
+        setValue('originLocalZoneType', location.localZoneType || '', { shouldDirty: true });
+        setValue('originAddressReference', location.reference || '', { shouldDirty: true });
+        setValue('originLatitude', null, { shouldDirty: true });
+        setValue('originLongitude', null, { shouldDirty: true });
+    }, [setValue]);
+
+    const handleDestinationLocationChange = React.useCallback((location: LocationSelectorValue) => {
+        setValue('destinationDepartment', location.departmentName || '', { shouldValidate: true, shouldDirty: true });
+        setValue('destinationCity', location.municipalityName || '', { shouldValidate: true, shouldDirty: true });
+        setValue('destinationAddress', location.exactAddress || '', { shouldValidate: true, shouldDirty: true });
+        setValue('destinationDepartmentId', location.departmentId || null, { shouldDirty: true });
+        setValue('destinationMunicipalityId', location.municipalityId || null, { shouldDirty: true });
+        setValue('destinationLocalZoneId', location.localZoneId || null, { shouldDirty: true });
+        setValue('destinationLocalZoneName', location.localZoneName || '', { shouldDirty: true });
+        setValue('destinationLocalZoneType', location.localZoneType || '', { shouldDirty: true });
+        setValue('destinationAddressReference', location.reference || '', { shouldDirty: true });
+        setValue('destinationLatitude', null, { shouldDirty: true });
+        setValue('destinationLongitude', null, { shouldDirty: true });
+    }, [setValue]);
 
     return (
         <div className="space-y-8">
@@ -1074,37 +1190,61 @@ function StepRouteInfo({
                     </h3>
                 </div>
 
-                <div className="grid md:grid-cols-2 gap-4 mb-4">
-                    <Select
-                        label="Departamento"
-                        options={departmentOptions}
-                        value={originDepartment}
-                        onChange={(value) => {
-                            setValue('originDepartment', value);
-                            setValue('originCity', '');
-                        }}
-                        errorMessage={errors.originDepartment?.message}
-                        searchable
-                        required
-                    />
-                    <Select
-                        label="Ciudad"
-                        options={originCityOptions}
-                        value={originCity}
-                        onChange={(value) => setValue('originCity', value)}
-                        disabled={!originDepartment}
-                        errorMessage={errors.originCity?.message}
-                        searchable
-                        required
-                    />
-                </div>
+                {country === 'CO' ? (
+                    <>
+                        <LocationSelector
+                            value={originLocationValue}
+                            onChange={handleOriginLocationChange}
+                            mode="origen"
+                            required
+                            allowManualZone
+                            showExactAddress
+                            showReference
+                            defaultDepartment={originDepartment}
+                            defaultMunicipality={originCity}
+                            className="mb-4 space-y-4"
+                        />
+                        {errors.originDepartment || errors.originCity || errors.originAddress ? (
+                            <p className="mb-4 text-sm font-medium text-red-700">
+                                {errors.originDepartment?.message || errors.originCity?.message || errors.originAddress?.message}
+                            </p>
+                        ) : null}
+                    </>
+                ) : (
+                    <>
+                        <div className="grid md:grid-cols-2 gap-4 mb-4">
+                            <Select
+                                label="Departamento"
+                                options={departmentOptions}
+                                value={originDepartment}
+                                onChange={(value) => {
+                                    setValue('originDepartment', value);
+                                    setValue('originCity', '');
+                                }}
+                                errorMessage={errors.originDepartment?.message}
+                                searchable
+                                required
+                            />
+                            <Select
+                                label="Ciudad"
+                                options={originCityOptions}
+                                value={originCity}
+                                onChange={(value) => setValue('originCity', value)}
+                                disabled={!originDepartment}
+                                errorMessage={errors.originCity?.message}
+                                searchable
+                                required
+                            />
+                        </div>
 
-                <Input
-                    label="Dirección Completa"
-                    placeholder="Calle 123 #45-67, Bodega 5"
-                    errorMessage={errors.originAddress?.message}
-                    {...originAddressField}
-                />
+                        <Input
+                            label="Dirección Completa"
+                            placeholder="Calle 123 #45-67, Bodega 5"
+                            errorMessage={errors.originAddress?.message}
+                            {...originAddressField}
+                        />
+                    </>
+                )}
 
                 {/* Pickup Contact - Critical for PIN delivery */}
                 <div className="grid md:grid-cols-2 gap-4 mt-4 p-4 bg-emerald-100 border border-emerald-300 rounded-lg">
@@ -1173,37 +1313,61 @@ function StepRouteInfo({
                     </h3>
                 </div>
 
-                <div className="grid md:grid-cols-2 gap-4 mb-4">
-                    <Select
-                        label="Departamento"
-                        options={departmentOptions}
-                        value={destinationDepartment}
-                        onChange={(value) => {
-                            setValue('destinationDepartment', value);
-                            setValue('destinationCity', '');
-                        }}
-                        errorMessage={errors.destinationDepartment?.message}
-                        searchable
-                        required
-                    />
-                    <Select
-                        label="Ciudad"
-                        options={destinationCityOptions}
-                        value={destinationCity}
-                        onChange={(value) => setValue('destinationCity', value)}
-                        disabled={!destinationDepartment}
-                        errorMessage={errors.destinationCity?.message}
-                        searchable
-                        required
-                    />
-                </div>
+                {country === 'CO' ? (
+                    <>
+                        <LocationSelector
+                            value={destinationLocationValue}
+                            onChange={handleDestinationLocationChange}
+                            mode="destino"
+                            required
+                            allowManualZone
+                            showExactAddress
+                            showReference
+                            defaultDepartment={destinationDepartment}
+                            defaultMunicipality={destinationCity}
+                            className="mb-4 space-y-4"
+                        />
+                        {errors.destinationDepartment || errors.destinationCity || errors.destinationAddress ? (
+                            <p className="mb-4 text-sm font-medium text-red-700">
+                                {errors.destinationDepartment?.message || errors.destinationCity?.message || errors.destinationAddress?.message}
+                            </p>
+                        ) : null}
+                    </>
+                ) : (
+                    <>
+                        <div className="grid md:grid-cols-2 gap-4 mb-4">
+                            <Select
+                                label="Departamento"
+                                options={departmentOptions}
+                                value={destinationDepartment}
+                                onChange={(value) => {
+                                    setValue('destinationDepartment', value);
+                                    setValue('destinationCity', '');
+                                }}
+                                errorMessage={errors.destinationDepartment?.message}
+                                searchable
+                                required
+                            />
+                            <Select
+                                label="Ciudad"
+                                options={destinationCityOptions}
+                                value={destinationCity}
+                                onChange={(value) => setValue('destinationCity', value)}
+                                disabled={!destinationDepartment}
+                                errorMessage={errors.destinationCity?.message}
+                                searchable
+                                required
+                            />
+                        </div>
 
-                <Input
-                    label="Dirección Completa"
-                    placeholder="Zona Industrial Norte, Bodega 12"
-                    errorMessage={errors.destinationAddress?.message}
-                    {...destinationAddressField}
-                />
+                        <Input
+                            label="Dirección Completa"
+                            placeholder="Zona Industrial Norte, Bodega 12"
+                            errorMessage={errors.destinationAddress?.message}
+                            {...destinationAddressField}
+                        />
+                    </>
+                )}
 
                 {/* Delivery Contact - Critical for PIN delivery */}
                 <div className="grid md:grid-cols-2 gap-4 mt-4 p-4 bg-green-100 border border-green-400 rounded-lg">
@@ -2166,6 +2330,12 @@ export default function PublishOfferPage() {
             originDepartment: '',
             originCity: '',
             originAddress: '',
+            originDepartmentId: null,
+            originMunicipalityId: null,
+            originLocalZoneId: null,
+            originLocalZoneName: '',
+            originLocalZoneType: '',
+            originAddressReference: '',
             originLatitude: null,
             originLongitude: null,
             pickupContactName: '',
@@ -2173,6 +2343,12 @@ export default function PublishOfferPage() {
             destinationDepartment: '',
             destinationCity: '',
             destinationAddress: '',
+            destinationDepartmentId: null,
+            destinationMunicipalityId: null,
+            destinationLocalZoneId: null,
+            destinationLocalZoneName: '',
+            destinationLocalZoneType: '',
+            destinationAddressReference: '',
             destinationLatitude: null,
             destinationLongitude: null,
             deliveryContactName: '',
@@ -2458,6 +2634,12 @@ export default function PublishOfferPage() {
                 originCity: originCityName,
                 originDepartment: originDepartmentName,
                 originAddress: data.originAddress,
+                originDepartmentId: data.originDepartmentId || null,
+                originMunicipalityId: data.originMunicipalityId || null,
+                originLocalZoneId: data.originLocalZoneId || null,
+                originLocalZoneName: data.originLocalZoneName || undefined,
+                originLocalZoneType: data.originLocalZoneType || undefined,
+                originAddressReference: data.originAddressReference || undefined,
                 originLatitude: data.originLatitude,
                 originLongitude: data.originLongitude,
                 // NEW: Pickup contact for PIN delivery
@@ -2469,6 +2651,12 @@ export default function PublishOfferPage() {
                 destDepartment: destinationDepartmentName,
                 destinationAddress: data.destinationAddress,
                 destAddress: data.destinationAddress,
+                destinationDepartmentId: data.destinationDepartmentId || null,
+                destinationMunicipalityId: data.destinationMunicipalityId || null,
+                destinationLocalZoneId: data.destinationLocalZoneId || null,
+                destinationLocalZoneName: data.destinationLocalZoneName || undefined,
+                destinationLocalZoneType: data.destinationLocalZoneType || undefined,
+                destinationAddressReference: data.destinationAddressReference || undefined,
                 destinationLatitude: data.destinationLatitude,
                 destinationLongitude: data.destinationLongitude,
                 // NEW: Delivery contact for PIN delivery

@@ -11,15 +11,13 @@ import {
 
 import { Button, Input, Card, Badge, toast, AndeanPhoneInput, KargaxLogo } from '@/components/ui';
 import { Select } from '@/components/ui/Select';
+import LocationSelector from '@/components/location/LocationSelector';
 import { useAuthStore } from '@/features/auth/store/authStore';
 import { supabase } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
 import { validateAndeanPhoneValue } from '@/lib/phone/andean';
 import { extractApiErrorMessage } from '@/lib/contracts/api';
-import {
-    COLOMBIAN_DEPARTMENTS,
-    getCitiesByDepartment,
-} from '@/constants/colombia';
+import type { GeoZoneType, LocationSelectorValue } from '@/lib/geo/types';
 
 // =============================================================================
 // Types
@@ -33,6 +31,12 @@ interface BusinessFormData {
     department: string;
     city: string;
     phone: string;
+    departmentId?: string | null;
+    municipalityId?: string | null;
+    localZoneId?: string | null;
+    localZoneName?: string;
+    localZoneType?: GeoZoneType | '';
+    addressReference?: string;
 }
 
 interface TruckerFormData {
@@ -116,23 +120,50 @@ function BusinessOnboardingForm({
     const [form, setForm] = React.useState<BusinessFormData>({
         companyName: '', nit: '', industry: '',
         address: '', department: '', city: '', phone: '',
+        departmentId: null, municipalityId: null, localZoneId: null,
+        localZoneName: '', localZoneType: '', addressReference: '',
     });
     const [errors, setErrors] = React.useState<Partial<Record<keyof BusinessFormData, string>>>({});
-
-    const cities = React.useMemo(() => {
-        if (!form.department) return [];
-        return getCitiesByDepartment(form.department);
-    }, [form.department]);
-
-    const departmentOptions = COLOMBIAN_DEPARTMENTS.map((d) => ({
-        value: d.code, label: d.name, description: d.capital,
-    }));
-    const cityOptions = cities.map((c) => ({ value: c.code, label: c.name }));
 
     const update = (field: keyof BusinessFormData, value: string) => {
         setForm((prev) => ({ ...prev, [field]: value }));
         setErrors((prev) => ({ ...prev, [field]: undefined }));
     };
+
+    const locationValue = React.useMemo<LocationSelectorValue>(() => ({
+        countryCode: 'CO',
+        departmentId: form.departmentId || null,
+        departmentName: form.department,
+        municipalityId: form.municipalityId || null,
+        municipalityName: form.city,
+        localZoneId: form.localZoneId || null,
+        localZoneName: form.localZoneName || '',
+        localZoneType: form.localZoneType || '',
+        exactAddress: form.address,
+        reference: form.addressReference || '',
+        isManualZone: Boolean(form.localZoneName && !form.localZoneId),
+    }), [form]);
+
+    const updateLocation = React.useCallback((location: LocationSelectorValue) => {
+        setForm((prev) => ({
+            ...prev,
+            department: location.departmentName || '',
+            city: location.municipalityName || '',
+            address: location.exactAddress || '',
+            departmentId: location.departmentId || null,
+            municipalityId: location.municipalityId || null,
+            localZoneId: location.localZoneId || null,
+            localZoneName: location.localZoneName || '',
+            localZoneType: location.localZoneType || '',
+            addressReference: location.reference || '',
+        }));
+        setErrors((prev) => ({
+            ...prev,
+            department: undefined,
+            city: undefined,
+            address: undefined,
+        }));
+    }, []);
 
     const validateStep = () => {
         const newErrors: Partial<Record<keyof BusinessFormData, string>> = {};
@@ -238,32 +269,22 @@ function BusinessOnboardingForm({
 
                     {step === 1 && (
                         <>
-                            <Select
-                                label="Departamento"
-                                options={departmentOptions}
-                                value={form.department}
-                                onChange={(v) => { update('department', v); update('city', ''); }}
-                                placeholder="Selecciona departamento"
-                                searchable
-                                errorMessage={errors.department}
+                            <LocationSelector
+                                value={locationValue}
+                                onChange={updateLocation}
+                                mode="empresa"
+                                required
+                                allowManualZone
+                                showExactAddress
+                                showReference
+                                defaultDepartment={form.department}
+                                defaultMunicipality={form.city}
                             />
-                            <Select
-                                label="Ciudad"
-                                options={cityOptions}
-                                value={form.city}
-                                onChange={(v) => update('city', v)}
-                                placeholder="Selecciona ciudad"
-                                disabled={!form.department}
-                                searchable
-                                errorMessage={errors.city}
-                            />
-                            <Input
-                                label="Direccion (opcional)"
-                                placeholder="Cra 7 #45-12, Zona Industrial"
-                                leftIcon={<MapPin className="w-5 h-5" />}
-                                value={form.address}
-                                onChange={(e) => update('address', e.target.value)}
-                            />
+                            {errors.department || errors.city ? (
+                                <p className="text-sm font-medium text-red-300">
+                                    {errors.department || errors.city}
+                                </p>
+                            ) : null}
                         </>
                     )}
 

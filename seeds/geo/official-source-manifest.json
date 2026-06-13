@@ -1,0 +1,32 @@
+{
+  "country": "CO",
+  "consulted_at": "2026-06-13",
+  "primary_sources": [
+    {
+      "name": "DANE - DIVIPOLA",
+      "url": "https://www.dane.gov.co/index.php/sistema-estadistico-nacional-sen/normas-y-estandares/nomenclaturas-y-clasificaciones/divipola",
+      "data": "Departamentos, municipios, distritos, areas no municipalizadas y centros poblados segun codificacion DIVIPOLA.",
+      "confidence": "alta",
+      "production_use": true
+    },
+    {
+      "name": "Datos Abiertos Colombia - DIVIPOLA API",
+      "url": "https://www.datos.gov.co/resource/gdxc-w37w.json?$limit=50000",
+      "data": "API JSON para seed idempotente de departamentos y municipios/areas.",
+      "confidence": "alta si la metadata del dataset confirma propietario oficial",
+      "production_use": true
+    },
+    {
+      "name": "Geoportal DANE - Geovisor de Consulta de Codificacion DIVIPOLA",
+      "url": "https://geoportal.dane.gov.co/geovisores/territorio/consulta-divipola-division-politico-administrativa-de-colombia/",
+      "data": "Consulta y validacion visual de division politico-administrativa.",
+      "confidence": "alta",
+      "production_use": "validacion/referencia"
+    }
+  ],
+  "local_zone_policy": {
+    "barrios": "No cargar barrios a nivel nacional sin fuente oficial municipal verificable.",
+    "fallback": "Permitir input manual con is_user_submitted=true y needs_review=true.",
+    "required_fields": ["department_id", "municipality_id", "exact_address"]
+  }
+}

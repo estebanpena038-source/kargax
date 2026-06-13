@@ -6,6 +6,7 @@ import {
     isPlanLimitError,
     resolveBusinessAccessContext,
 } from '@/lib/server/warehouses';
+import { isMissingGeoColumnError, resolveGeoLocationForWrite } from '@/lib/server/geo';
 import { normalizePhoneForNotification } from '@/lib/phone/andean';
 import { COLOMBIAN_DEPARTMENTS, getCitiesByDepartment, normalizeVehicleTypeCode } from '@/constants/colombia';
 import {
@@ -63,11 +64,23 @@ interface CreateOfferRequest {
     originDepartment: string;
     originCity: string;
     originAddress: string;
+    originDepartmentId?: string | null;
+    originMunicipalityId?: string | null;
+    originLocalZoneId?: string | null;
+    originLocalZoneName?: string | null;
+    originLocalZoneType?: string | null;
+    originAddressReference?: string | null;
     originLatitude?: number | null;
     originLongitude?: number | null;
     destinationDepartment: string;
     destinationCity: string;
     destinationAddress: string;
+    destinationDepartmentId?: string | null;
+    destinationMunicipalityId?: string | null;
+    destinationLocalZoneId?: string | null;
+    destinationLocalZoneName?: string | null;
+    destinationLocalZoneType?: string | null;
+    destinationAddressReference?: string | null;
     destDepartment?: string;
     destCity?: string;
     destAddress?: string;
@@ -545,11 +558,21 @@ function toInsertPayload(data: CreateOfferRequest, businessId: string, fallbackC
         origin_department: originDepartment,
         origin_city: originCity,
         origin_address: data.originAddress,
+        origin_department_id: data.originDepartmentId || null,
+        origin_municipality_id: data.originMunicipalityId || null,
+        origin_local_zone_id: data.originLocalZoneId || null,
+        origin_zone_name_legacy: data.originLocalZoneName || null,
+        origin_address_reference: data.originAddressReference || null,
         origin_latitude: data.originLatitude ?? null,
         origin_longitude: data.originLongitude ?? null,
         destination_department: destinationDepartment,
         destination_city: destinationCity,
         destination_address: destinationAddress,
+        destination_department_id: data.destinationDepartmentId || null,
+        destination_municipality_id: data.destinationMunicipalityId || null,
+        destination_local_zone_id: data.destinationLocalZoneId || null,
+        destination_zone_name_legacy: data.destinationLocalZoneName || null,
+        destination_address_reference: data.destinationAddressReference || null,
         destination_latitude: data.destinationLatitude ?? null,
         destination_longitude: data.destinationLongitude ?? null,
         pickup_date: data.pickupDate,
@@ -718,6 +741,43 @@ export async function POST(request: NextRequest) {
     }
 
     try {
+        const originGeo = await resolveGeoLocationForWrite(supabaseAdmin, authUser.id, {
+            departmentId: offerBody.originDepartmentId,
+            municipalityId: offerBody.originMunicipalityId,
+            localZoneId: offerBody.originLocalZoneId,
+            localZoneName: offerBody.originLocalZoneName,
+            localZoneType: offerBody.originLocalZoneType,
+            addressReference: offerBody.originAddressReference,
+        });
+        const destinationGeo = await resolveGeoLocationForWrite(supabaseAdmin, authUser.id, {
+            departmentId: offerBody.destinationDepartmentId,
+            municipalityId: offerBody.destinationMunicipalityId,
+            localZoneId: offerBody.destinationLocalZoneId,
+            localZoneName: offerBody.destinationLocalZoneName,
+            localZoneType: offerBody.destinationLocalZoneType,
+            addressReference: offerBody.destinationAddressReference,
+        });
+
+        offerBody = {
+            ...offerBody,
+            originDepartmentId: originGeo.departmentId,
+            originMunicipalityId: originGeo.municipalityId,
+            originLocalZoneId: originGeo.localZoneId,
+            originLocalZoneName: originGeo.localZoneName || undefined,
+            originAddressReference: originGeo.addressReference || undefined,
+            destinationDepartmentId: destinationGeo.departmentId,
+            destinationMunicipalityId: destinationGeo.municipalityId,
+            destinationLocalZoneId: destinationGeo.localZoneId,
+            destinationLocalZoneName: destinationGeo.localZoneName || undefined,
+            destinationAddressReference: destinationGeo.addressReference || undefined,
+        };
+    } catch (error) {
+        return NextResponse.json({
+            error: error instanceof Error ? error.message : 'Ubicacion oficial invalida',
+        }, { status: 400 });
+    }
+
+    try {
         await enforceMonthlyTripLimit(supabaseAdmin, businessId);
     } catch (error) {
         if (isPlanLimitError(error)) {
@@ -763,10 +823,20 @@ export async function POST(request: NextRequest) {
         .select('id, status, assigned_trucker_id, private_fleet_trucker_id, is_private_fleet')
         .single();
 
-    if (offerResult.error?.code === '42703') {
+    if (isMissingGeoColumnError(offerResult.error)) {
         const legacyPayload: Record<string, unknown> = { ...insertPayload };
         delete legacyPayload.country_code;
         delete legacyPayload.currency_code;
+        delete legacyPayload.origin_department_id;
+        delete legacyPayload.origin_municipality_id;
+        delete legacyPayload.origin_local_zone_id;
+        delete legacyPayload.origin_zone_name_legacy;
+        delete legacyPayload.origin_address_reference;
+        delete legacyPayload.destination_department_id;
+        delete legacyPayload.destination_municipality_id;
+        delete legacyPayload.destination_local_zone_id;
+        delete legacyPayload.destination_zone_name_legacy;
+        delete legacyPayload.destination_address_reference;
         offerResult = await supabaseAdmin
             .from('cargo_offers')
             .insert(legacyPayload)

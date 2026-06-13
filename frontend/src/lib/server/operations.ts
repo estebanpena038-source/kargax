@@ -772,6 +772,14 @@ export async function createSupportRequest(
         holdingAccountId?: string | null;
         countryCode?: string | null;
         domain: SupportRequest['domain'];
+        category?: SupportRequest['category'];
+        assignedTo?: string | null;
+        relatedUserId?: string | null;
+        relatedBusinessId?: string | null;
+        relatedTruckerId?: string | null;
+        relatedOfferId?: string | null;
+        relatedPaymentId?: string | null;
+        relatedWalletTransactionId?: string | null;
         priority?: SupportPriority;
         preferredContactChannel?: SupportRequest['preferred_contact_channel'];
         subject: string;
@@ -791,6 +799,14 @@ export async function createSupportRequest(
             holding_account_id: payload.holdingAccountId || null,
             country_code: payload.countryCode || 'CO',
             domain: payload.domain,
+            category: payload.category || 'other',
+            assigned_to: payload.assignedTo || null,
+            related_user_id: payload.relatedUserId || null,
+            related_business_id: payload.relatedBusinessId || null,
+            related_trucker_id: payload.relatedTruckerId || null,
+            related_offer_id: payload.relatedOfferId || null,
+            related_payment_id: payload.relatedPaymentId || null,
+            related_wallet_transaction_id: payload.relatedWalletTransactionId || null,
             priority: normalizedPriority,
             preferred_contact_channel: payload.preferredContactChannel || 'email',
             subject: payload.subject,
@@ -820,6 +836,7 @@ export async function createSupportRequest(
         sourceReference: data.id,
         metadata: {
             priority: normalizedPriority,
+            category: payload.category || 'other',
             subject: payload.subject,
             preferred_contact_channel: payload.preferredContactChannel || 'email',
         },
@@ -832,6 +849,7 @@ export async function createSupportRequest(
             request_id: payload.requestId,
             domain: payload.domain,
             priority: normalizedPriority,
+            category: payload.category || 'other',
             country_code: payload.countryCode || 'CO',
             subject: payload.subject,
         },

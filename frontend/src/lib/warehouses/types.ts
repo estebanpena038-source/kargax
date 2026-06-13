@@ -114,6 +114,11 @@ export interface Warehouse {
     department: string;
     city: string;
     address: string;
+    department_id?: string | null;
+    municipality_id?: string | null;
+    local_zone_id?: string | null;
+    local_zone_name_legacy?: string | null;
+    address_reference?: string | null;
     latitude: number | null;
     longitude: number | null;
     gps_tolerance_meters: number | null;

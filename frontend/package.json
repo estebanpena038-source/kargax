@@ -14,7 +14,12 @@
     "visual:qa": "node ./scripts/visual-qa-release-gate.mjs",
     "visual:qa:browser": "node ./scripts/visual-qa-release-gate.mjs --require-browser",
     "smoke:release": "node ./scripts/smoke-suite.mjs",
-    "debug:payment": "node ./scripts/debug-payment.mjs"
+    "debug:payment": "node ./scripts/debug-payment.mjs",
+    "seed:geo": "node ../scripts/geo/seed-geo-colombia.mjs",
+    "verify:geo": "node ../scripts/geo/verify-geo-colombia.mjs",
+    "validate:geo": "node ../scripts/geo/validate-geo-colombia.mjs",
+    "diff:geo": "node ../scripts/geo/diff-geo-colombia.mjs",
+    "export:geo": "node ../scripts/geo/export-geo-colombia.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

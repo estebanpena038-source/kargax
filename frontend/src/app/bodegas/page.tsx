@@ -35,11 +35,13 @@ import {
     toast,
 } from '@/components/ui';
 import { PlanLimitPaywallDialog } from '@/components/billing/PlanLimitPaywallDialog';
+import LocationSelector from '@/components/location/LocationSelector';
 import { getCountryConfig, type CountryConfig } from '@/constants/countries';
 import { useAuthStore } from '@/features/auth/store/authStore';
 import warehouseClient from '@/lib/warehouses/client';
 import { CoordinatePicker } from '@/components/maps/CoordinatePicker';
 import { isPlanLimitReachedError, type PlanLimitErrorDetails } from '@/lib/billing/plan-limits';
+import type { GeoZoneType, LocationSelectorValue } from '@/lib/geo/types';
 import {
     getCityDisplayName,
     getCityOptions,
@@ -56,6 +58,12 @@ type WarehouseFormState = {
     department: string;
     city: string;
     address: string;
+    departmentId: string | null;
+    municipalityId: string | null;
+    localZoneId: string | null;
+    localZoneName: string;
+    localZoneType: GeoZoneType | '';
+    addressReference: string;
     latitude: number | null;
     longitude: number | null;
     gpsToleranceMeters: string;
@@ -79,6 +87,12 @@ const EMPTY_CREATE_FORM: WarehouseFormState = {
     department: '',
     city: '',
     address: '',
+    departmentId: null,
+    municipalityId: null,
+    localZoneId: null,
+    localZoneName: '',
+    localZoneType: '',
+    addressReference: '',
     latitude: null,
     longitude: null,
     gpsToleranceMeters: '500',
@@ -127,6 +141,12 @@ function toWarehouseFormState(warehouse: WarehouseType): WarehouseFormState {
         department: warehouse.department,
         city: warehouse.city,
         address: warehouse.address,
+        departmentId: warehouse.department_id || null,
+        municipalityId: warehouse.municipality_id || null,
+        localZoneId: warehouse.local_zone_id || null,
+        localZoneName: warehouse.local_zone_name_legacy || '',
+        localZoneType: '',
+        addressReference: warehouse.address_reference || '',
         latitude: warehouse.latitude,
         longitude: warehouse.longitude,
         gpsToleranceMeters: String(warehouse.gps_tolerance_meters || 500),
@@ -144,6 +164,39 @@ function WarehouseFormFields({
     onChange,
     includeStatus = false,
 }: WarehouseFormFieldsProps) {
+    const isColombia = countryConfig.code === 'CO';
+    const departmentDisplayName = getSubdivisionDisplayName(countryConfig.code, form.department) || form.department;
+    const cityDisplayName = getCityDisplayName(countryConfig.code, form.city) || form.city;
+    const locationValue = React.useMemo<LocationSelectorValue>(() => ({
+        countryCode: 'CO',
+        departmentId: form.departmentId,
+        departmentName: departmentDisplayName,
+        municipalityId: form.municipalityId,
+        municipalityName: cityDisplayName,
+        localZoneId: form.localZoneId,
+        localZoneName: form.localZoneName,
+        localZoneType: form.localZoneType,
+        exactAddress: form.address,
+        reference: form.addressReference,
+        isManualZone: Boolean(form.localZoneName && !form.localZoneId),
+    }), [cityDisplayName, departmentDisplayName, form]);
+
+    const handleLocationChange = React.useCallback((location: LocationSelectorValue) => {
+        onChange({
+            department: location.departmentName || '',
+            city: location.municipalityName || '',
+            address: location.exactAddress || '',
+            departmentId: location.departmentId || null,
+            municipalityId: location.municipalityId || null,
+            localZoneId: location.localZoneId || null,
+            localZoneName: location.localZoneName || '',
+            localZoneType: location.localZoneType || '',
+            addressReference: location.reference || '',
+            latitude: null,
+            longitude: null,
+        });
+    }, [onChange]);
+
     return (
         <div className="space-y-5">
             <div className="grid min-w-0 gap-4">
@@ -160,29 +213,45 @@ function WarehouseFormFields({
                     onChange={(event) => onChange({ name: event.target.value })}
                     placeholder="Centro logistico norte"
                 />
-                <Select
-                    label={countryConfig.subdivisionLabel}
-                    value={form.department}
-                    onChange={(value) => onChange({ department: value, city: '', latitude: null, longitude: null })}
-                    options={subdivisionOptions}
-                    searchable
-                    placeholder={`Selecciona ${countryConfig.subdivisionLabel.toLowerCase()}`}
-                />
-                <Select
-                    label={countryConfig.cityLabel}
-                    value={form.city}
-                    onChange={(value) => onChange({ city: value, latitude: null, longitude: null })}
-                    options={cityOptions}
-                    searchable
-                    disabled={!form.department}
-                    placeholder={`Selecciona ${countryConfig.cityLabel.toLowerCase()}`}
-                />
-                <Input
-                    label="Direccion"
-                    value={form.address}
-                    onChange={(event) => onChange({ address: event.target.value, latitude: null, longitude: null })}
-                    placeholder="Direccion operativa"
-                />
+                {isColombia ? (
+                    <LocationSelector
+                        value={locationValue}
+                        onChange={handleLocationChange}
+                        mode="bodega"
+                        required
+                        allowManualZone
+                        showExactAddress
+                        showReference
+                        defaultDepartment={departmentDisplayName}
+                        defaultMunicipality={cityDisplayName}
+                    />
+                ) : (
+                    <>
+                        <Select
+                            label={countryConfig.subdivisionLabel}
+                            value={form.department}
+                            onChange={(value) => onChange({ department: value, city: '', latitude: null, longitude: null })}
+                            options={subdivisionOptions}
+                            searchable
+                            placeholder={`Selecciona ${countryConfig.subdivisionLabel.toLowerCase()}`}
+                        />
+                        <Select
+                            label={countryConfig.cityLabel}
+                            value={form.city}
+                            onChange={(value) => onChange({ city: value, latitude: null, longitude: null })}
+                            options={cityOptions}
+                            searchable
+                            disabled={!form.department}
+                            placeholder={`Selecciona ${countryConfig.cityLabel.toLowerCase()}`}
+                        />
+                        <Input
+                            label="Direccion"
+                            value={form.address}
+                            onChange={(event) => onChange({ address: event.target.value, latitude: null, longitude: null })}
+                            placeholder="Direccion operativa"
+                        />
+                    </>
+                )}
                 <Input
                     label="Radio GPS permitido (m)"
                     inputMode="numeric"
@@ -208,8 +277,8 @@ function WarehouseFormFields({
             <CoordinatePicker
                 label="Coordenadas GPS de la bodega"
                 address={form.address}
-                city={form.city}
-                department={form.department}
+                city={cityDisplayName}
+                department={departmentDisplayName}
                 countryCode={countryConfig.code}
                 value={{
                     latitude: form.latitude,
@@ -310,6 +379,12 @@ export default function WarehousesPage() {
                 department: createForm.department,
                 city: createForm.city,
                 address: createForm.address,
+                departmentId: createForm.departmentId,
+                municipalityId: createForm.municipalityId,
+                localZoneId: createForm.localZoneId,
+                localZoneName: createForm.localZoneName,
+                localZoneType: createForm.localZoneType,
+                addressReference: createForm.addressReference,
                 latitude: createForm.latitude,
                 longitude: createForm.longitude,
                 gpsToleranceMeters: Number(createForm.gpsToleranceMeters || 500),
@@ -355,6 +430,12 @@ export default function WarehousesPage() {
                 department: editForm.department,
                 city: editForm.city,
                 address: editForm.address,
+                departmentId: editForm.departmentId,
+                municipalityId: editForm.municipalityId,
+                localZoneId: editForm.localZoneId,
+                localZoneName: editForm.localZoneName,
+                localZoneType: editForm.localZoneType,
+                addressReference: editForm.addressReference,
                 latitude: editForm.latitude,
                 longitude: editForm.longitude,
                 gpsToleranceMeters: Number(editForm.gpsToleranceMeters || 500),

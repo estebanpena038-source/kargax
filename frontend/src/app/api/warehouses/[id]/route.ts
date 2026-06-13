@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { requireAuthenticatedRoute } from '@/lib/server/route-auth';
 import { apiError, apiSuccess, getRequestId } from '@/lib/server/api-response';
+import { isMissingGeoColumnError, resolveGeoLocationForWrite } from '@/lib/server/geo';
 import {
     assertWarehouseCapability,
     enforceWarehouseActivationLimit,
@@ -146,6 +147,12 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
             department?: string;
             city?: string;
             address?: string;
+            departmentId?: string | null;
+            municipalityId?: string | null;
+            localZoneId?: string | null;
+            localZoneName?: string | null;
+            localZoneType?: string | null;
+            addressReference?: string | null;
             latitude?: number | null;
             longitude?: number | null;
             gpsToleranceMeters?: number;
@@ -163,6 +170,36 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         if (body.department !== undefined) payload.department = body.department.trim();
         if (body.city !== undefined) payload.city = body.city.trim();
         if (body.address !== undefined) payload.address = body.address.trim();
+        const hasGeoPayload = body.departmentId !== undefined
+            || body.municipalityId !== undefined
+            || body.localZoneId !== undefined
+            || body.localZoneName !== undefined
+            || body.addressReference !== undefined;
+
+        if (hasGeoPayload) {
+            try {
+                const geoLocation = await resolveGeoLocationForWrite(supabaseAdmin, authUser.id, {
+                    departmentId: body.departmentId,
+                    municipalityId: body.municipalityId,
+                    localZoneId: body.localZoneId,
+                    localZoneName: body.localZoneName,
+                    localZoneType: body.localZoneType,
+                    addressReference: body.addressReference,
+                });
+                payload.department_id = geoLocation.departmentId;
+                payload.municipality_id = geoLocation.municipalityId;
+                payload.local_zone_id = geoLocation.localZoneId;
+                payload.local_zone_name_legacy = geoLocation.localZoneName;
+                payload.address_reference = geoLocation.addressReference;
+            } catch (error) {
+                return apiError(error instanceof Error ? error.message : 'Ubicacion oficial invalida', {
+                    status: 400,
+                    code: 'WAREHOUSE_GEO_INVALID',
+                    requestId,
+                });
+            }
+        }
+
         if (body.latitude !== undefined || body.longitude !== undefined) {
             if (!hasValidCoordinates(body.latitude, body.longitude)) {
                 return apiError('latitude and longitude are required for warehouse GPS verification', {
@@ -189,12 +226,28 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
             await enforceWarehouseActivationLimit(supabaseAdmin, access.warehouse.business_id);
         }
 
-        const { data: warehouse, error } = await supabaseAdmin
+        let warehouseResult = await supabaseAdmin
             .from('warehouses')
             .update(payload)
             .eq('id', warehouseId)
             .select('*')
             .single();
+
+        if (isMissingGeoColumnError(warehouseResult.error)) {
+            delete payload.department_id;
+            delete payload.municipality_id;
+            delete payload.local_zone_id;
+            delete payload.local_zone_name_legacy;
+            delete payload.address_reference;
+            warehouseResult = await supabaseAdmin
+                .from('warehouses')
+                .update(payload)
+                .eq('id', warehouseId)
+                .select('*')
+                .single();
+        }
+
+        const { data: warehouse, error } = warehouseResult;
 
         if (error || !warehouse) {
             return apiError(error?.message || 'Could not update warehouse', {

@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-06-09T21:00:57.717Z",
+  "generated_at": "2026-06-13T17:12:11.310Z",
   "status": "pass",
   "mode": {
     "static_only": true,
@@ -146,8 +146,8 @@
     {
       "key": "source:legacy-color-utilities-neutralized-by-css",
       "evidence": {
-        "files": 36,
-        "hits": 676,
+        "files": 39,
+        "hits": 686,
         "samples": [
           {
             "file": "frontend/src/app/billetera/page.tsx",
@@ -237,7 +237,7 @@
           },
           {
             "file": "frontend/src/app/ofertas/publicar/page.tsx",
-            "count": 93,
+            "count": 95,
             "samples": [
               "border-red-",
               "text-red-",
@@ -247,6 +247,13 @@
               "ring-green-",
               "bg-blue-",
               "border-blue-"
+            ]
+          },
+          {
+            "file": "frontend/src/app/onboarding/page.tsx",
+            "count": 1,
+            "samples": [
+              "text-red-"
             ]
           },
           {
@@ -370,15 +377,6 @@
               "bg-emerald-",
               "text-emerald-",
               "text-green-"
-            ]
-          },
-          {
-            "file": "frontend/src/components/billing/PlanLimitPaywallDialog.tsx",
-            "count": 7,
-            "samples": [
-              "bg-emerald-",
-              "text-emerald-",
-              "border-emerald-"
             ]
           }
         ]

@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { requireAuthenticatedRoute } from '@/lib/server/route-auth';
 import { apiError, apiSuccess, getRequestId } from '@/lib/server/api-response';
+import { isMissingGeoColumnError, resolveGeoLocationForWrite } from '@/lib/server/geo';
 import {
     enforceWarehouseCreateLimit,
     getPlanLimitErrorDetails,
@@ -238,6 +239,12 @@ export async function POST(request: NextRequest) {
             department?: string;
             city?: string;
             address?: string;
+            departmentId?: string | null;
+            municipalityId?: string | null;
+            localZoneId?: string | null;
+            localZoneName?: string | null;
+            localZoneType?: string | null;
+            addressReference?: string | null;
             latitude?: number | null;
             longitude?: number | null;
             gpsToleranceMeters?: number;
@@ -289,26 +296,66 @@ export async function POST(request: NextRequest) {
             await enforceWarehouseCreateLimit(supabaseAdmin, businessId);
         }
 
-        const { data: warehouse, error } = await supabaseAdmin
+        let geoLocation;
+        try {
+            geoLocation = await resolveGeoLocationForWrite(supabaseAdmin, authUser.id, {
+                departmentId: body.departmentId,
+                municipalityId: body.municipalityId,
+                localZoneId: body.localZoneId,
+                localZoneName: body.localZoneName,
+                localZoneType: body.localZoneType,
+                addressReference: body.addressReference,
+            });
+        } catch (error) {
+            return apiError(error instanceof Error ? error.message : 'Ubicacion oficial invalida', {
+                status: 400,
+                code: 'WAREHOUSE_GEO_INVALID',
+                requestId,
+            });
+        }
+
+        const insertPayload: Record<string, unknown> = {
+            business_id: businessId,
+            code: body.code.trim().toUpperCase(),
+            name: body.name.trim(),
+            description: body.description?.trim() || null,
+            department: body.department.trim(),
+            city: body.city.trim(),
+            address: body.address.trim(),
+            department_id: geoLocation.departmentId,
+            municipality_id: geoLocation.municipalityId,
+            local_zone_id: geoLocation.localZoneId,
+            local_zone_name_legacy: geoLocation.localZoneName,
+            address_reference: geoLocation.addressReference,
+            latitude: Number(body.latitude),
+            longitude: Number(body.longitude),
+            gps_tolerance_meters: Math.max(50, Number(body.gpsToleranceMeters || 500)),
+            timezone: body.timezone || 'America/Bogota',
+            status: body.status || 'active',
+            flow_mode: body.flowMode || 'warehouse_managed',
+            notes: body.notes?.trim() || null,
+        };
+
+        let warehouseResult = await supabaseAdmin
             .from('warehouses')
-            .insert({
-                business_id: businessId,
-                code: body.code.trim().toUpperCase(),
-                name: body.name.trim(),
-                description: body.description?.trim() || null,
-                department: body.department.trim(),
-                city: body.city.trim(),
-                address: body.address.trim(),
-                latitude: Number(body.latitude),
-                longitude: Number(body.longitude),
-                gps_tolerance_meters: Math.max(50, Number(body.gpsToleranceMeters || 500)),
-                timezone: body.timezone || 'America/Bogota',
-                status: body.status || 'active',
-                flow_mode: body.flowMode || 'warehouse_managed',
-                notes: body.notes?.trim() || null,
-            })
+            .insert(insertPayload)
             .select('*')
             .single();
+
+        if (isMissingGeoColumnError(warehouseResult.error)) {
+            delete insertPayload.department_id;
+            delete insertPayload.municipality_id;
+            delete insertPayload.local_zone_id;
+            delete insertPayload.local_zone_name_legacy;
+            delete insertPayload.address_reference;
+            warehouseResult = await supabaseAdmin
+                .from('warehouses')
+                .insert(insertPayload)
+                .select('*')
+                .single();
+        }
+
+        const { data: warehouse, error } = warehouseResult;
 
         if (error || !warehouse) {
             return apiError(error?.message || 'Could not create warehouse', {

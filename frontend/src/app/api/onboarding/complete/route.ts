@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { apiError, apiSuccess, getRequestId } from '@/lib/server/api-response';
 import { requireAuthenticatedRoute } from '@/lib/server/route-auth';
+import { isMissingGeoColumnError, resolveGeoLocationForWrite } from '@/lib/server/geo';
 
 type BusinessOnboardingPayload = {
     userType: 'business';
@@ -11,6 +12,12 @@ type BusinessOnboardingPayload = {
     department: string;
     city: string;
     phone?: string | null;
+    departmentId?: string | null;
+    municipalityId?: string | null;
+    localZoneId?: string | null;
+    localZoneName?: string | null;
+    localZoneType?: string | null;
+    addressReference?: string | null;
 };
 
 type TruckerOnboardingPayload = {
@@ -79,18 +86,60 @@ export async function POST(request: NextRequest) {
             });
         }
 
-        const { error: businessError } = await supabaseAdmin
+        let geoLocation;
+        try {
+            geoLocation = await resolveGeoLocationForWrite(supabaseAdmin, authUser.id, {
+                departmentId: body.departmentId,
+                municipalityId: body.municipalityId,
+                localZoneId: body.localZoneId,
+                localZoneName: body.localZoneName,
+                localZoneType: body.localZoneType,
+                addressReference: body.addressReference,
+            });
+        } catch (error) {
+            return apiError(error instanceof Error ? error.message : 'Ubicacion oficial invalida', {
+                requestId,
+                status: 400,
+                code: 'ONBOARDING_GEO_INVALID',
+            });
+        }
+
+        const businessPayload: Record<string, unknown> = {
+            user_id: authUser.id,
+            company_name: companyName,
+            nit,
+            industry,
+            address: cleanText(body.address) || null,
+            city,
+            department,
+            country_code: countryCode,
+            department_id: geoLocation.departmentId,
+            municipality_id: geoLocation.municipalityId,
+            local_zone_id: geoLocation.localZoneId,
+            department_name_legacy: department,
+            city_name_legacy: city,
+            local_zone_name_legacy: geoLocation.localZoneName,
+            address_reference: geoLocation.addressReference,
+        };
+
+        let businessResult = await supabaseAdmin
             .from('business_profiles')
-            .upsert({
-                user_id: authUser.id,
-                company_name: companyName,
-                nit,
-                industry,
-                address: cleanText(body.address) || null,
-                city,
-                department,
-                country_code: countryCode,
-            }, { onConflict: 'user_id' });
+            .upsert(businessPayload, { onConflict: 'user_id' });
+
+        if (isMissingGeoColumnError(businessResult.error)) {
+            delete businessPayload.department_id;
+            delete businessPayload.municipality_id;
+            delete businessPayload.local_zone_id;
+            delete businessPayload.department_name_legacy;
+            delete businessPayload.city_name_legacy;
+            delete businessPayload.local_zone_name_legacy;
+            delete businessPayload.address_reference;
+            businessResult = await supabaseAdmin
+                .from('business_profiles')
+                .upsert(businessPayload, { onConflict: 'user_id' });
+        }
+
+        const businessError = businessResult.error;
 
         if (businessError) {
             return apiError(businessError.message || 'No se pudo guardar la empresa', {
