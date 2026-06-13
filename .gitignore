@@ -9,6 +9,7 @@ node_modules/
 .vercel/
 .env*
 !.env.example
+!**/.env.local.example
 *.log
 *.tsbuildinfo
 **/lint-report.json

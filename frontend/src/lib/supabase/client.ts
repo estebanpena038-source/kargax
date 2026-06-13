@@ -1,14 +1,10 @@
 // =============================================================================
-// KargaX - Supabase Client Configuration
-// Oracle-Level: Fault-tolerant with automatic reconnection
+// KargaX - Supabase Browser Client
 // =============================================================================
 
-import { createClient } from '@supabase/supabase-js';
+import { createBrowserClient } from '@supabase/ssr';
 import type { Database } from '@/types/database.types';
 
-// =============================================================================
-// Environment Validation
-// =============================================================================
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const isProduction = process.env.NODE_ENV === 'production';
@@ -17,7 +13,7 @@ const SUPABASE_STORAGE_FETCH_TIMEOUT_MS = 60000;
 
 if (!supabaseUrl || !supabaseAnonKey) {
     console.warn(
-        '⚠️ Supabase credentials not configured. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY'
+        'Supabase credentials not configured. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY'
     );
 }
 
@@ -31,7 +27,10 @@ async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}
     const timeoutMs = requestUrl.includes('/storage/v1/')
         ? SUPABASE_STORAGE_FETCH_TIMEOUT_MS
         : SUPABASE_DEFAULT_FETCH_TIMEOUT_MS;
-    const timeout = setTimeout(() => controller.abort(new Error(`Supabase request timeout after ${timeoutMs}ms`)), timeoutMs);
+    const timeout = setTimeout(
+        () => controller.abort(new Error(`Supabase request timeout after ${timeoutMs}ms`)),
+        timeoutMs
+    );
 
     try {
         return await fetch(input, {
@@ -43,10 +42,7 @@ async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}
     }
 }
 
-// =============================================================================
-// Supabase Client Instance
-// =============================================================================
-export const supabase = createClient<Database>(
+export const supabase = createBrowserClient<Database>(
     supabaseUrl || 'http://127.0.0.1:54321',
     supabaseAnonKey || 'dev-only-missing-supabase-anon-key',
     {
@@ -54,9 +50,8 @@ export const supabase = createClient<Database>(
             persistSession: true,
             autoRefreshToken: true,
             detectSessionInUrl: true,
-            // Supabase default email templates cannot be edited on free/default SMTP.
-            // Implicit links keep email confirmation and password recovery usable when
-            // users open the email from Gmail/mobile in a different browser context.
+            // Keep implicit links during this migration. Existing callbacks support
+            // code, access_token/refresh_token, and token_hash based email flows.
             flowType: 'implicit',
         },
         global: {
@@ -77,9 +72,6 @@ export const supabase = createClient<Database>(
     }
 );
 
-// =============================================================================
-// Connection Health Check
-// =============================================================================
 export async function checkSupabaseHealth(): Promise<{
     connected: boolean;
     latency: number;
@@ -91,7 +83,6 @@ export async function checkSupabaseHealth(): Promise<{
         const { error } = await supabase.from('_health_check').select('*').limit(1);
         const latency = Date.now() - startTime;
 
-        // If table doesn't exist, that's okay - connection still works
         if (error && !error.message.includes('does not exist')) {
             return { connected: false, latency, error: error.message };
         }
@@ -106,24 +97,20 @@ export async function checkSupabaseHealth(): Promise<{
     }
 }
 
-// =============================================================================
-// Auth Helpers with Retry Logic
-// =============================================================================
 export async function getSessionWithRetry(maxRetries = 3): Promise<{
     session: Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session'];
     error: Error | null;
 }> {
     let lastError: Error | null = null;
 
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    for (let attempt = 1; attempt <= maxRetries; attempt += 1) {
         try {
             const { data, error } = await supabase.auth.getSession();
 
             if (error) {
                 lastError = error;
-                // Wait before retry with exponential backoff
                 if (attempt < maxRetries) {
-                    await new Promise((r) => setTimeout(r, Math.pow(2, attempt) * 100));
+                    await new Promise((resolve) => setTimeout(resolve, Math.pow(2, attempt) * 100));
                     continue;
                 }
             }
@@ -132,7 +119,7 @@ export async function getSessionWithRetry(maxRetries = 3): Promise<{
         } catch (err) {
             lastError = err instanceof Error ? err : new Error('Unknown error');
             if (attempt < maxRetries) {
-                await new Promise((r) => setTimeout(r, Math.pow(2, attempt) * 100));
+                await new Promise((resolve) => setTimeout(resolve, Math.pow(2, attempt) * 100));
             }
         }
     }
@@ -140,9 +127,6 @@ export async function getSessionWithRetry(maxRetries = 3): Promise<{
     return { session: null, error: lastError };
 }
 
-// =============================================================================
-// Real-time Subscription Helper
-// =============================================================================
 export function subscribeToTable<T extends keyof Database['public']['Tables']>(
     table: T,
     callback: (payload: {

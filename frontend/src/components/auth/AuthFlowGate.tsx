@@ -36,15 +36,6 @@ function isMfaEscapePath(pathname: string) {
     return MFA_ESCAPE_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`));
 }
 
-function buildLoginRedirect(pathname: string) {
-    if (typeof window === 'undefined') {
-        return `/login?redirect=${encodeURIComponent(pathname)}`;
-    }
-
-    const target = `${window.location.pathname}${window.location.search || ''}`;
-    return `/login?redirect=${encodeURIComponent(target || pathname)}`;
-}
-
 export function AuthFlowGate() {
     const pathname = usePathname() || '/';
     const router = useRouter();
@@ -67,11 +58,7 @@ export function AuthFlowGate() {
                 try {
                     status = await getMfaStatus();
                 } catch (mfaError) {
-                    // Session likely expired during inactivity
-                    console.warn('[AuthFlowGate] MFA check failed (session may be expired):', mfaError);
-                    if (!isExemptPath(pathname)) {
-                        router.replace(buildLoginRedirect(pathname));
-                    }
+                    console.warn('[AuthFlowGate] MFA check failed; keeping current route while session refresh settles:', mfaError);
                     return;
                 }
 
@@ -141,7 +128,7 @@ export function AuthFlowGate() {
         return () => {
             cancelled = true;
         };
-    }, [isInitialized, pathname, router, user?.id, user?.onboardingCompleted]);
+    }, [isInitialized, pathname, router, user?.id, user?.onboardingCompleted, user?.userType]);
 
     return null;
 }

@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { SESSION_COOKIE_NAME } from '@/lib/auth/session-constants';
 import { apiError, getRequestId } from '@/lib/server/api-response';
 import { isStrictProductionEnvironment } from '@/lib/server/runtime-env';
+import { createClient as createServerSupabaseClient } from '@/lib/supabase/server';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AdminClient = SupabaseClient<any, 'public', any>;
 type AuthAssuranceLevel = 'aal1' | 'aal2' | null;
@@ -128,7 +128,7 @@ function getAal2RequiredResponse() {
     });
 }
 
-function getRequestToken(request: NextRequest) {
+function getBearerToken(request: NextRequest) {
     const authHeader = request.headers.get('authorization');
 
     if (authHeader?.startsWith('Bearer ')) {
@@ -138,7 +138,7 @@ function getRequestToken(request: NextRequest) {
         }
     }
 
-    return request.cookies.get(SESSION_COOKIE_NAME)?.value?.trim() || null;
+    return null;
 }
 
 export function safelyCompareSecrets(providedSecret: string | null | undefined, expectedSecret: string | null | undefined) {
@@ -224,26 +224,62 @@ export async function requireAuthenticatedRoute(
     request: NextRequest,
     options: RequireAuthOptions = {}
 ): Promise<AuthResult> {
-    const token = getRequestToken(request);
+    const supabaseAdmin = getSupabaseAdmin();
+    const bearerToken = getBearerToken(request);
+    let token = bearerToken || '';
+    let assuranceLevel: AuthAssuranceLevel = bearerToken ? getTokenAssuranceLevel(bearerToken) : null;
+    let authUser: AuthContext['authUser'] | null = null;
 
-    if (!token) {
-        return {
-            response: apiError('Unauthorized - No token provided', {
-                status: 401,
-                code: 'UNAUTHORIZED',
-            }),
+    if (bearerToken) {
+        const {
+            data: { user },
+            error: authError,
+        } = await supabaseAdmin.auth.getUser(bearerToken);
+
+        if (authError || !user) {
+            return {
+                response: apiError('Unauthorized - Invalid token', {
+                    status: 401,
+                    code: 'UNAUTHORIZED',
+                }),
+            };
+        }
+
+        authUser = {
+            id: user.id,
+            email: user.email ?? null,
+        };
+    } else {
+        const supabase = await createServerSupabaseClient();
+        const {
+            data: { user },
+            error: authError,
+        } = await supabase.auth.getUser();
+
+        if (authError || !user) {
+            return {
+                response: apiError('Unauthorized - No active session', {
+                    status: 401,
+                    code: 'UNAUTHORIZED',
+                }),
+            };
+        }
+
+        const {
+            data: { session },
+        } = await supabase.auth.getSession();
+
+        token = session?.access_token || '';
+        assuranceLevel = token ? getTokenAssuranceLevel(token) : null;
+        authUser = {
+            id: user.id,
+            email: user.email ?? null,
         };
     }
-    const supabaseAdmin = getSupabaseAdmin();
-    const assuranceLevel = getTokenAssuranceLevel(token);
-    const {
-        data: { user },
-        error: authError,
-    } = await supabaseAdmin.auth.getUser(token);
 
-    if (authError || !user) {
+    if (!authUser) {
         return {
-            response: apiError('Unauthorized - Invalid token', {
+            response: apiError('Unauthorized - No active session', {
                 status: 401,
                 code: 'UNAUTHORIZED',
             }),
@@ -259,16 +295,13 @@ export async function requireAuthenticatedRoute(
     const { data: profile } = await supabaseAdmin
         .from('user_profiles')
         .select('id, email, full_name, phone, user_type, country_code')
-        .eq('id', user.id)
+        .eq('id', authUser.id)
         .maybeSingle();
 
     return {
         context: {
             supabaseAdmin,
-            authUser: {
-                id: user.id,
-                email: user.email ?? null,
-            },
+            authUser,
             token,
             assuranceLevel,
             profile: (profile as AuthProfile | null) ?? null,

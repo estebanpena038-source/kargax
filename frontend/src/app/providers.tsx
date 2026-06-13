@@ -10,6 +10,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { AuthFlowGate } from '@/components/auth/AuthFlowGate';
 import { CommandPalette } from '@/components/ui/CommandPalette';
+import { AuthSessionProvider } from '@/features/auth/components/AuthSessionProvider';
 
 // =============================================================================
 // Query Client Configuration
@@ -54,26 +55,6 @@ function getQueryClient() {
 }
 
 // =============================================================================
-// Auth Initialization Hook
-// =============================================================================
-function AuthInitializer({ children }: { children: React.ReactNode }) {
-    const isInitialized = React.useRef(false);
-
-    React.useEffect(() => {
-        if (!isInitialized.current) {
-            isInitialized.current = true;
-            // Dynamic import to avoid circular dependency
-            import('@/features/auth/store/authStore').then(({ initAuthListener, useAuthStore }) => {
-                initAuthListener();
-                useAuthStore.getState().initialize();
-            });
-        }
-    }, []);
-
-    return <>{children}</>;
-}
-
-// =============================================================================
 // Providers Component
 // =============================================================================
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -81,11 +62,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
     return (
         <QueryClientProvider client={queryClient}>
-            <AuthInitializer>
+            <AuthSessionProvider queryClient={queryClient}>
                 <AuthFlowGate />
                 <CommandPalette />
                 {children}
-            </AuthInitializer>
+            </AuthSessionProvider>
             {process.env.NODE_ENV === 'development' && (
                 <ReactQueryDevtools initialIsOpen={false} position="bottom" />
             )}

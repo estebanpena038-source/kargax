@@ -1,12 +1,12 @@
 // =============================================================================
-// KargaX - Security Proxy (Sin Supabase)
+// KargaX - Security Proxy
 // Oracle-Level: Route protection, rate limiting, security headers
 // =============================================================================
 
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { SESSION_COOKIE_NAME } from '@/lib/auth/session-constants';
 import { handleCorsRequest, secureResponse } from '@/lib/server/cors';
+import { updateSession } from '@/lib/supabase/proxy';
 
 // =============================================================================
 // Configuration
@@ -50,6 +50,7 @@ const RATE_LIMITS = {
 } as const;
 
 const fallbackRateLimitMap = new Map<string, { count: number; resetTime: number }>();
+const LEGACY_SESSION_COOKIE_NAME = 'kargax-session';
 
 // =============================================================================
 // Rate Limiting
@@ -235,6 +236,20 @@ function isStaticAssetRequest(pathname: string) {
     );
 }
 
+function clearLegacySessionCookie(response: NextResponse) {
+    response.cookies.set({
+        name: LEGACY_SESSION_COOKIE_NAME,
+        value: '',
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: process.env.NODE_ENV === 'production',
+        path: '/',
+        maxAge: 0,
+    });
+
+    return response;
+}
+
 // =============================================================================
 // Main Proxy Function
 // =============================================================================
@@ -298,15 +313,16 @@ export async function proxy(request: NextRequest) {
     if (isPublicRoute) {
         const response = NextResponse.next();
         response.headers.set('X-RateLimit-Remaining', String(remaining));
-        return secureResponse(response, request);
+        return secureResponse(clearLegacySessionCookie(response), request);
     }
 
     // ==========================================================================
     // Authentication Check
     // ==========================================================================
-    const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+    const { response: authResponse, claims } = await updateSession(request);
+    const isAuthenticated = Boolean(claims?.sub);
 
-    if (!sessionCookie) {
+    if (!isAuthenticated) {
         if (pathname.startsWith('/api')) {
             const response = NextResponse.json(
                 {
@@ -322,7 +338,7 @@ export async function proxy(request: NextRequest) {
                 { status: 401 }
             );
             response.headers.set('X-RateLimit-Remaining', String(remaining));
-            return secureResponse(response, request);
+            return secureResponse(clearLegacySessionCookie(response), request);
         }
 
         const loginUrl = request.nextUrl.clone();
@@ -331,13 +347,12 @@ export async function proxy(request: NextRequest) {
 
         const response = NextResponse.redirect(loginUrl);
         response.headers.set('X-RateLimit-Remaining', String(remaining));
-        return secureResponse(response, request);
+        return secureResponse(clearLegacySessionCookie(response), request);
     }
 
-    const response = NextResponse.next();
-    response.headers.set('X-RateLimit-Remaining', String(remaining));
+    authResponse.headers.set('X-RateLimit-Remaining', String(remaining));
 
-    return secureResponse(response, request);
+    return secureResponse(clearLegacySessionCookie(authResponse), request);
 }
 
 // =============================================================================

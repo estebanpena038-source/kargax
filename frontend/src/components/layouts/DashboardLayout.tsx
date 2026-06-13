@@ -9,6 +9,7 @@ import { useTranslation, LanguageSelector } from '@/lib/i18n';
 import { useAuthStore } from '@/features/auth/store/authStore';
 import { supabase } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
+import { AuthLoadingScreen } from '@/components/auth/AuthLoadingScreen';
 import { KargaxLogo, Select, toast } from '@/components/ui';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
 import warehouseClient from '@/lib/warehouses/client';
@@ -655,23 +656,19 @@ export function DashboardLayout({
 
     if (!isInitialized) {
         return (
-            <div className="flex min-h-screen items-center justify-center bg-[var(--color-background)]">
-                <div className="text-center">
-                    <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-zinc-950 border-t-transparent" />
-                    <p className="text-zinc-500">{t('common.loading') || 'Cargando...'}</p>
-                </div>
-            </div>
+            <AuthLoadingScreen
+                title="Preparando tu operacion"
+                message={t('common.loading') || 'Estamos restaurando tu sesion y permisos.'}
+            />
         );
     }
 
     if (!user) {
         return (
-            <div className="flex min-h-screen items-center justify-center bg-[var(--color-background)]">
-                <div className="text-center">
-                    <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-zinc-950 border-t-transparent" />
-                    <p className="text-zinc-500">{t('common.loading') || 'Redirigiendo...'}</p>
-                </div>
-            </div>
+            <AuthLoadingScreen
+                title="Validando sesion"
+                message={t('common.loading') || 'Confirmando acceso antes de continuar.'}
+            />
         );
     }
 
