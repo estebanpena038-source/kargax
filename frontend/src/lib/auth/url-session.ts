@@ -110,6 +110,13 @@ export async function establishSessionFromAuthUrl(searchParams: SearchParamsLike
                 return existingSession;
             }
 
+            const message = exchangeError.message.toLowerCase();
+            if (message.includes('code verifier') || message.includes('pkce')) {
+                throw new Error(
+                    'Este enlace fue abierto fuera del navegador donde se solicito. Reenvia el correo y abre el enlace nuevo desde este dispositivo.'
+                );
+            }
+
             throw exchangeError;
         }
 

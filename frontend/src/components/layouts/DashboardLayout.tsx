@@ -39,6 +39,11 @@ interface DashboardLayoutProps {
 }
 
 type BusinessWarehouseRole = WarehouseRole | null;
+type StaffAccessState = {
+    roles: string[];
+    capabilities: string[];
+    actorRole: string | null;
+};
 
 interface BusinessSidebarAccessState {
     businessId: string | null;
@@ -151,6 +156,7 @@ export function DashboardLayout({
     const [privateFleetContext, setPrivateFleetContext] = React.useState<PrivateFleetDriverContext | null>(null);
     const [privateFleetContextLoading, setPrivateFleetContextLoading] = React.useState(false);
     const [canAccessCeo, setCanAccessCeo] = React.useState(false);
+    const [staffAccess, setStaffAccess] = React.useState<StaffAccessState | null>(null);
 
     React.useEffect(() => {
         if (user && isAuthenticated) {
@@ -259,6 +265,55 @@ export function DashboardLayout({
             cancelled = true;
         };
     }, [user?.id, user?.userType]);
+
+    React.useEffect(() => {
+        let cancelled = false;
+
+        const loadStaffAccess = async () => {
+            if (!user || !['staff', 'admin'].includes(user.userType)) {
+                setStaffAccess(null);
+                return;
+            }
+
+            try {
+                const { data: { session } } = await supabase.auth.getSession();
+                if (!session?.access_token) {
+                    if (!cancelled) setStaffAccess(null);
+                    return;
+                }
+
+                const response = await fetch('/api/staff/me', {
+                    headers: {
+                        Authorization: `Bearer ${session.access_token}`,
+                        'Content-Type': 'application/json',
+                    },
+                });
+                const payload = await response.json().catch(() => null);
+
+                if (!cancelled && response.ok) {
+                    setStaffAccess({
+                        roles: Array.isArray(payload?.data?.roles) ? payload.data.roles : [],
+                        capabilities: Array.isArray(payload?.data?.capabilities) ? payload.data.capabilities : [],
+                        actorRole: typeof payload?.data?.actorRole === 'string' ? payload.data.actorRole : null,
+                    });
+                }
+
+                if (!cancelled && !response.ok) {
+                    setStaffAccess(null);
+                }
+            } catch {
+                if (!cancelled) {
+                    setStaffAccess(null);
+                }
+            }
+        };
+
+        void loadStaffAccess();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [user?.id, user?.userType, user]);
 
     React.useEffect(() => {
         let cancelled = false;
@@ -425,6 +480,24 @@ export function DashboardLayout({
                     return user.userType === 'admin' || (businessAccess ? Boolean(businessAccess.capabilities?.viewWarehouseSummary) : true);
                 }
 
+                if (item.id === 'admin') {
+                    return canAccessCeo;
+                }
+
+                if (item.id === 'staff-support') {
+                    return Boolean(
+                        canAccessCeo
+                        || staffAccess?.capabilities.some((capability) => capability.startsWith('support:'))
+                    );
+                }
+
+                if (item.id === 'staff-payouts') {
+                    return Boolean(
+                        canAccessCeo
+                        || staffAccess?.capabilities.some((capability) => capability.startsWith('payout:'))
+                    );
+                }
+
                 return true;
             })
             .map((item) => {
@@ -448,6 +521,7 @@ export function DashboardLayout({
         privateFleetContext?.isPrivateFleetDriver,
         privateFleetContext?.stats.activeTrips,
         privateFleetContextLoading,
+        staffAccess?.capabilities,
     ]);
 
     const secondaryNavItems = React.useMemo(() => getSecondaryNavItems(), []);
@@ -460,6 +534,20 @@ export function DashboardLayout({
         }
 
         if (user.userType !== 'business' || !businessAccess?.role) {
+            if (user.userType === 'staff') {
+                const role = staffAccess?.actorRole || staffAccess?.roles[0] || null;
+                if (role === 'support_agent') return 'Soporte KargaX';
+                if (role === 'support_lead') return 'Lider soporte KargaX';
+                if (role === 'payout_reviewer') return 'Revision pagos KargaX';
+                if (role === 'payout_approver') return 'Pagos KargaX';
+                if (role === 'ops_manager') return 'Operacion KargaX';
+                return 'Staff KargaX';
+            }
+
+            if (user.userType === 'admin') {
+                return 'CEO KargaX';
+            }
+
             return null;
         }
 
@@ -468,7 +556,7 @@ export function DashboardLayout({
         }
 
         return getBusinessRoleLabel(businessAccess.role);
-    }, [businessAccess?.role, privateFleetContext?.isPrivateFleetDriver, user]);
+    }, [businessAccess?.role, privateFleetContext?.isPrivateFleetDriver, staffAccess?.actorRole, staffAccess?.roles, user]);
 
     const profileBusinessName = React.useMemo(() => {
         if (!user) return null;

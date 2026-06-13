@@ -9,8 +9,11 @@
     "repo:audit": "node ./scripts/repo-audit.mjs",
     "check:roles": "node ./scripts/check-role-policy.mjs",
     "security:audit": "node ./scripts/security-audit.mjs",
+    "staff:bootstrap": "node ./scripts/bootstrap-internal-admins.mjs",
+    "internal-admins:bootstrap": "node ./scripts/bootstrap-internal-admins.mjs",
     "supabase:inspect": "node ./scripts/supabase-inspect.mjs",
     "supabase:auth-url-check": "node ./scripts/supabase-auth-url-check.mjs",
+    "clientes5:outreach": "node ./scripts/clientes5-outreach.mjs",
     "check:release": "npm run repo:audit && npm run check:roles && npm --prefix frontend run check:release",
     "check": "npm run repo:audit && npm run check:roles && npm --prefix frontend run check"
   },

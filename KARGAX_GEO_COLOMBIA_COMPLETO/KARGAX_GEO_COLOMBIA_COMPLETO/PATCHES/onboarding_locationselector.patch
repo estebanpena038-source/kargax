@@ -1,0 +1,92 @@
+*** Begin Patch
+*** Update File: frontend/src/app/onboarding/page.tsx
+@@
+-import {
+-    COLOMBIAN_DEPARTMENTS,
+-    getCitiesByDepartment,
+-} from '@/constants/colombia';
++import LocationSelector from '@/components/location/LocationSelector';
++import type { LocationSelectorValue } from '@/lib/geo/types';
+@@
+ interface BusinessFormData {
+@@
+     department: string;
+     city: string;
++    departmentId?: string | null;
++    municipalityId?: string | null;
++    localZoneId?: string | null;
++    localZoneName?: string;
++    addressReference?: string;
+     phone: string;
+ }
+@@
+-    const cities = React.useMemo(() => {
+-        if (!form.department) return [];
+-        return getCitiesByDepartment(form.department);
+-    }, [form.department]);
+-
+-    const departmentOptions = COLOMBIAN_DEPARTMENTS.map((d) => ({
+-        value: d.code, label: d.name, description: d.capital,
+-    }));
+-    const cityOptions = cities.map((c) => ({ value: c.code, label: c.name }));
++    const locationValue: LocationSelectorValue = {
++        departmentId: form.departmentId || null,
++        departmentName: form.department,
++        municipalityId: form.municipalityId || null,
++        municipalityName: form.city,
++        localZoneId: form.localZoneId || null,
++        localZoneName: form.localZoneName || '',
++        exactAddress: form.address,
++        reference: form.addressReference || '',
++    };
++
++    const updateLocation = (next: LocationSelectorValue) => {
++        setForm((prev) => ({
++            ...prev,
++            departmentId: next.departmentId || null,
++            municipalityId: next.municipalityId || null,
++            localZoneId: next.localZoneId || null,
++            localZoneName: next.localZoneName || '',
++            department: next.departmentName || '',
++            city: next.municipalityName || '',
++            address: next.exactAddress || '',
++            addressReference: next.reference || '',
++        }));
++        setErrors((prev) => ({ ...prev, department: undefined, city: undefined, address: undefined }));
++    };
+@@
+-                            <Select
+-                                label="Departamento"
+-                                options={departmentOptions}
+-                                value={form.department}
+-                                onChange={(v) => { update('department', v); update('city', ''); }}
+-                                placeholder="Selecciona departamento"
+-                                searchable
+-                                errorMessage={errors.department}
+-                            />
+-                            <Select
+-                                label="Ciudad"
+-                                options={cityOptions}
+-                                value={form.city}
+-                                onChange={(v) => update('city', v)}
+-                                placeholder="Selecciona ciudad"
+-                                disabled={!form.department}
+-                                searchable
+-                                errorMessage={errors.city}
+-                            />
+-                            <Input
+-                                placeholder="Cra 7 #45-12, Zona Industrial"
+-                                leftIcon={<MapPin className="w-5 h-5" />}
+-                                value={form.address}
+-                                onChange={(e) => update('address', e.target.value)}
+-                            />
++                            <LocationSelector
++                                mode="empresa"
++                                value={locationValue}
++                                onChange={updateLocation}
++                                required
++                                allowManualZone
++                                showExactAddress
++                                showReference
++                            />
+*** End Patch

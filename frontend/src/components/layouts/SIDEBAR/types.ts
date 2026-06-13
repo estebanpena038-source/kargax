@@ -1,6 +1,6 @@
 import type * as React from 'react';
 
-export type SidebarUserType = 'trucker' | 'business' | 'admin';
+export type SidebarUserType = 'trucker' | 'business' | 'admin' | 'staff';
 
 export type SidebarSectionKey =
     | 'command'

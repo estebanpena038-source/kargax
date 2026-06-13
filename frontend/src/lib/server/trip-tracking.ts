@@ -12,7 +12,7 @@ export interface TrackingOfferAccess {
 }
 
 export interface TrackingAuthProfile {
-    user_type: 'trucker' | 'business' | 'admin';
+    user_type: 'trucker' | 'business' | 'admin' | 'staff';
 }
 
 export interface LocationPingInput {

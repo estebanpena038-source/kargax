@@ -8,7 +8,7 @@ export type SupabaseAdminClient = SupabaseClient<any, 'public', any>;
 
 export type PayrollAccessProfile = {
     id: string;
-    user_type: 'trucker' | 'business' | 'admin';
+    user_type: 'trucker' | 'business' | 'admin' | 'staff';
 } | null;
 
 export const PRIVATE_FLEET_PAYROLL_FEE_PERCENT = Number(process.env.PRIVATE_FLEET_PAYROLL_FEE_PERCENT || 0);

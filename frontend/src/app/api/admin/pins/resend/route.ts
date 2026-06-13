@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createAdminNotification, requireAdminRoute } from '@/lib/server/route-auth';
+import { createAdminNotification } from '@/lib/server/route-auth';
+import { requireInternalAdminCapability } from '@/lib/server/internal-admins';
 import { getPaymentRuntimeConfig } from '@/lib/server/runtime-env';
 import { getRequestId } from '@/lib/server/api-response';
 import { recordCriticalOperation } from '@/lib/server/operations';
 
 export async function POST(request: NextRequest) {
     const requestId = getRequestId(request);
-    const auth = await requireAdminRoute(request);
+    const auth = await requireInternalAdminCapability(request, 'pin:resend');
 
     if ('response' in auth) {
         return auth.response;

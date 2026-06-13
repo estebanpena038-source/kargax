@@ -1,8 +1,15 @@
 import type { NextConfig } from "next";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { getSecurityHeaderEntries } from "./src/lib/server/security-headers";
+
+const appRoot = dirname(fileURLToPath(import.meta.url));
 
 const nextConfig: NextConfig = {
   experimental: {},
+  turbopack: {
+    root: appRoot,
+  },
 
   // Image security config
   images: {

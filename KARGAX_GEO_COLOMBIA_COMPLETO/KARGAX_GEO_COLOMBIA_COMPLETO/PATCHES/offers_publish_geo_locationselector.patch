@@ -1,0 +1,80 @@
+*** Begin Patch
+*** Update File: frontend/src/app/ofertas/publicar/page.tsx
+@@
+ import { WarehouseOfferFields } from '@/components/warehouses/WarehouseOfferFields';
++import LocationSelector from '@/components/location/LocationSelector';
++import type { LocationSelectorValue } from '@/lib/geo/types';
+ import {
+-    COLOMBIAN_DEPARTMENTS,
+-    getCitiesByDepartment,
+     getCityName,
+     getDepartmentName,
+@@
+     originDepartment: string;
+     originCity: string;
+     originAddress: string;
++    originDepartmentId?: string | null;
++    originMunicipalityId?: string | null;
++    originLocalZoneId?: string | null;
++    originLocalZoneName?: string;
++    originAddressReference?: string;
+@@
+     destinationDepartment: string;
+     destinationCity: string;
+     destinationAddress: string;
++    destinationDepartmentId?: string | null;
++    destinationMunicipalityId?: string | null;
++    destinationLocalZoneId?: string | null;
++    destinationLocalZoneName?: string;
++    destinationAddressReference?: string;
+@@
+     originAddress: z.string().min(5, 'Dirección muy corta'),
++    originDepartmentId: z.string().nullable().optional(),
++    originMunicipalityId: z.string().nullable().optional(),
++    originLocalZoneId: z.string().nullable().optional(),
++    originLocalZoneName: z.string().max(120).optional(),
++    originAddressReference: z.string().max(180).optional(),
+@@
+     destinationAddress: z.string().min(5, 'Dirección muy corta'),
++    destinationDepartmentId: z.string().nullable().optional(),
++    destinationMunicipalityId: z.string().nullable().optional(),
++    destinationLocalZoneId: z.string().nullable().optional(),
++    destinationLocalZoneName: z.string().max(120).optional(),
++    destinationAddressReference: z.string().max(180).optional(),
+@@
++// Inside route step UI, replace duplicated Department/City/Address blocks with:
++const originLocationValue: LocationSelectorValue = {
++    departmentId: form.watch('originDepartmentId') || null,
++    departmentName: form.watch('originDepartment'),
++    municipalityId: form.watch('originMunicipalityId') || null,
++    municipalityName: form.watch('originCity'),
++    localZoneId: form.watch('originLocalZoneId') || null,
++    localZoneName: form.watch('originLocalZoneName') || '',
++    exactAddress: form.watch('originAddress'),
++    reference: form.watch('originAddressReference') || '',
++};
++
++<LocationSelector
++    mode="origen"
++    labelPrefix="origen"
++    value={originLocationValue}
++    onChange={(next) => {
++        form.setValue('originDepartmentId', next.departmentId || null, { shouldValidate: true });
++        form.setValue('originMunicipalityId', next.municipalityId || null, { shouldValidate: true });
++        form.setValue('originLocalZoneId', next.localZoneId || null, { shouldValidate: true });
++        form.setValue('originLocalZoneName', next.localZoneName || '', { shouldValidate: true });
++        form.setValue('originDepartment', next.departmentName || '', { shouldValidate: true });
++        form.setValue('originCity', next.municipalityName || '', { shouldValidate: true });
++        form.setValue('originAddress', next.exactAddress || '', { shouldValidate: true });
++        form.setValue('originAddressReference', next.reference || '', { shouldValidate: true });
++        form.setValue('originLatitude', null);
++        form.setValue('originLongitude', null);
++    }}
++    required
++    allowManualZone
++    showExactAddress
++    showReference
++/>
++
++// Repeat with mode="destino" and destination* fields for destinationLocationValue.
+*** End Patch

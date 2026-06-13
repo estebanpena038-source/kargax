@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdminRoute } from '@/lib/server/route-auth';
+import { requireInternalAdminCapability } from '@/lib/server/internal-admins';
 
 interface TreasuryAdjustmentRequest {
     amount: number;
@@ -8,7 +8,7 @@ interface TreasuryAdjustmentRequest {
 }
 
 export async function POST(request: NextRequest) {
-    const auth = await requireAdminRoute(request);
+    const auth = await requireInternalAdminCapability(request, 'treasury:adjust');
 
     if ('response' in auth) {
         return auth.response;

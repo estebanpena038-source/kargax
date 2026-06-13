@@ -15,7 +15,7 @@ type AdminClient = SupabaseClient<any, 'public', any>;
 
 export type RolePolicyProfile = {
     id: string;
-    user_type: 'trucker' | 'business' | 'admin';
+    user_type: 'trucker' | 'business' | 'admin' | 'staff';
 } | null;
 
 export type RolePolicyScopeError = {

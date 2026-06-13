@@ -2,14 +2,14 @@ import { NextRequest } from 'next/server';
 import { apiError, apiSuccess, getRequestId } from '@/lib/server/api-response';
 import { executeReplayAction } from '@/lib/server/replay-actions';
 import { getPlatformIncident, recordCriticalOperation } from '@/lib/server/operations';
-import { requireAdminRoute } from '@/lib/server/route-auth';
+import { requireInternalAdminCapability } from '@/lib/server/internal-admins';
 
 export async function POST(
     request: NextRequest,
     context: { params: Promise<{ id: string }> }
 ) {
     const requestId = getRequestId(request);
-    const auth = await requireAdminRoute(request, { requireAal2: true });
+    const auth = await requireInternalAdminCapability(request, 'incident:write', { requireAal2: true });
 
     if ('response' in auth) {
         return auth.response;

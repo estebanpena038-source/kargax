@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-27T12:12:53.672Z",
+  "generated_at": "2026-06-09T21:00:57.717Z",
   "status": "pass",
   "mode": {
     "static_only": true,
@@ -146,9 +146,18 @@
     {
       "key": "source:legacy-color-utilities-neutralized-by-css",
       "evidence": {
-        "files": 33,
-        "hits": 640,
+        "files": 36,
+        "hits": 676,
         "samples": [
+          {
+            "file": "frontend/src/app/billetera/page.tsx",
+            "count": 3,
+            "samples": [
+              "border-amber-",
+              "bg-amber-",
+              "text-amber-"
+            ]
+          },
           {
             "file": "frontend/src/app/bodegas/[id]/despachos/page.tsx",
             "count": 6,
@@ -259,6 +268,34 @@
             ]
           },
           {
+            "file": "frontend/src/app/staff/payouts/page.tsx",
+            "count": 16,
+            "samples": [
+              "border-amber-",
+              "bg-amber-",
+              "text-amber-",
+              "border-blue-",
+              "bg-blue-",
+              "text-blue-",
+              "border-red-",
+              "bg-red-"
+            ]
+          },
+          {
+            "file": "frontend/src/app/staff/support/page.tsx",
+            "count": 17,
+            "samples": [
+              "border-amber-",
+              "bg-amber-",
+              "text-amber-",
+              "border-blue-",
+              "bg-blue-",
+              "text-blue-",
+              "border-purple-",
+              "bg-purple-"
+            ]
+          },
+          {
             "file": "frontend/src/components/admin/AdvancesPanel.tsx",
             "count": 49,
             "samples": [
@@ -342,32 +379,6 @@
               "bg-emerald-",
               "text-emerald-",
               "border-emerald-"
-            ]
-          },
-          {
-            "file": "frontend/src/components/last-mile/LastMileDashboard.tsx",
-            "count": 1,
-            "samples": [
-              "text-red-"
-            ]
-          },
-          {
-            "file": "frontend/src/components/notifications/NotificationBell.tsx",
-            "count": 4,
-            "samples": [
-              "text-blue-",
-              "text-emerald-",
-              "text-red-",
-              "text-green-"
-            ]
-          },
-          {
-            "file": "frontend/src/components/picking/PickingChecklist.tsx",
-            "count": 6,
-            "samples": [
-              "border-red-",
-              "bg-red-",
-              "text-red-"
             ]
           }
         ]

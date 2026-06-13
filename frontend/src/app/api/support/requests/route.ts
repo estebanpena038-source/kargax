@@ -1,12 +1,14 @@
 import { NextRequest } from 'next/server';
 import { apiError, apiSuccess, getRequestId } from '@/lib/server/api-response';
 import { createSupportRequest, listSupportRequests } from '@/lib/server/operations';
-import { getSupabaseAdmin, requireAdminRoute } from '@/lib/server/route-auth';
+import { requireStaffCapability } from '@/lib/server/staff';
+import { getSupabaseAdmin } from '@/lib/server/route-auth';
+import { normalizeSupportCategory } from '@/lib/server/support-tickets';
 import type { SupportRequest } from '@/lib/platform/types';
 
 export async function GET(request: NextRequest) {
     const requestId = getRequestId(request);
-    const auth = await requireAdminRoute(request);
+    const auth = await requireStaffCapability(request, 'support:read');
 
     if ('response' in auth) {
         return auth.response;
@@ -37,6 +39,7 @@ export async function POST(request: NextRequest) {
     const subject = typeof body?.subject === 'string' ? body.subject.trim() : '';
     const description = typeof body?.description === 'string' ? body.description.trim() : '';
     const domain = typeof body?.domain === 'string' ? body.domain : 'support';
+    const category = normalizeSupportCategory(body?.category);
     const priority = typeof body?.priority === 'string' ? body.priority : 'medium';
     const preferredContactChannel = typeof body?.preferredContactChannel === 'string'
         ? body.preferredContactChannel
@@ -59,6 +62,7 @@ export async function POST(request: NextRequest) {
             subject,
             description,
             domain: domain as SupportRequest['domain'],
+            category,
             priority: priority as SupportRequest['priority'],
             preferredContactChannel: preferredContactChannel as SupportRequest['preferred_contact_channel'],
             countryCode,

@@ -1,0 +1,13 @@
+*** Begin Patch
+*** Update File: frontend/package.json
+@@
+     "smoke:release": "node ./scripts/smoke-suite.mjs",
+-    "debug:payment": "node ./scripts/debug-payment.mjs"
++    "debug:payment": "node ./scripts/debug-payment.mjs",
++    "seed:geo": "node ../scripts/geo/seed-geo-colombia.mjs",
++    "verify:geo": "node ../scripts/geo/verify-geo-colombia.mjs",
++    "diff:geo": "node ../scripts/geo/diff-geo-colombia.mjs",
++    "validate:geo": "node ../scripts/geo/validate-geo-colombia.mjs",
++    "export:geo": "node ../scripts/geo/export-geo-colombia.mjs"
+   },
+*** End Patch

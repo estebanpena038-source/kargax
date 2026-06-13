@@ -13,7 +13,7 @@ type AdminClient = SupabaseClient<any, 'public', any>;
 
 interface AuthProfile {
     id: string;
-    user_type: 'trucker' | 'business' | 'admin';
+    user_type: 'trucker' | 'business' | 'admin' | 'staff';
 }
 
 type PlanLike = {

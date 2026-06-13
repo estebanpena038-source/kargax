@@ -13,14 +13,15 @@ import { buildPublicAppUrl, shouldAllowLocalPublicAppUrl } from '@/lib/platform/
 // TYPES
 // =============================================================================
 
-export type UserType = 'trucker' | 'business' | 'admin';
+export type UserType = 'trucker' | 'business' | 'admin' | 'staff';
+export type PublicSignUpUserType = 'trucker' | 'business';
 
 export interface SignUpData {
     email: string;
     password: string;
     fullName: string;
     phone?: string;
-    userType: UserType;
+    userType: PublicSignUpUserType;
     corporateInviteCode?: string;
     documentType?: string;
     documentNumber?: string;

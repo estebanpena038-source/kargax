@@ -14,7 +14,7 @@ interface AuthProfile {
     email: string;
     full_name: string;
     phone: string | null;
-    user_type: 'trucker' | 'business' | 'admin';
+    user_type: 'trucker' | 'business' | 'admin' | 'staff';
     country_code?: string | null;
 }
 
@@ -292,11 +292,11 @@ export async function requireAdminRoute(
         return auth;
     }
 
-    if (auth.context.profile?.user_type !== 'admin') {
+    if (auth.context.profile?.user_type !== 'admin' || !isFounderCeoAllowed(auth.context)) {
         return {
-            response: apiError('Forbidden - Admin access required', {
+            response: apiError('Forbidden - CEO access required', {
                 status: 403,
-                code: 'ADMIN_REQUIRED',
+                code: 'CEO_ACCESS_REQUIRED',
             }),
         };
     }

@@ -1,0 +1,22 @@
+*** Begin Patch
+*** Update File: frontend/src/app/api/warehouses/route.ts
+@@
+             department?: string;
+             city?: string;
+             address?: string;
++            departmentId?: string | null;
++            municipalityId?: string | null;
++            localZoneId?: string | null;
++            localZoneName?: string | null;
++            addressReference?: string | null;
+@@
+                 department: body.department.trim(),
+                 city: body.city.trim(),
+                 address: body.address.trim(),
++                department_id: body.departmentId || null,
++                municipality_id: body.municipalityId || null,
++                local_zone_id: body.localZoneId || null,
++                local_zone_name_legacy: body.localZoneName?.trim() || null,
++                address_reference: body.addressReference?.trim() || null,
+                 latitude: Number(body.latitude),
+*** End Patch

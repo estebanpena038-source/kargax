@@ -271,7 +271,8 @@ const UserProfileSection = React.memo(function UserProfileSection({
     const userTypeLabel = visibleRole || {
         trucker: t('nav.userType.trucker') || 'Transportador',
         business: t('nav.userType.business') || 'Empresa',
-        admin: t('nav.userType.admin') || 'Administrador',
+        admin: 'CEO KargaX',
+        staff: 'Staff KargaX',
     }[user.userType];
 
     return (
@@ -292,7 +293,7 @@ const UserProfileSection = React.memo(function UserProfileSection({
                             <p className="truncate text-sm font-semibold text-zinc-950">{fullName}</p>
                             <p className="truncate text-xs text-zinc-500">{userTypeLabel}</p>
                             <p className="truncate text-[11px] text-zinc-400">
-                                {businessName || (user.userType === 'admin' ? 'KargaX Plataforma' : 'Cuenta personal')}
+                                {businessName || (user.userType === 'admin' || user.userType === 'staff' ? 'KargaX Plataforma' : 'Cuenta personal')}
                             </p>
                             {planName ? (
                                 <p className="mt-1 truncate text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500">

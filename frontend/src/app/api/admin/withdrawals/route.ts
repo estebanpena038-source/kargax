@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdminRoute } from '@/lib/server/route-auth';
+import { requireInternalAdminCapability } from '@/lib/server/internal-admins';
 
 function normalizeWithdrawal(row: Record<string, any>): Record<string, any> {
     const metadata = row.metadata && typeof row.metadata === 'object' ? row.metadata : {};
@@ -25,7 +25,7 @@ function normalizeWithdrawal(row: Record<string, any>): Record<string, any> {
 }
 
 export async function GET(request: NextRequest) {
-    const auth = await requireAdminRoute(request);
+    const auth = await requireInternalAdminCapability(request, 'payout:read');
 
     if ('response' in auth) {
         return auth.response;

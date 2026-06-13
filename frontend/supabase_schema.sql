@@ -13,7 +13,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- STEP 2: Create Custom Types (ENUMs)
 -- =============================================================================
 DO $$ BEGIN
-    CREATE TYPE user_type AS ENUM ('trucker', 'business', 'admin');
+    CREATE TYPE user_type AS ENUM ('trucker', 'business', 'admin', 'staff');
 EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;

@@ -1,0 +1,56 @@
+*** Begin Patch
+*** Update File: frontend/src/app/api/offers/route.ts
+@@
+ import { COLOMBIAN_DEPARTMENTS, getCitiesByDepartment, normalizeVehicleTypeCode } from '@/constants/colombia';
+@@
+     originDepartment: string;
+     originCity: string;
+     originAddress: string;
++    originDepartmentId?: string | null;
++    originMunicipalityId?: string | null;
++    originLocalZoneId?: string | null;
++    originLocalZoneName?: string | null;
++    originAddressReference?: string | null;
+@@
+     destinationDepartment: string;
+     destinationCity: string;
+     destinationAddress: string;
++    destinationDepartmentId?: string | null;
++    destinationMunicipalityId?: string | null;
++    destinationLocalZoneId?: string | null;
++    destinationLocalZoneName?: string | null;
++    destinationAddressReference?: string | null;
+@@
+         origin_department: originDepartment,
+         origin_city: originCity,
+         origin_address: data.originAddress,
++        origin_department_id: data.originDepartmentId || null,
++        origin_municipality_id: data.originMunicipalityId || null,
++        origin_local_zone_id: data.originLocalZoneId || null,
++        origin_zone_name_legacy: data.originLocalZoneName || null,
++        origin_address_reference: data.originAddressReference || null,
+@@
+         destination_department: destinationDepartment,
+         destination_city: destinationCity,
+         destination_address: destinationAddress,
++        destination_department_id: data.destinationDepartmentId || null,
++        destination_municipality_id: data.destinationMunicipalityId || null,
++        destination_local_zone_id: data.destinationLocalZoneId || null,
++        destination_zone_name_legacy: data.destinationLocalZoneName || null,
++        destination_address_reference: data.destinationAddressReference || null,
+@@
+     if (offerResult.error?.code === '42703') {
+         const legacyPayload: Record<string, unknown> = { ...insertPayload };
+         delete legacyPayload.country_code;
+         delete legacyPayload.currency_code;
++        delete legacyPayload.origin_department_id;
++        delete legacyPayload.origin_municipality_id;
++        delete legacyPayload.origin_local_zone_id;
++        delete legacyPayload.origin_zone_name_legacy;
++        delete legacyPayload.origin_address_reference;
++        delete legacyPayload.destination_department_id;
++        delete legacyPayload.destination_municipality_id;
++        delete legacyPayload.destination_local_zone_id;
++        delete legacyPayload.destination_zone_name_legacy;
++        delete legacyPayload.destination_address_reference;
+*** End Patch

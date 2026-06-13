@@ -1,0 +1,79 @@
+*** Begin Patch
+*** Update File: frontend/src/app/bodegas/page.tsx
+@@
+ import { CoordinatePicker } from '@/components/maps/CoordinatePicker';
++import LocationSelector from '@/components/location/LocationSelector';
++import type { LocationSelectorValue } from '@/lib/geo/types';
+@@
+     department: string;
+     city: string;
+     address: string;
++    departmentId?: string | null;
++    municipalityId?: string | null;
++    localZoneId?: string | null;
++    localZoneName?: string;
++    addressReference?: string;
+@@
+-                <Select
+-                    label={countryConfig.subdivisionLabel}
+-                    value={form.department}
+-                    onChange={(value) => onChange({ department: value, city: '', latitude: null, longitude: null })}
+-                    options={subdivisionOptions}
+-                    searchable
+-                    placeholder={`Selecciona ${countryConfig.subdivisionLabel.toLowerCase()}`}
+-                />
+-                <Select
+-                    label={countryConfig.cityLabel}
+-                    value={form.city}
+-                    onChange={(value) => onChange({ city: value, latitude: null, longitude: null })}
+-                    options={cityOptions}
+-                    searchable
+-                    disabled={!form.department}
+-                    placeholder={`Selecciona ${countryConfig.cityLabel.toLowerCase()}`}
+-                />
+-                <Input
+-                    label="Direccion"
+-                    value={form.address}
+-                    onChange={(event) => onChange({ address: event.target.value, latitude: null, longitude: null })}
+-                    placeholder="Direccion operativa"
+-                />
++                <LocationSelector
++                    mode="bodega"
++                    value={{
++                        departmentId: form.departmentId || null,
++                        departmentName: form.department,
++                        municipalityId: form.municipalityId || null,
++                        municipalityName: form.city,
++                        localZoneId: form.localZoneId || null,
++                        localZoneName: form.localZoneName || '',
++                        exactAddress: form.address,
++                        reference: form.addressReference || '',
++                    }}
++                    onChange={(next: LocationSelectorValue) => onChange({
++                        departmentId: next.departmentId || null,
++                        municipalityId: next.municipalityId || null,
++                        localZoneId: next.localZoneId || null,
++                        localZoneName: next.localZoneName || '',
++                        department: next.departmentName || '',
++                        city: next.municipalityName || '',
++                        address: next.exactAddress || '',
++                        addressReference: next.reference || '',
++                        latitude: null,
++                        longitude: null,
++                    })}
++                    required
++                    allowManualZone
++                    showExactAddress
++                    showReference
++                    disabled={countryConfig.code !== 'CO'}
++                />
+@@
+                 department: createForm.department,
+                 city: createForm.city,
+                 address: createForm.address,
++                departmentId: createForm.departmentId,
++                municipalityId: createForm.municipalityId,
++                localZoneId: createForm.localZoneId,
++                localZoneName: createForm.localZoneName,
++                addressReference: createForm.addressReference,
+*** End Patch

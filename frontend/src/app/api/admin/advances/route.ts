@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdminRoute } from '@/lib/server/route-auth';
+import { requireInternalAdminCapability } from '@/lib/server/internal-admins';
 import { getAdminAdvancePortfolioSnapshot, getAdvanceRepayments } from '@/lib/server/advances';
 
 export async function GET(request: NextRequest) {
-    const auth = await requireAdminRoute(request);
+    const auth = await requireInternalAdminCapability(request, 'advance:read');
 
     if ('response' in auth) {
         return auth.response;

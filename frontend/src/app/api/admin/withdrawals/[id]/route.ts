@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createAdminNotification, requireAdminRoute } from '@/lib/server/route-auth';
+import { createAdminNotification } from '@/lib/server/route-auth';
+import { requireInternalAdminCapability } from '@/lib/server/internal-admins';
 import { getRequestId } from '@/lib/server/api-response';
 import { recordCriticalOperation } from '@/lib/server/operations';
 
@@ -8,13 +9,13 @@ export async function PATCH(
     context: { params: Promise<{ id: string }> }
 ) {
     const requestId = getRequestId(request);
-    const auth = await requireAdminRoute(request);
+    const auth = await requireInternalAdminCapability(request, 'payout:write');
 
     if ('response' in auth) {
         return auth.response;
     }
 
-    const { supabaseAdmin, authUser } = auth.context;
+    const { supabaseAdmin, authUser, internalAdmin } = auth.context;
     const { id } = await context.params;
     const body = await request.json().catch(() => ({}));
     const action = body?.action as 'approve' | 'reject' | 'cancel' | 'retry_payout' | 'force_manual_review' | 'mark_paid_manual';
@@ -212,6 +213,7 @@ export async function PATCH(
                 action,
                 amount,
                 note: note || null,
+                actor_role: internalAdmin.actorRole,
             },
         });
 
@@ -308,6 +310,7 @@ export async function PATCH(
             action,
             amount,
             note: note || null,
+            actor_role: internalAdmin.actorRole,
             reversal_transaction_id: processing?.reversal_transaction_id || null,
         },
     });

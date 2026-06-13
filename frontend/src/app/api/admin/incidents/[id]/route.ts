@@ -1,14 +1,14 @@
 import { NextRequest } from 'next/server';
 import { apiError, apiSuccess, getRequestId } from '@/lib/server/api-response';
 import { getPlatformIncident } from '@/lib/server/operations';
-import { requireAdminRoute } from '@/lib/server/route-auth';
+import { requireInternalAdminCapability } from '@/lib/server/internal-admins';
 
 export async function GET(
     request: NextRequest,
     context: { params: Promise<{ id: string }> }
 ) {
     const requestId = getRequestId(request);
-    const auth = await requireAdminRoute(request);
+    const auth = await requireInternalAdminCapability(request, 'incident:read');
 
     if ('response' in auth) {
         return auth.response;

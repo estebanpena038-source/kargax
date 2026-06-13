@@ -11,9 +11,10 @@ import { useAuthStore } from '@/features/auth/store/authStore';
 import { updateUserProfile } from '@/lib/supabase/auth';
 import { TruckerScoreBadge } from '@/components/trucker/TruckerScoreBadge';
 
-function getUserTypeLabel(userType: 'trucker' | 'business' | 'admin') {
+function getUserTypeLabel(userType: 'trucker' | 'business' | 'admin' | 'staff') {
     if (userType === 'business') return 'Empresa';
-    if (userType === 'admin') return 'Administrador';
+    if (userType === 'admin') return 'CEO KargaX';
+    if (userType === 'staff') return 'Staff KargaX';
     return 'Transportador';
 }
 
@@ -21,14 +22,14 @@ function UserTypeIcon({
     userType,
     className,
 }: {
-    userType?: 'trucker' | 'business' | 'admin';
+    userType?: 'trucker' | 'business' | 'admin' | 'staff';
     className?: string;
 }) {
     if (userType === 'business') {
         return <Building2 className={className} />;
     }
 
-    if (userType === 'admin') {
+    if (userType === 'admin' || userType === 'staff') {
         return <Shield className={className} />;
     }
 

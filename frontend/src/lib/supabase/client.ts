@@ -54,7 +54,10 @@ export const supabase = createClient<Database>(
             persistSession: true,
             autoRefreshToken: true,
             detectSessionInUrl: true,
-            flowType: 'pkce', // More secure auth flow
+            // Supabase default email templates cannot be edited on free/default SMTP.
+            // Implicit links keep email confirmation and password recovery usable when
+            // users open the email from Gmail/mobile in a different browser context.
+            flowType: 'implicit',
         },
         global: {
             fetch: fetchWithTimeout,

@@ -392,7 +392,7 @@ const _apiBase = {
                     id: string;
                     email: string;
                     fullName: string;
-                    userType: 'trucker' | 'business' | 'admin';
+                    userType: 'trucker' | 'business' | 'admin' | 'staff';
                 };
                 accessToken: string;
                 refreshToken: string;
@@ -432,7 +432,7 @@ const _apiBase = {
                 fullName: string;
                 phone: string | null;
                 avatarUrl: string | null;
-                userType: 'trucker' | 'business' | 'admin';
+                userType: 'trucker' | 'business' | 'admin' | 'staff';
                 isVerified: boolean;
                 createdAt: string;
             };

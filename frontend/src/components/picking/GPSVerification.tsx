@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { AlertTriangle, Check, ExternalLink, Loader2, LocateFixed, MapPin, Navigation, RefreshCw, Shield, Target, Wifi, WifiOff, X } from 'lucide-react';
+import { AlertTriangle, Check, ExternalLink, Loader2, LocateFixed, MapPin, Navigation, RefreshCw, Shield, Wifi, WifiOff, X } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui';
@@ -21,6 +21,15 @@ export type VerificationStatus =
     | 'verified'
     | 'too_far'
     | 'error';
+
+type GpsIssue =
+    | 'permission_denied'
+    | 'timeout'
+    | 'position_unavailable'
+    | 'low_accuracy'
+    | 'missing_target'
+    | 'unsupported'
+    | 'unknown';
 
 export interface GPSVerificationProps {
     locationType: LocationType;
@@ -47,6 +56,7 @@ type CurrentPosition = {
 };
 
 const MAX_ACCEPTABLE_ACCURACY_METERS = 150;
+const GPS_READ_TIMEOUT_MS = 45000;
 
 function hasTargetCoordinates(latitude?: number | null, longitude?: number | null) {
     if (latitude === null || latitude === undefined || longitude === null || longitude === undefined) {
@@ -67,18 +77,49 @@ function hasTargetCoordinates(latitude?: number | null, longitude?: number | nul
 
 function getPermissionErrorMessage(error: GeolocationPositionError) {
     if (error.code === error.PERMISSION_DENIED) {
-        return 'Permiso de GPS denegado. Activa la ubicacion en tu celular para continuar.';
+        return 'Permiso de GPS denegado. Activa la ubicacion para este sitio y elige ubicacion precisa, no aproximada.';
     }
 
     if (error.code === error.TIMEOUT) {
-        return 'El GPS tardo demasiado. Sal a un punto con mejor senal y vuelve a intentar.';
+        return 'El celular no entrego una ubicacion precisa a tiempo. Activa ubicacion precisa, sal a cielo abierto y vuelve a intentar.';
     }
 
-    return 'No se pudo obtener tu ubicacion. Verifica que el GPS del celular este activo.';
+    return 'No se pudo obtener tu ubicacion. Verifica que el GPS del celular este activo y que el permiso sea preciso.';
 }
 
-function mapsPointUrl(latitude: number, longitude: number) {
-    return `https://www.google.com/maps?q=${latitude},${longitude}`;
+function getGpsIssue(error: GeolocationPositionError): GpsIssue {
+    if (error.code === error.PERMISSION_DENIED) return 'permission_denied';
+    if (error.code === error.TIMEOUT) return 'timeout';
+    if (error.code === error.POSITION_UNAVAILABLE) return 'position_unavailable';
+    return 'unknown';
+}
+
+function getErrorTitle(issue: GpsIssue | null) {
+    if (issue === 'permission_denied') return 'GPS bloqueado';
+    if (issue === 'timeout') return 'GPS sin respuesta';
+    if (issue === 'low_accuracy') return 'Ubicacion aproximada';
+    if (issue === 'missing_target') return 'Coordenadas faltantes';
+    if (issue === 'unsupported') return 'GPS no disponible';
+    return 'GPS pendiente';
+}
+
+function getHelpTitle(issue: GpsIssue | null, permissionState: PermissionState | 'unsupported') {
+    if (permissionState === 'denied' || issue === 'permission_denied') return 'Permiso de ubicacion bloqueado';
+    if (issue === 'low_accuracy') return 'Ubicacion precisa requerida';
+    if (issue === 'timeout') return 'Lectura GPS agotada';
+    return 'Verificacion pendiente';
+}
+
+function getHelpMessage(issue: GpsIssue | null, error: string) {
+    if (issue === 'low_accuracy') {
+        return 'Elegiste ubicacion aproximada o el celular entrego baja precision. Cambia el permiso del navegador a Precisa/Exacta y vuelve a intentar.';
+    }
+
+    if (issue === 'timeout') {
+        return 'Mantente en esta pantalla, activa GPS del sistema y prueba en un punto abierto. La lectura puede tardar hasta 45 segundos.';
+    }
+
+    return error || 'Debes estar dentro del radio permitido para continuar.';
 }
 
 function mapsEmbedUrl(latitude: number, longitude: number) {
@@ -201,6 +242,7 @@ export function GPSVerification({
     const [current, setCurrent] = React.useState<CurrentPosition | null>(null);
     const [distance, setDistance] = React.useState<number | null>(null);
     const [error, setError] = React.useState('');
+    const [issue, setIssue] = React.useState<GpsIssue | null>(null);
     const [permissionState, setPermissionState] = React.useState<PermissionState | 'unsupported'>('unsupported');
 
     const gpsSupported = isGeolocationSupported();
@@ -237,15 +279,18 @@ export function GPSVerification({
 
     const handleVerify = React.useCallback(() => {
         setError('');
+        setIssue(null);
 
         if (!gpsSupported) {
             setStatus('error');
+            setIssue('unsupported');
             setError('GPS no disponible en este dispositivo.');
             return;
         }
 
         if (!hasTarget) {
             setStatus('error');
+            setIssue('missing_target');
             setError('Esta ruta no tiene coordenadas configuradas. La empresa debe completarlas.');
             return;
         }
@@ -269,7 +314,8 @@ export function GPSVerification({
 
                 if (nextCurrent.accuracy > MAX_ACCEPTABLE_ACCURACY_METERS) {
                     setStatus('error');
-                    setError(`La senal GPS esta imprecisa (+/- ${Math.round(nextCurrent.accuracy)}m). Espera mejor senal y vuelve a intentar.`);
+                    setIssue('low_accuracy');
+                    setError(`La ubicacion llego con baja precision (+/- ${Math.round(nextCurrent.accuracy)}m). En el permiso del navegador elige ubicacion Precisa/Exacta y vuelve a intentar.`);
                     return;
                 }
 
@@ -289,6 +335,7 @@ export function GPSVerification({
             },
             (gpsError) => {
                 setStatus('error');
+                setIssue(getGpsIssue(gpsError));
                 setError(getPermissionErrorMessage(gpsError));
                 if (gpsError.code === gpsError.PERMISSION_DENIED) {
                     setPermissionState('denied');
@@ -296,7 +343,7 @@ export function GPSVerification({
             },
             {
                 enableHighAccuracy: true,
-                timeout: 20000,
+                timeout: GPS_READ_TIMEOUT_MS,
                 maximumAge: 0,
             }
         );
@@ -306,6 +353,7 @@ export function GPSVerification({
         setStatus('idle');
         setDistance(null);
         setError('');
+        setIssue(null);
     }, []);
 
     const targetLat = Number(targetLatitude);
@@ -351,11 +399,11 @@ export function GPSVerification({
                             {status === 'checking' && 'Leyendo GPS del celular...'}
                             {status === 'verified' && 'Ubicacion registrada'}
                             {status === 'too_far' && `No has llegado al ${targetLabel.toLowerCase()}`}
-                            {status === 'error' && 'GPS bloqueado'}
+                            {status === 'error' && getErrorTitle(issue)}
                         </p>
                         <p className="mt-2 text-sm leading-6 text-zinc-600">
-                            {status === 'idle' && 'El navegador pedira permiso de ubicacion en tu celular.'}
-                            {status === 'checking' && 'Mantente en esta pantalla hasta que termine la lectura.'}
+                            {status === 'idle' && 'El navegador pedira permiso de ubicacion. Elige Precisa/Exacta, no aproximada.'}
+                            {status === 'checking' && 'Mantente en esta pantalla hasta que termine la lectura. Puede tardar hasta 45 segundos.'}
                             {status === 'verified' && (verifiedAt ? `Verificado a las ${new Date(verifiedAt).toLocaleTimeString()}` : 'Ya puedes continuar con el checklist.')}
                             {status === 'too_far' && strictMessage}
                             {status === 'error' && (error || 'No se pudo verificar tu ubicacion.')}
@@ -409,11 +457,11 @@ export function GPSVerification({
                 <div className="mt-5 flex items-start gap-3 rounded-lg border border-zinc-300 bg-zinc-50 p-4">
                     {permissionState === 'denied' ? <WifiOff className="mt-0.5 h-5 w-5 text-zinc-800" /> : <AlertTriangle className="mt-0.5 h-5 w-5 text-zinc-800" />}
                     <div>
-                        <p className="font-medium text-zinc-950">{permissionState === 'denied' ? 'Permiso de ubicacion bloqueado' : 'Verificacion pendiente'}</p>
+                        <p className="font-medium text-zinc-950">{getHelpTitle(issue, permissionState)}</p>
                         <p className="mt-1 text-sm leading-6 text-zinc-600">
                             {permissionState === 'denied'
                                 ? 'Activa el permiso de ubicacion para esta web desde la configuracion del navegador o del celular.'
-                                : error || 'Debes estar dentro del radio permitido para continuar.'}
+                                : getHelpMessage(issue, error)}
                         </p>
                     </div>
                 </div>
@@ -421,7 +469,7 @@ export function GPSVerification({
 
             <div className="mt-4 flex items-center justify-center gap-2 text-xs text-zinc-400">
                 <Wifi className="h-3.5 w-3.5" />
-                <span>Usando GPS real del dispositivo</span>
+                <span>GPS real requerido: ubicacion precisa, no aproximada</span>
             </div>
         </motion.div>
     );

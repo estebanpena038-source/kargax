@@ -14,7 +14,7 @@ export interface Database {
                     id: string;
                     email: string;
                     full_name: string;
-                    user_type: 'trucker' | 'business' | 'admin';
+                    user_type: 'trucker' | 'business' | 'admin' | 'staff';
                     phone: string | null;
                     avatar_url: string | null;
                     document_type: string | null;
@@ -847,7 +847,7 @@ export interface Database {
             [_ in never]: never;
         };
         Enums: {
-            user_type: 'trucker' | 'business' | 'admin';
+            user_type: 'trucker' | 'business' | 'admin' | 'staff';
             cargo_status: 'active' | 'assigned' | 'in_transit' | 'delivered' | 'cancelled';
             bid_status: 'pending' | 'accepted' | 'rejected' | 'withdrawn';
             shipment_status: 'pending_pickup' | 'picked_up' | 'in_transit' | 'delivered' | 'issue';

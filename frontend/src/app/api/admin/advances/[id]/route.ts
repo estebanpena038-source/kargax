@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createAdminNotification, requireAdminRoute } from '@/lib/server/route-auth';
+import { createAdminNotification } from '@/lib/server/route-auth';
+import { requireInternalAdminCapability } from '@/lib/server/internal-admins';
 
 type AdvanceAction = 'approve' | 'reject' | 'mark_restructured' | 'write_off';
 
@@ -7,7 +8,7 @@ export async function PATCH(
     request: NextRequest,
     context: { params: Promise<{ id: string }> }
 ) {
-    const auth = await requireAdminRoute(request);
+    const auth = await requireInternalAdminCapability(request, 'advance:write');
 
     if ('response' in auth) {
         return auth.response;

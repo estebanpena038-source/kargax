@@ -120,6 +120,36 @@ const requiredDbShapes = [
     table: 'release_gate_checks',
     columns: ['id', 'gate_key', 'status', 'environment', 'evidence'],
   },
+  {
+    gate: 'db:internal-admin-memberships',
+    table: 'internal_admin_memberships',
+    columns: ['id', 'user_id', 'role', 'status', 'created_by', 'updated_by'],
+  },
+  {
+    gate: 'db:staff-memberships',
+    table: 'staff_memberships',
+    columns: ['id', 'user_id', 'role', 'status', 'created_by', 'updated_by'],
+  },
+  {
+    gate: 'db:staff-audit-events',
+    table: 'staff_audit_events',
+    columns: ['id', 'actor_id', 'actor_role', 'capability', 'target_type', 'target_id', 'previous_state', 'new_state'],
+  },
+  {
+    gate: 'db:support-ticket-messages',
+    table: 'support_ticket_messages',
+    columns: ['id', 'ticket_id', 'author_id', 'author_role', 'visibility', 'body'],
+  },
+  {
+    gate: 'db:support-ticket-events',
+    table: 'support_ticket_events',
+    columns: ['id', 'ticket_id', 'actor_id', 'actor_role', 'action', 'metadata'],
+  },
+  {
+    gate: 'db:support-requests-portal-columns',
+    table: 'support_requests',
+    columns: ['id', 'category', 'assigned_to', 'related_user_id', 'related_offer_id', 'last_message_at'],
+  },
 ];
 const requiredFeatureFlags = [
   ['lending_enabled', false],
@@ -140,7 +170,6 @@ const requiredStorageBuckets = [
   'private-fleet-payment-proofs',
 ];
 const defaultCanonicalProductionAppUrl = 'https://kargax.com';
-const originalEnvKeys = new Set(Object.keys(process.env));
 const loadedEnvFiles = [];
 
 function parseEnvLine(line) {
@@ -181,7 +210,7 @@ function loadEnvFile(path) {
   for (const line of file.split(/\r?\n/)) {
     const parsed = parseEnvLine(line);
 
-    if (!parsed || originalEnvKeys.has(parsed.key)) {
+    if (!parsed || Object.prototype.hasOwnProperty.call(process.env, parsed.key)) {
       continue;
     }
 
@@ -193,16 +222,27 @@ function loadEnvFile(path) {
 
 function loadLocalEnv() {
   const targetEnv = process.env.VERCEL_ENV || process.env.NODE_ENV || 'production';
+  const productionCheckEnv = resolve(root, '.env.production.check');
+  const vercelProductionEnv = resolve(root, '.vercel/.env.production.local');
+  const vercelPreviewEnv = resolve(root, '.vercel/.env.preview.local');
   const candidates = [
+    ...(targetEnv === 'production' ? [
+      productionCheckEnv,
+      vercelProductionEnv,
+    ] : []),
     resolve(repoRoot, '.env'),
     resolve(repoRoot, '.env.local'),
     resolve(root, '.env'),
     resolve(root, '.env.local'),
     resolve(root, `.env.${targetEnv}`),
     resolve(root, `.env.${targetEnv}.local`),
-    resolve(root, '.env.production.check'),
-    resolve(root, '.vercel/.env.preview.local'),
-    resolve(root, '.vercel/.env.production.local'),
+    ...(targetEnv === 'production' ? [
+      vercelPreviewEnv,
+    ] : [
+      productionCheckEnv,
+      vercelPreviewEnv,
+      vercelProductionEnv,
+    ]),
   ];
 
   for (const candidate of candidates) {

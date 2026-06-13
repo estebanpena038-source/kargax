@@ -13,3 +13,5 @@ node_modules/
 *.tsbuildinfo
 **/lint-report.json
 supabase/.temp/
+CLIENTES5.0(2)/CLIENTES5.0/CLIENTES5.0_OUTREACH_QUEUE.csv
+CLIENTES5.0(2)/CLIENTES5.0/CLIENTES5.0_OUTREACH_LOG.jsonl

@@ -1,0 +1,64 @@
+*** Begin Patch
+*** Update File: frontend/src/app/api/onboarding/complete/route.ts
+@@
+ type BusinessOnboardingPayload = {
+@@
+     department: string;
+     city: string;
++    departmentId?: string | null;
++    municipalityId?: string | null;
++    localZoneId?: string | null;
++    localZoneName?: string | null;
++    addressReference?: string | null;
+     phone?: string | null;
+ };
+@@
+-        const { error: businessError } = await supabaseAdmin
++        const businessPayload = {
++            user_id: authUser.id,
++            company_name: companyName,
++            nit,
++            industry,
++            address: cleanText(body.address) || null,
++            city,
++            department,
++            country_code: countryCode,
++            department_id: body.departmentId || null,
++            municipality_id: body.municipalityId || null,
++            local_zone_id: body.localZoneId || null,
++            department_name_legacy: department,
++            city_name_legacy: city,
++            local_zone_name_legacy: cleanText(body.localZoneName) || null,
++            address_reference: cleanText(body.addressReference) || null,
++        };
++
++        let businessResult = await supabaseAdmin
+             .from('business_profiles')
+-            .upsert({
+-                user_id: authUser.id,
+-                company_name: companyName,
+-                nit,
+-                industry,
+-                address: cleanText(body.address) || null,
+-                city,
+-                department,
+-                country_code: countryCode,
+-            }, { onConflict: 'user_id' });
++            .upsert(businessPayload, { onConflict: 'user_id' });
++
++        if (businessResult.error?.code === '42703') {
++            const legacyPayload = { ...businessPayload } as Record<string, unknown>;
++            delete legacyPayload.department_id;
++            delete legacyPayload.municipality_id;
++            delete legacyPayload.local_zone_id;
++            delete legacyPayload.department_name_legacy;
++            delete legacyPayload.city_name_legacy;
++            delete legacyPayload.local_zone_name_legacy;
++            delete legacyPayload.address_reference;
++            businessResult = await supabaseAdmin
++                .from('business_profiles')
++                .upsert(legacyPayload, { onConflict: 'user_id' });
++        }
++
++        const { error: businessError } = businessResult;
+*** End Patch

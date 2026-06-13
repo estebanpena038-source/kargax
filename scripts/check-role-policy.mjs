@@ -4,6 +4,7 @@ import path from 'node:path';
 const ROOT = process.cwd();
 const SENSITIVE_ROOTS = [
   'frontend/src/app/api/admin',
+  'frontend/src/app/api/staff',
   'frontend/src/app/api/business/fleet',
   'frontend/src/app/api/billing',
   'frontend/src/app/api/reports',
@@ -19,6 +20,8 @@ const SENSITIVE_ROOTS = [
 const SOURCE_ALLOWLIST = new Set([
   'frontend/src/lib/business-roles.ts',
   'frontend/src/lib/server/role-policy.ts',
+  'frontend/src/lib/server/internal-admins.ts',
+  'frontend/src/lib/server/staff.ts',
   'frontend/src/lib/server/warehouses.ts',
   'frontend/src/lib/server/holding.ts',
 ]);
@@ -32,6 +35,8 @@ const ROUTE_GUARD_PATTERNS = [
   /\brequireAdminRoute\s*\(/,
   /\brequireAal2Route\s*\(/,
   /\brequireFounderCeoRoute\s*\(/,
+  /\brequireInternalAdminCapability\s*\(/,
+  /\brequireStaffCapability\s*\(/,
   /\brequireInternalApiKeyRoute\s*\(/,
   /\bvalidateWebhookSignature\s*\(/,
   /\bsafelyCompareSecrets\s*\(/,

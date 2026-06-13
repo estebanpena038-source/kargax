@@ -39,7 +39,7 @@ interface User {
     id: string;
     email: string;
     fullName: string;
-    userType: 'trucker' | 'business' | 'admin';
+    userType: 'trucker' | 'business' | 'admin' | 'staff';
     avatarUrl?: string | null;
     isVerified?: boolean;
     phone?: string | null;

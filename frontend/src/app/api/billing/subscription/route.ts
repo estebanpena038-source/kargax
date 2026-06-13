@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { requireAal2Route } from '@/lib/server/route-auth';
+import { isFounderCeoAllowed, requireAal2Route } from '@/lib/server/route-auth';
 import { apiError, apiSuccess, getRequestId } from '@/lib/server/api-response';
 import {
     getBillingCheckoutInfrastructureStatus,
@@ -89,6 +89,7 @@ export async function PATCH(request: NextRequest) {
 
     try {
         const { supabaseAdmin, authUser, profile } = auth.context;
+        const isFounderCeo = profile?.user_type === 'admin' && isFounderCeoAllowed(auth.context);
         const body = (await request.json()) as {
             planCode?: string;
             businessId?: string;
@@ -166,7 +167,7 @@ export async function PATCH(request: NextRequest) {
             });
         }
 
-        if (profile.user_type !== 'admin' && plan.action_state === 'checkout') {
+        if (!isFounderCeo && plan.action_state === 'checkout') {
             return apiError('This plan requires payment approval before activation.', {
                 status: 400,
                 code: 'PLAN_REQUIRES_CHECKOUT',
@@ -174,7 +175,7 @@ export async function PATCH(request: NextRequest) {
             });
         }
 
-        if (profile.user_type !== 'admin' && plan.action_state === 'blocked_by_usage') {
+        if (!isFounderCeo && plan.action_state === 'blocked_by_usage') {
             return apiError(plan.action_disabled_reason || 'Current usage exceeds the selected plan limits.', {
                 status: 409,
                 code: 'PLAN_LIMIT_BLOCKED',
