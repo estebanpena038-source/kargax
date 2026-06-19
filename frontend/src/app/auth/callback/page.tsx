@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { CheckCircle2, XCircle } from 'lucide-react';
+import { CheckCircle2, RefreshCw, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui';
 import { CenteredAuthState, MatteSpinner } from '@/components/public/PublicLuxury';
 import { supabase } from '@/lib/supabase/client';
@@ -106,6 +106,10 @@ function AuthCallbackPageContent() {
     <CenteredAuthState title="No pudimos validar el acceso" message={errorMessage || 'El enlace no se pudo procesar.'}>
       <XCircle className="mx-auto h-12 w-12 text-zinc-950" />
       <div className="mt-7 grid gap-3">
+        <Button fullWidth onClick={() => router.push('/verificar-email')}>
+          <RefreshCw className="h-4 w-4" />
+          Reenviar verificacion
+        </Button>
         <Button fullWidth onClick={() => router.push('/login')}>
           Ir a login
         </Button>

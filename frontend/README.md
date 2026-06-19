@@ -35,6 +35,7 @@ En produccion financiera:
 - `MERCADOPAGO_WEBHOOK_SECRET` es obligatoria
 - `INTERNAL_API_KEY` es obligatoria para flujos internos
 - `NOTIFICATION_PROVIDER` no puede ser `console`
+- Supabase Auth debe usar SMTP propio: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_ADMIN_EMAIL`, `SMTP_SENDER_NAME`
 
 ## Notas de release
 

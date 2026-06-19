@@ -1,0 +1,53 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Restablece tu acceso a KargaX</title>
+</head>
+<body style="margin:0;background:#f7f7f5;font-family:Inter,Segoe UI,Arial,sans-serif;color:#18181b;">
+  <span style="display:none!important;visibility:hidden;opacity:0;color:transparent;height:0;width:0;overflow:hidden;">
+    Usa este enlace para crear una nueva contrasena de KargaX.
+  </span>
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f7f7f5;padding:32px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;background:#ffffff;border:1px solid #e4e4e7;border-radius:16px;overflow:hidden;">
+          <tr>
+            <td style="background:#18181b;padding:30px 32px;color:#ffffff;">
+              <div style="font-size:13px;letter-spacing:.18em;text-transform:uppercase;color:#d4d4d8;font-weight:800;">KargaX</div>
+              <h1 style="margin:14px 0 0;font-size:30px;line-height:1.18;">Restablece tu acceso</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px;">
+              <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#3f3f46;">
+                Recibimos una solicitud para cambiar la contrasena de tu cuenta KargaX.
+              </p>
+              <div style="text-align:center;margin:30px 0;">
+                <a href="{{ .RedirectTo }}?token_hash={{ .TokenHash }}&amp;type=recovery" style="display:inline-block;background:#18181b;color:#ffffff;text-decoration:none;font-weight:800;padding:15px 24px;border-radius:10px;">
+                  Crear nueva contrasena
+                </a>
+              </div>
+              <div style="margin:24px 0;padding:18px;border-radius:12px;background:#f7f7f5;border:1px solid #e4e4e7;">
+                <p style="margin:0;font-size:14px;line-height:1.65;color:#52525b;">
+                  Este enlace es personal, expira por seguridad y solo puede usarse una vez. Si no solicitaste este cambio, ignora este mensaje.
+                </p>
+              </div>
+              <p style="margin:22px 0 0;font-size:13px;line-height:1.65;color:#71717a;">
+                Si el boton no abre, copia y pega este enlace en tu navegador:
+              </p>
+              <p style="margin:8px 0 0;font-size:12px;line-height:1.6;color:#71717a;word-break:break-all;">
+                {{ .RedirectTo }}?token_hash={{ .TokenHash }}&amp;type=recovery
+              </p>
+              <p style="margin:26px 0 0;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#a1a1aa;font-weight:800;">
+                KargaX - acceso operativo seguro
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

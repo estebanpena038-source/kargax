@@ -6,6 +6,8 @@ type SearchParamsLike = {
     toString(): string;
 } | null | undefined;
 
+const EMAIL_OTP_TYPES = new Set(['signup', 'invite', 'magiclink', 'recovery', 'email_change', 'email']);
+
 const AUTH_PARAM_KEYS = [
     'access_token',
     'code',
@@ -31,6 +33,32 @@ function getHashParams() {
 
 function getAuthParam(searchParams: SearchParamsLike, hashParams: URLSearchParams, name: string) {
     return searchParams?.get(name) || hashParams.get(name);
+}
+
+function resolveEmailOtpType(value: string | null) {
+    if (!value || !EMAIL_OTP_TYPES.has(value)) {
+        return null;
+    }
+
+    return value as EmailOtpType;
+}
+
+function getEmailLinkErrorMessage(error: Error) {
+    const message = error.message.toLowerCase();
+
+    if (message.includes('expired') || message.includes('otp expired')) {
+        return 'El enlace ya vencio. Reenvia la verificacion y abre el correo mas reciente.';
+    }
+
+    if (
+        message.includes('invalid token')
+        || message.includes('token has expired')
+        || message.includes('otp')
+    ) {
+        return 'No pudimos validar este enlace. Puede estar vencido o ya haber sido usado. Reenvia la verificacion e intenta con el correo mas reciente.';
+    }
+
+    return error.message || 'No pudimos validar este enlace. Reenvia la verificacion e intenta de nuevo.';
 }
 
 function hasAuthCredentials(searchParams: SearchParamsLike, hashParams: URLSearchParams) {
@@ -99,7 +127,33 @@ export async function establishSessionFromAuthUrl(searchParams: SearchParamsLike
     const accessToken = getAuthParam(searchParams, hashParams, 'access_token');
     const refreshToken = getAuthParam(searchParams, hashParams, 'refresh_token');
     const tokenHash = getAuthParam(searchParams, hashParams, 'token_hash');
-    const type = getAuthParam(searchParams, hashParams, 'type') as EmailOtpType | null;
+    const type = resolveEmailOtpType(getAuthParam(searchParams, hashParams, 'type'));
+
+    if (tokenHash) {
+        if (!type) {
+            throw new Error('El enlace no trae el tipo de verificacion. Reenvia el correo e intenta de nuevo.');
+        }
+
+        const { data, error: verifyError } = await supabase.auth.verifyOtp({
+            token_hash: tokenHash,
+            type,
+        });
+
+        if (verifyError) {
+            throw new Error(getEmailLinkErrorMessage(verifyError));
+        }
+
+        if (data.session) {
+            scrubAuthParamsFromBrowserUrl();
+            return data.session;
+        }
+
+        const existingSession = await waitForSession(2);
+        if (existingSession) {
+            scrubAuthParamsFromBrowserUrl();
+            return existingSession;
+        }
+    }
 
     if (code) {
         const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
@@ -113,7 +167,7 @@ export async function establishSessionFromAuthUrl(searchParams: SearchParamsLike
             const message = exchangeError.message.toLowerCase();
             if (message.includes('code verifier') || message.includes('pkce')) {
                 throw new Error(
-                    'Este enlace fue abierto fuera del navegador donde se solicito. Reenvia el correo y abre el enlace nuevo desde este dispositivo.'
+                    'Este enlace usa un flujo anterior que depende del navegador donde se solicito. Reenvia la verificacion y abre el correo mas reciente.'
                 );
             }
 
@@ -134,22 +188,6 @@ export async function establishSessionFromAuthUrl(searchParams: SearchParamsLike
 
         if (setSessionError) {
             throw setSessionError;
-        }
-
-        if (data.session) {
-            scrubAuthParamsFromBrowserUrl();
-            return data.session;
-        }
-    }
-
-    if (tokenHash && type) {
-        const { data, error: verifyError } = await supabase.auth.verifyOtp({
-            token_hash: tokenHash,
-            type,
-        });
-
-        if (verifyError) {
-            throw verifyError;
         }
 
         if (data.session) {

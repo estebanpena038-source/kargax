@@ -49,7 +49,7 @@ function VerifyEmailPageContent() {
             </div>
             <h1 className="kx-public-heading font-semibold">Confirma tu correo</h1>
             <p className="mt-3 text-sm leading-6 text-zinc-600">
-              Reenvía la verificación si el enlace no llegó. Mantén esta pantalla simple y sin presión.
+              Reenvia la verificacion si el enlace vencio, fue usado o no abrio correctamente.
             </p>
           </div>
 
@@ -66,17 +66,17 @@ function VerifyEmailPageContent() {
             </label>
 
             <div className="rounded-lg border border-zinc-200 bg-[#f7f7f5] p-4 text-sm leading-6 text-zinc-600">
-              Revisa spam o correo corporativo. Algunas empresas filtran mensajes de verificación.
+              Abre siempre el correo mas reciente. El nuevo enlace esta preparado para funcionar aunque lo abras desde otro navegador o dispositivo.
             </div>
 
             <Button onClick={handleResend} size="lg" fullWidth isLoading={isSending}>
               <RefreshCw className="h-4 w-4" />
-              Reenviar verificación
+              Reenviar verificacion
             </Button>
           </div>
 
           <p className="mt-7 text-center text-sm text-zinc-600">
-            ¿Ya confirmaste?{' '}
+            Ya confirmaste?{' '}
             <Link href="/login" className="font-semibold text-zinc-950 underline underline-offset-4">
               Entrar
             </Link>
@@ -91,7 +91,7 @@ export default function VerifyEmailPage() {
   return (
     <React.Suspense
       fallback={
-        <CenteredAuthState title="Validando acceso" message="Preparando la verificación de correo.">
+        <CenteredAuthState title="Validando acceso" message="Preparando la verificacion de correo.">
           <MatteSpinner />
         </CenteredAuthState>
       }
