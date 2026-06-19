@@ -69,6 +69,21 @@ confirmar que el remitente ya no aparece como Supabase.
 npm run supabase:auth-template-check
 ```
 
+## Check remoto
+
+Con token de Supabase Management:
+
+```bash
+$env:SUPABASE_ACCESS_TOKEN="..."
+npm run supabase:auth-config-check -- --project-ref kutgkfrjpujvtnimjnvo --base-url https://kargax.com --extra-origin https://app.kargax.com
+```
+
+Cuando SMTP propio este configurado, exigirlo en el gate:
+
+```bash
+npm run supabase:auth-config-check -- --project-ref kutgkfrjpujvtnimjnvo --base-url https://kargax.com --extra-origin https://app.kargax.com --require-smtp
+```
+
 ## Aplicacion por Management API
 
 Con token de Supabase Management:

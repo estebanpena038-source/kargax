@@ -15,6 +15,7 @@
     "supabase:auth-url-check": "node ./scripts/supabase-auth-url-check.mjs",
     "supabase:auth-template-check": "node ./scripts/supabase-auth-template-check.mjs",
     "supabase:auth-template-apply": "node ./scripts/supabase-auth-template-apply.mjs",
+    "supabase:auth-config-check": "node ./scripts/supabase-auth-config-check.mjs",
     "clientes5:outreach": "node ./scripts/clientes5-outreach.mjs",
     "check:release": "npm run repo:audit && npm run check:roles && npm run supabase:auth-template-check && npm --prefix frontend run check:release",
     "check": "npm run repo:audit && npm run check:roles && npm --prefix frontend run check"
