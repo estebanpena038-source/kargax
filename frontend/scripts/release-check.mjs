@@ -364,8 +364,12 @@ function validateProductionObservability(strictProduction) {
     || process.env.SENTRY_DSN?.trim()
   );
   const posthogConfigured = Boolean(
-    process.env.POSTHOG_CAPTURE_URL?.trim()
-    && (process.env.POSTHOG_API_KEY?.trim() || process.env.NEXT_PUBLIC_POSTHOG_KEY?.trim())
+    (process.env.POSTHOG_CAPTURE_URL?.trim() || process.env.NEXT_PUBLIC_POSTHOG_HOST?.trim())
+    && (
+      process.env.POSTHOG_API_KEY?.trim()
+      || process.env.NEXT_PUBLIC_POSTHOG_KEY?.trim()
+      || process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN?.trim()
+    )
   );
 
   if (strictProduction && !sentryConfigured) {

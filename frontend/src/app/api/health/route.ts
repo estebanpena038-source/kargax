@@ -57,7 +57,10 @@ export async function GET(request: NextRequest) {
 
         const snapshot = await getReliabilitySnapshot(supabaseAdmin);
         const releaseGateRequired = snapshot.flags.some((flag) => flag.key === 'release_gate_required' && flag.enabled);
-        const sentryConfigured = Boolean(process.env.NEXT_PUBLIC_SENTRY_DSN || process.env.SENTRY_DSN);
+        const sentryConfigured = Boolean(
+            process.env.NEXT_PUBLIC_SENTRY_DSN?.trim()
+            || process.env.SENTRY_DSN?.trim()
+        );
         const upstashConfigured = Boolean(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
         const paymentWebhookConfigured = Boolean(process.env.MERCADOPAGO_WEBHOOK_SECRET);
         const degradedFlags = snapshot.flags.filter((flag) =>

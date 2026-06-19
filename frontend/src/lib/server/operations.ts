@@ -1498,10 +1498,17 @@ export async function getReliabilitySnapshot(supabaseAdmin: AdminClient) {
         && process.env.QSTASH_TOKEN?.trim()
     );
 
-    const sentryEnabled = Boolean(process.env.NEXT_PUBLIC_SENTRY_DSN?.trim());
+    const sentryEnabled = Boolean(
+        process.env.NEXT_PUBLIC_SENTRY_DSN?.trim()
+        || process.env.SENTRY_DSN?.trim()
+    );
     const posthogEnabled = Boolean(
-        process.env.POSTHOG_CAPTURE_URL?.trim()
-        && (process.env.POSTHOG_API_KEY?.trim() || process.env.NEXT_PUBLIC_POSTHOG_KEY?.trim())
+        (process.env.POSTHOG_CAPTURE_URL?.trim() || process.env.NEXT_PUBLIC_POSTHOG_HOST?.trim())
+        && (
+            process.env.POSTHOG_API_KEY?.trim()
+            || process.env.NEXT_PUBLIC_POSTHOG_KEY?.trim()
+            || process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN?.trim()
+        )
     );
 
     const countries = await safeSelect(
