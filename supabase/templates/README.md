@@ -35,11 +35,14 @@ No usar `{{ .ConfirmationURL }}` en emails productivos de KargaX.
 
 Produccion:
 
-- Site URL: `https://app.kargax.com`
+- Site URL: `https://kargax.com`
 - Redirect URLs:
-  - `https://app.kargax.com/auth/callback`
-  - `https://app.kargax.com/auth/reset-password`
-  - `https://app.kargax.com/auth/invite/accept`
+  - `https://kargax.com/auth/callback`
+  - `https://kargax.com/auth/reset-password`
+  - `https://kargax.com/auth/invite/accept`
+  - `https://app.kargax.com/auth/callback` si `app.kargax.com` esta aliasado al proyecto productivo
+  - `https://app.kargax.com/auth/reset-password` si `app.kargax.com` esta aliasado al proyecto productivo
+  - `https://app.kargax.com/auth/invite/accept` si `app.kargax.com` esta aliasado al proyecto productivo
 
 Staging, si sigue activo:
 
@@ -72,7 +75,7 @@ Con token de Supabase Management:
 
 ```bash
 $env:SUPABASE_ACCESS_TOKEN="..."
-npm run supabase:auth-template-apply -- --project-ref kutgkfrjpujvtnimjnvo --base-url https://app.kargax.com
+npm run supabase:auth-template-apply -- --project-ref kutgkfrjpujvtnimjnvo --base-url https://kargax.com --extra-origin https://app.kargax.com
 ```
 
 Para incluir SMTP en el mismo PATCH:
@@ -84,5 +87,5 @@ $env:SMTP_USER="resend"
 $env:SMTP_PASS="re_..."
 $env:SMTP_ADMIN_EMAIL="noreply@auth.kargax.com"
 $env:SMTP_SENDER_NAME="KargaX"
-npm run supabase:auth-template-apply -- --project-ref kutgkfrjpujvtnimjnvo --base-url https://app.kargax.com --include-smtp
+npm run supabase:auth-template-apply -- --project-ref kutgkfrjpujvtnimjnvo --base-url https://kargax.com --extra-origin https://app.kargax.com --include-smtp
 ```

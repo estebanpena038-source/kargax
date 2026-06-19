@@ -5,7 +5,7 @@ import path from 'node:path';
 import process from 'node:process';
 
 const ROOT = process.cwd();
-const DEFAULT_BASE_URL = 'https://app.kargax.com';
+const DEFAULT_BASE_URL = 'https://kargax.com';
 const DEFAULT_STAGING_URL = 'https://kargax-staging.vercel.app';
 const DEFAULT_ENV_FILES = [
   'frontend/.env.example',
@@ -48,6 +48,7 @@ function parseArgs(argv) {
     projectRef: env.PROJECT_REF || env.SUPABASE_PROJECT_REF || null,
     baseUrl: env.KARGAX_CANONICAL_APP_URL || env.NEXT_PUBLIC_APP_URL || DEFAULT_BASE_URL,
     stagingUrl: env.KARGAX_STAGING_APP_URL || DEFAULT_STAGING_URL,
+    extraOrigins: (env.KARGAX_EXTRA_AUTH_ORIGINS || '').split(/[\s,]+/).filter(Boolean),
     dryRun: false,
     includeSmtp: false,
   };
@@ -66,6 +67,10 @@ function parseArgs(argv) {
       args.stagingUrl = argv[++index];
     } else if (arg.startsWith('--staging-url=')) {
       args.stagingUrl = arg.slice('--staging-url='.length);
+    } else if (arg === '--extra-origin') {
+      args.extraOrigins.push(argv[++index]);
+    } else if (arg.startsWith('--extra-origin=')) {
+      args.extraOrigins.push(arg.slice('--extra-origin='.length));
     } else if (arg === '--dry-run') {
       args.dryRun = true;
     } else if (arg === '--include-smtp') {
@@ -119,15 +124,15 @@ function readTemplate(relativeFile) {
   return fs.readFileSync(path.resolve(ROOT, relativeFile), 'utf8');
 }
 
-function buildRedirectUrls(baseUrl, stagingUrl) {
-  const origins = [normalizeOrigin(baseUrl), normalizeOrigin(stagingUrl)];
+function buildRedirectUrls(baseUrl, stagingUrl, extraOrigins = []) {
+  const origins = [baseUrl, stagingUrl, ...extraOrigins].map(normalizeOrigin);
   const paths = ['/auth/callback', '/auth/reset-password', '/auth/invite/accept'];
   return [...new Set(origins.flatMap((origin) => paths.map((item) => `${origin}${item}`)))];
 }
 
 function buildPayload(args, currentConfig = {}) {
   const productionOrigin = normalizeOrigin(args.baseUrl);
-  const redirectUrls = buildRedirectUrls(args.baseUrl, args.stagingUrl);
+  const redirectUrls = buildRedirectUrls(args.baseUrl, args.stagingUrl, args.extraOrigins);
   const payload = {
     mailer_autoconfirm: false,
     mailer_subjects_confirmation: 'Confirma tu correo en KargaX',
