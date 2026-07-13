@@ -233,8 +233,10 @@ function loadLocalEnv() {
   const productionCheckEnv = resolve(root, '.env.production.check');
   const vercelProductionEnv = resolve(root, '.vercel/.env.production.local');
   const vercelPreviewEnv = resolve(root, '.vercel/.env.preview.local');
+  const isProductionTarget = targetEnv === 'production';
+  const isPreviewTarget = targetEnv === 'preview';
   const candidates = [
-    ...(targetEnv === 'production' ? [
+    ...(isProductionTarget ? [
       productionCheckEnv,
       vercelProductionEnv,
     ] : []),
@@ -244,13 +246,12 @@ function loadLocalEnv() {
     resolve(root, '.env.local'),
     resolve(root, `.env.${targetEnv}`),
     resolve(root, `.env.${targetEnv}.local`),
-    ...(targetEnv === 'production' ? [
+    ...(isProductionTarget ? [
       vercelPreviewEnv,
-    ] : [
-      productionCheckEnv,
+    ] : []),
+    ...(isPreviewTarget ? [
       vercelPreviewEnv,
-      vercelProductionEnv,
-    ]),
+    ] : []),
   ];
 
   for (const candidate of candidates) {
