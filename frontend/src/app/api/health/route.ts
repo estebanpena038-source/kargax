@@ -2,7 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getRequestId } from '@/lib/server/api-response';
 import { getSupabaseAdmin } from '@/lib/server/route-auth';
 import { getReliabilitySnapshot } from '@/lib/server/operations';
-import { isLocalAppUrl, isStrictProductionEnvironment, getConfiguredAppUrl } from '@/lib/server/runtime-env';
+import {
+    getConfiguredAppUrl,
+    isKargaxProductionHost,
+    isKargaxStagingEnvironment,
+    isLocalAppUrl,
+    isStrictProductionEnvironment,
+} from '@/lib/server/runtime-env';
 
 const REQUIRED_STORAGE_BUCKETS = [
     'offer-photos',
@@ -39,6 +45,46 @@ function sanitizePublicHealthPayload(value: unknown): unknown {
     return value;
 }
 
+function getSupabaseProjectRef(value?: string | null) {
+    if (!value) return null;
+
+    try {
+        return new URL(value).hostname.split('.')[0] || null;
+    } catch {
+        return null;
+    }
+}
+
+function getDbTargetSnapshot(appUrl: string) {
+    const supabaseProjectRef = getSupabaseProjectRef(process.env.NEXT_PUBLIC_SUPABASE_URL);
+    const productionProjectRef = process.env.KARGAX_PROD_SUPABASE_PROJECT_REF?.trim() || null;
+    const stagingProjectRef = process.env.KARGAX_STAGING_SUPABASE_PROJECT_REF?.trim() || null;
+    const stagingRuntime = isKargaxStagingEnvironment({ requestUrl: appUrl });
+    const productionRuntime = isStrictProductionEnvironment() || isKargaxProductionHost({ requestUrl: appUrl });
+    const expectedProjectRef = productionRuntime
+        ? productionProjectRef
+        : stagingRuntime
+            ? stagingProjectRef
+            : null;
+    const refsSeparated = productionProjectRef && stagingProjectRef
+        ? productionProjectRef !== stagingProjectRef
+        : true;
+    const dbTargetValid = Boolean(
+        supabaseProjectRef
+        && refsSeparated
+        && (!expectedProjectRef || supabaseProjectRef === expectedProjectRef)
+        && (!(productionRuntime || stagingRuntime) || expectedProjectRef)
+    );
+
+    return {
+        supabase_project_ref: supabaseProjectRef,
+        db_target_valid: dbTargetValid,
+        expected_db_target_configured: Boolean(expectedProjectRef),
+        refs_separated: refsSeparated,
+        runtime: productionRuntime ? 'production' : stagingRuntime ? 'staging' : 'development',
+    };
+}
+
 export async function GET(request: NextRequest) {
     const requestId = getRequestId(request);
     const supabaseAdmin = getSupabaseAdmin();
@@ -51,6 +97,7 @@ export async function GET(request: NextRequest) {
 
         const appUrl = getConfiguredAppUrl();
         const appUrlLocalInStrictProduction = isStrictProductionEnvironment() && isLocalAppUrl(appUrl);
+        const dbTarget = getDbTargetSnapshot(appUrl);
         const { data: buckets, error: bucketsError } = await supabaseAdmin.storage.listBuckets();
         const bucketIds = new Set((buckets || []).map((bucket: { id?: string | null }) => bucket.id).filter(Boolean));
         const missingBuckets = REQUIRED_STORAGE_BUCKETS.filter((bucketId) => !bucketIds.has(bucketId));
@@ -66,7 +113,11 @@ export async function GET(request: NextRequest) {
         const degradedFlags = snapshot.flags.filter((flag) =>
             flag.enabled && ['degraded_mode_wallet', 'degraded_mode_warehouse'].includes(flag.key)
         );
-        const healthy = !error && !bucketsError && missingBuckets.length === 0 && !appUrlLocalInStrictProduction;
+        const healthy = !error
+            && !bucketsError
+            && missingBuckets.length === 0
+            && !appUrlLocalInStrictProduction
+            && dbTarget.db_target_valid;
         const status = healthy && degradedFlags.length === 0 ? 'healthy' : healthy ? 'degraded' : 'unhealthy';
         const responseStatus = healthy ? 200 : 503;
 
@@ -78,6 +129,7 @@ export async function GET(request: NextRequest) {
                 app_url: appUrl,
                 strict_production: isStrictProductionEnvironment(),
                 local_app_url_in_strict_production: appUrlLocalInStrictProduction,
+                ...dbTarget,
             },
             storage: {
                 required_buckets: REQUIRED_STORAGE_BUCKETS,
@@ -110,6 +162,7 @@ export async function GET(request: NextRequest) {
                     || bucketsError?.message
                     || (missingBuckets.length ? `Missing storage buckets: ${missingBuckets.join(', ')}` : null)
                     || (appUrlLocalInStrictProduction ? 'Public app URL cannot be localhost in production' : null)
+                    || (!dbTarget.db_target_valid ? 'Supabase project ref does not match the configured runtime target' : null)
                     || 'Health probe failed',
             },
             meta: {

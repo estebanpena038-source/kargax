@@ -25,8 +25,15 @@ interface DriverPayout {
     destination: {
         method: string;
         provider: string;
+        bank_name: string | null;
+        account_number: string | null;
         account_tail: string | null;
         holder: string | null;
+        document_type: string | null;
+        document_number_tail: string | null;
+        is_complete: boolean;
+        missing_fields: string[];
+        sensitive_visible: boolean;
     };
     driver: {
         id: string;
@@ -73,6 +80,39 @@ function formatDate(value?: string | null) {
         dateStyle: 'medium',
         timeStyle: 'short',
     }).format(new Date(value));
+}
+
+function formatDestinationMethod(method?: string | null) {
+    if (method === 'nequi') return 'Nequi';
+    if (method === 'bancolombia_savings') return 'Bancolombia ahorros';
+    if (method === 'bancolombia_checking') return 'Bancolombia corriente';
+    if (method === 'other_bank') return 'Otro banco';
+    return method || 'Manual';
+}
+
+function formatPayoutProvider(provider?: string | null) {
+    if (!provider || provider === 'manual') return null;
+    return provider;
+}
+
+function formatDestinationBank(destination: DriverPayout['destination']) {
+    if (destination.method === 'nequi') return 'Nequi';
+    if (destination.method?.startsWith('bancolombia')) return destination.bank_name || 'Bancolombia';
+    return destination.bank_name || 'Banco no visible';
+}
+
+function formatDestinationAccount(destination: DriverPayout['destination']) {
+    const accountLabel = destination.method === 'nequi' ? 'Nequi' : 'Cuenta';
+
+    if (destination.account_number) {
+        return `${accountLabel}: ${destination.account_number}`;
+    }
+
+    if (destination.account_tail) {
+        return `${accountLabel}: ${destination.account_tail}`;
+    }
+
+    return destination.is_complete ? 'Destino restringido' : 'Destino incompleto';
 }
 
 export default function AdminPayoutsPage() {
@@ -289,79 +329,108 @@ export default function AdminPayoutsPage() {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-zinc-100">
-                                    {filteredPayouts.map((payout) => (
-                                        <tr key={payout.id} className="align-top">
-                                            <td className="px-4 py-4">
-                                                <div className="font-medium text-zinc-950">{payout.driver?.full_name || 'Driver sin perfil'}</div>
-                                                <div className="mt-1 text-xs text-zinc-500">{payout.driver?.email || payout.driver?.id || 'n/a'}</div>
-                                            </td>
-                                            <td className="px-4 py-4">
-                                                <div className="font-medium text-zinc-950">{payout.route?.cargo_description || 'Retiro wallet'}</div>
-                                                <div className="mt-1 text-xs text-zinc-500">
-                                                    {payout.route ? `${payout.route.origin_city} -> ${payout.route.destination_city}` : payout.id.slice(0, 8)}
-                                                </div>
-                                            </td>
-                                            <td className="px-4 py-4">
-                                                <div className="font-semibold text-zinc-950">{formatCOP(payout.net_to_pay_cop)}</div>
-                                                <div className="mt-1 text-xs text-zinc-500">Fee: {formatCOP(payout.platform_fee_cop || 0)}</div>
-                                            </td>
-                                            <td className="px-4 py-4">
-                                                <div className="inline-flex items-center gap-2 rounded-md border border-zinc-200 px-2.5 py-1 text-xs text-zinc-700">
-                                                    <Wallet className="h-3.5 w-3.5" />
-                                                    {payout.destination.provider}/{payout.destination.method}
-                                                </div>
-                                                <div className="mt-1 text-xs text-zinc-500">{payout.destination.account_tail || 'Destino no visible'}</div>
-                                            </td>
-                                            <td className="px-4 py-4">
-                                                <span className={`inline-flex rounded-md border px-2.5 py-1 text-xs font-semibold ${STATUS_STYLES[payout.status]}`}>
-                                                    {STATUS_LABELS[payout.status]}
-                                                </span>
-                                                {payout.failure_reason ? <div className="mt-1 max-w-[220px] text-xs text-red-600">{String(payout.failure_reason)}</div> : null}
-                                            </td>
-                                            <td className="px-4 py-4 text-xs text-zinc-500">
-                                                <div>{formatDate(payout.generated_at)}</div>
-                                                {payout.paid_at ? <div>Pagado: {formatDate(payout.paid_at)}</div> : null}
-                                            </td>
-                                            <td className="px-4 py-4">
-                                                <div className="flex flex-wrap gap-2">
-                                                    {payout.status === 'pending' && canApprove ? (
-                                                        <>
-                                                            <Button size="sm" onClick={() => void applyAction(payout, 'approve')} disabled={processingId === payout.id}>
-                                                                <CheckCircle2 className="h-4 w-4" />
-                                                                Aprobar
+                                    {filteredPayouts.map((payout) => {
+                                        const destinationComplete = Boolean(payout.destination?.is_complete);
+                                        const canShowMarkPaid = ['approved', 'under_review', 'failed'].includes(payout.status) && canMarkPaid;
+                                        const payoutProvider = formatPayoutProvider(payout.destination.provider);
+
+                                        return (
+                                            <tr key={payout.id} className="align-top">
+                                                <td className="px-4 py-4">
+                                                    <div className="font-medium text-zinc-950">{payout.driver?.full_name || 'Driver sin perfil'}</div>
+                                                    <div className="mt-1 text-xs text-zinc-500">{payout.driver?.email || payout.driver?.id || 'n/a'}</div>
+                                                </td>
+                                                <td className="px-4 py-4">
+                                                    <div className="font-medium text-zinc-950">{payout.route?.cargo_description || 'Retiro wallet'}</div>
+                                                    <div className="mt-1 text-xs text-zinc-500">
+                                                        {payout.route ? `${payout.route.origin_city} -> ${payout.route.destination_city}` : payout.id.slice(0, 8)}
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-4">
+                                                    <div className="font-semibold text-zinc-950">{formatCOP(payout.net_to_pay_cop)}</div>
+                                                    <div className="mt-1 text-xs text-zinc-500">Fee: {formatCOP(payout.platform_fee_cop || 0)}</div>
+                                                </td>
+                                                <td className="px-4 py-4">
+                                                    <div className="inline-flex items-center gap-2 rounded-md border border-zinc-200 px-2.5 py-1 text-xs text-zinc-700">
+                                                        <Wallet className="h-3.5 w-3.5" />
+                                                        {formatDestinationMethod(payout.destination.method)}
+                                                    </div>
+                                                    <div className="mt-2 space-y-1 text-xs text-zinc-500">
+                                                        <div>Banco: {formatDestinationBank(payout.destination)}</div>
+                                                        {payoutProvider ? <div>Provider: {payoutProvider}</div> : null}
+                                                        <div className={payout.destination.account_number ? 'font-semibold text-zinc-950' : ''}>
+                                                            {formatDestinationAccount(payout.destination)}
+                                                        </div>
+                                                        {payout.destination.holder ? (
+                                                            <div>Titular: {payout.destination.holder}</div>
+                                                        ) : null}
+                                                        {payout.destination.document_number_tail ? (
+                                                            <div>{payout.destination.document_type || 'Doc'}: {payout.destination.document_number_tail}</div>
+                                                        ) : null}
+                                                        {!payout.destination.sensitive_visible && destinationComplete ? (
+                                                            <div className="font-medium text-amber-700">Destino restringido</div>
+                                                        ) : null}
+                                                        {!destinationComplete ? (
+                                                            <div className="font-medium text-red-600">Destino incompleto</div>
+                                                        ) : null}
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-4">
+                                                    <span className={`inline-flex rounded-md border px-2.5 py-1 text-xs font-semibold ${STATUS_STYLES[payout.status]}`}>
+                                                        {STATUS_LABELS[payout.status]}
+                                                    </span>
+                                                    {payout.failure_reason ? <div className="mt-1 max-w-[220px] text-xs text-red-600">{String(payout.failure_reason)}</div> : null}
+                                                </td>
+                                                <td className="px-4 py-4 text-xs text-zinc-500">
+                                                    <div>{formatDate(payout.generated_at)}</div>
+                                                    {payout.paid_at ? <div>Pagado: {formatDate(payout.paid_at)}</div> : null}
+                                                </td>
+                                                <td className="px-4 py-4">
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {payout.status === 'pending' && canApprove ? (
+                                                            <>
+                                                                <Button size="sm" onClick={() => void applyAction(payout, 'approve')} disabled={processingId === payout.id}>
+                                                                    <CheckCircle2 className="h-4 w-4" />
+                                                                    Aprobar
+                                                                </Button>
+                                                                <Button size="sm" variant="outline" onClick={() => void applyAction(payout, 'reject')} disabled={processingId === payout.id}>
+                                                                    <XCircle className="h-4 w-4" />
+                                                                    Rechazar
+                                                                </Button>
+                                                            </>
+                                                        ) : null}
+                                                        {canShowMarkPaid ? (
+                                                            <Button
+                                                                size="sm"
+                                                                onClick={() => void applyAction(payout, 'mark_paid')}
+                                                                disabled={processingId === payout.id || !destinationComplete}
+                                                                title={!destinationComplete ? 'Destino de pago incompleto. Solicita al driver actualizar metodo de retiro.' : undefined}
+                                                            >
+                                                                <BadgeCheck className="h-4 w-4" />
+                                                                {destinationComplete ? 'Marcar pagado' : 'Destino incompleto'}
                                                             </Button>
-                                                            <Button size="sm" variant="outline" onClick={() => void applyAction(payout, 'reject')} disabled={processingId === payout.id}>
-                                                                <XCircle className="h-4 w-4" />
-                                                                Rechazar
+                                                        ) : null}
+                                                        {payout.status === 'failed' && canReview ? (
+                                                            <Button size="sm" variant="outline" onClick={() => void applyAction(payout, 'retry')} disabled={processingId === payout.id}>
+                                                                <RefreshCw className="h-4 w-4" />
+                                                                Reintentar
                                                             </Button>
-                                                        </>
-                                                    ) : null}
-                                                    {['approved', 'under_review', 'failed'].includes(payout.status) && canMarkPaid ? (
-                                                        <Button size="sm" onClick={() => void applyAction(payout, 'mark_paid')} disabled={processingId === payout.id}>
-                                                            <BadgeCheck className="h-4 w-4" />
-                                                            Marcar pagado
+                                                        ) : null}
+                                                        {payout.status === 'approved' && canReview ? (
+                                                            <Button size="sm" variant="outline" onClick={() => void applyAction(payout, 'under_review')} disabled={processingId === payout.id}>
+                                                                <Clock className="h-4 w-4" />
+                                                                Revisar
+                                                            </Button>
+                                                        ) : null}
+                                                        <Button size="sm" variant="ghost" onClick={() => navigator.clipboard?.writeText(payout.id)}>
+                                                            <Eye className="h-4 w-4" />
+                                                            ID
                                                         </Button>
-                                                    ) : null}
-                                                    {payout.status === 'failed' && canReview ? (
-                                                        <Button size="sm" variant="outline" onClick={() => void applyAction(payout, 'retry')} disabled={processingId === payout.id}>
-                                                            <RefreshCw className="h-4 w-4" />
-                                                            Reintentar
-                                                        </Button>
-                                                    ) : null}
-                                                    {payout.status === 'approved' && canReview ? (
-                                                        <Button size="sm" variant="outline" onClick={() => void applyAction(payout, 'under_review')} disabled={processingId === payout.id}>
-                                                            <Clock className="h-4 w-4" />
-                                                            Revisar
-                                                        </Button>
-                                                    ) : null}
-                                                    <Button size="sm" variant="ghost" onClick={() => navigator.clipboard?.writeText(payout.id)}>
-                                                        <Eye className="h-4 w-4" />
-                                                        ID
-                                                    </Button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </div>

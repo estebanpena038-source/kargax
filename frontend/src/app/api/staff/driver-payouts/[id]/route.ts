@@ -16,7 +16,9 @@ export async function GET(
 
     try {
         const { id } = await context.params;
-        const data = await getDriverPayout(auth.context.supabaseAdmin, id);
+        const data = await getDriverPayout(auth.context.supabaseAdmin, id, {
+            includeSensitiveDestination: auth.context.staff.capabilities.includes('payout:mark_paid'),
+        });
 
         if (!data) {
             return apiError('Pago a driver no encontrado', {

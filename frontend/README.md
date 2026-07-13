@@ -34,6 +34,8 @@ En produccion financiera:
 - `SUPABASE_SERVICE_ROLE_KEY` es obligatoria
 - `MERCADOPAGO_WEBHOOK_SECRET` es obligatoria
 - `INTERNAL_API_KEY` es obligatoria para flujos internos
+- `KARGAX_PROD_SUPABASE_PROJECT_REF` debe coincidir con el project ref real de Supabase produccion
+- `KARGAX_STAGING_SUPABASE_PROJECT_REF` debe existir y ser diferente al ref de produccion
 - `NOTIFICATION_PROVIDER` debe ser `twilio` en `www.kargax.online`
 - `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` y `TWILIO_PHONE_NUMBER` o `TWILIO_MESSAGING_SERVICE_SID` son obligatorias en produccion
 - Supabase Auth debe usar SMTP propio: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_ADMIN_EMAIL`, `SMTP_SENDER_NAME`
@@ -41,6 +43,8 @@ En produccion financiera:
 En staging:
 
 - `NEXT_PUBLIC_APP_URL=https://kargax-staging.vercel.app`
+- `KARGAX_STAGING_SUPABASE_PROJECT_REF` debe coincidir con el project ref real de Supabase staging
+- `KARGAX_PROD_SUPABASE_PROJECT_REF` debe existir y ser diferente al ref de staging
 - `NOTIFICATION_PROVIDER=console`
 - No configurar `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER` ni `TWILIO_MESSAGING_SERVICE_SID`
 - El runtime fuerza `console` para `kargax-staging.vercel.app` y `VERCEL_ENV=preview` aunque el provider quede mal configurado

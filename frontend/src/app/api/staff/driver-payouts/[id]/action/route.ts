@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { apiError, apiSuccess, getRequestId } from '@/lib/server/api-response';
 import { createAdminNotification } from '@/lib/server/route-auth';
-import { getDriverPayout } from '@/lib/server/driver-payouts';
+import { getDriverPayout, hasCompletePayoutDestination } from '@/lib/server/driver-payouts';
 import { getRequestAuditMetadata, recordStaffAuditEvent, requireStaffCapability, type StaffCapability } from '@/lib/server/staff';
 import { recordCriticalOperation } from '@/lib/server/operations';
 
@@ -184,6 +184,18 @@ export async function POST(
             });
         }
 
+        const destinationCompleteness = hasCompletePayoutDestination(transaction, payoutAttempt);
+        if (!destinationCompleteness.complete) {
+            return apiError('Destino de pago incompleto. Solicita al driver actualizar metodo de retiro.', {
+                requestId,
+                status: 409,
+                code: 'PAYOUT_DESTINATION_INCOMPLETE',
+                details: {
+                    missingFields: destinationCompleteness.missingFields,
+                },
+            });
+        }
+
         if (!reference) {
             return apiError('La referencia de pago es obligatoria.', {
                 requestId,
@@ -267,7 +279,9 @@ export async function POST(
         ...getRequestAuditMetadata(request),
     });
 
-    const data = await getDriverPayout(supabaseAdmin, transaction.id);
+    const data = await getDriverPayout(supabaseAdmin, transaction.id, {
+        includeSensitiveDestination: auth.context.staff.capabilities.includes('payout:mark_paid'),
+    });
 
     return apiSuccess(data, {
         requestId,

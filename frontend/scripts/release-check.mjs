@@ -311,6 +311,10 @@ function sanitizeSupabaseUrl(url) {
   }
 }
 
+function getSupabaseProjectRef(url) {
+  return sanitizeSupabaseUrl(url).project_ref;
+}
+
 function normalizeUrlOrigin(value) {
   try {
     return new URL(value).origin;
@@ -393,6 +397,88 @@ function validateProductionAppUrl(appUrl, strictProduction) {
     appUrl: appOrigin,
     strictProduction,
     canonicalAppUrl: canonicalOrigin,
+  });
+}
+
+function validateSupabaseEnvironmentTarget(appUrl, strictProduction) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+  const actualProjectRef = getSupabaseProjectRef(supabaseUrl);
+  const productionProjectRef = process.env.KARGAX_PROD_SUPABASE_PROJECT_REF?.trim() || null;
+  const stagingProjectRef = process.env.KARGAX_STAGING_SUPABASE_PROJECT_REF?.trim() || null;
+  const stagingRuntime = process.env.VERCEL_ENV === 'preview' || isStagingAppUrl(appUrl);
+  const productionRuntime = strictProduction || isProductionAppUrl(appUrl);
+
+  if (!actualProjectRef) {
+    return fail('supabase-environment-target', {
+      reason: 'NEXT_PUBLIC_SUPABASE_URL is missing or invalid',
+      appUrl: normalizeUrlOrigin(appUrl) || appUrl || null,
+      strictProduction,
+      stagingRuntime,
+      productionRuntime,
+    });
+  }
+
+  if (productionProjectRef && stagingProjectRef && productionProjectRef === stagingProjectRef) {
+    return fail('supabase-environment-target', {
+      reason: 'Production and staging Supabase project refs must be different',
+      actualProjectRef,
+      productionProjectRef,
+      stagingProjectRef,
+      appUrl: normalizeUrlOrigin(appUrl) || appUrl || null,
+      strictProduction,
+      stagingRuntime,
+      productionRuntime,
+    });
+  }
+
+  if (productionRuntime) {
+    if (!productionProjectRef) {
+      return fail('supabase-environment-target', {
+        reason: 'KARGAX_PROD_SUPABASE_PROJECT_REF is required for production release checks',
+        actualProjectRef,
+        appUrl: normalizeUrlOrigin(appUrl) || appUrl || null,
+        strictProduction,
+      });
+    }
+
+    if (actualProjectRef !== productionProjectRef) {
+      return fail('supabase-environment-target', {
+        reason: 'Production runtime is not pointing at the configured production Supabase project',
+        actualProjectRef,
+        expectedProjectRef: productionProjectRef,
+        appUrl: normalizeUrlOrigin(appUrl) || appUrl || null,
+        strictProduction,
+      });
+    }
+  }
+
+  if (stagingRuntime) {
+    if (!stagingProjectRef) {
+      return fail('supabase-environment-target', {
+        reason: 'KARGAX_STAGING_SUPABASE_PROJECT_REF is required for staging release checks',
+        actualProjectRef,
+        appUrl: normalizeUrlOrigin(appUrl) || appUrl || null,
+        stagingRuntime,
+      });
+    }
+
+    if (actualProjectRef !== stagingProjectRef) {
+      return fail('supabase-environment-target', {
+        reason: 'Staging runtime is not pointing at the configured staging Supabase project',
+        actualProjectRef,
+        expectedProjectRef: stagingProjectRef,
+        appUrl: normalizeUrlOrigin(appUrl) || appUrl || null,
+        stagingRuntime,
+      });
+    }
+  }
+
+  return pass('supabase-environment-target', {
+    actualProjectRef,
+    productionProjectRefConfigured: Boolean(productionProjectRef),
+    stagingProjectRefConfigured: Boolean(stagingProjectRef),
+    stagingRuntime,
+    productionRuntime,
   });
 }
 
@@ -594,6 +680,7 @@ checks.push(...requiredEnv.map((name) => (
   process.env[name] ? pass(`env:${name}`) : fail(`env:${name}`, { missing: true })
 )));
 checks.push(validateProductionAppUrl(appUrl, strictProduction));
+checks.push(validateSupabaseEnvironmentTarget(appUrl, strictProduction));
 checks.push(validateProductionObservability(strictProduction));
 checks.push(validateNotificationRuntime(appUrl, strictProduction));
 checks.push(existsSync(resolve(root, 'src/proxy.ts'))

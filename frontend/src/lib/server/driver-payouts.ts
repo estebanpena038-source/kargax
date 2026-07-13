@@ -20,6 +20,7 @@ export interface DriverPayoutFilters {
     from?: string | null;
     to?: string | null;
     limit?: number;
+    includeSensitiveDestination?: boolean;
 }
 
 function asRecord(value: unknown): JsonRecord {
@@ -47,6 +48,47 @@ function maskTail(value: unknown) {
     return tail ? `****${tail}` : '****';
 }
 
+function digitValue(value: unknown) {
+    const text = stringValue(value);
+    return text ? text.replace(/\D/g, '') : null;
+}
+
+function firstString(...values: unknown[]) {
+    for (const value of values) {
+        const text = stringValue(value);
+        if (text) return text;
+    }
+
+    return null;
+}
+
+function resolveCanonicalDestinationMethod(rawMethod: unknown, rawBankName: unknown) {
+    const method = String(rawMethod || '').toLowerCase();
+    const bankName = String(rawBankName || '').toLowerCase();
+
+    if (method === 'nequi') return 'nequi';
+    if (
+        method === 'bancolombia_savings'
+        || method === 'bancolombia_saving'
+        || method === 'bancolombia_savin'
+        || method === 'bancolombia_ahorros'
+        || (method === 'savings' && bankName.includes('bancolombia'))
+    ) {
+        return 'bancolombia_savings';
+    }
+    if (
+        method === 'bancolombia_checking'
+        || method === 'bancolombia_current'
+        || method === 'bancolombia_corriente'
+        || (method === 'checking' && bankName.includes('bancolombia'))
+    ) {
+        return 'bancolombia_checking';
+    }
+    if (method === 'other_bank') return 'other_bank';
+
+    return method || 'manual';
+}
+
 function resolveOperationalStatus(transaction: JsonRecord, payoutAttempt?: JsonRecord | null): DriverPayoutOperationalStatus {
     const txStatus = String(transaction.status || '').toLowerCase();
     const txMetadata = asRecord(transaction.metadata);
@@ -65,14 +107,135 @@ function resolveOperationalStatus(transaction: JsonRecord, payoutAttempt?: JsonR
     return 'pending';
 }
 
-function normalizeDestination(payoutAttempt?: JsonRecord | null) {
+function resolveDestinationSnapshot(transaction: JsonRecord, payoutAttempt?: JsonRecord | null) {
     const destination = asRecord(payoutAttempt?.destination_snapshot);
+    const metadata = asRecord(transaction.metadata);
+    const metadataDestination = asRecord(metadata.destination_snapshot);
+    const bankName = firstString(
+        destination.bank_name,
+        destination.bankName,
+        metadataDestination.bank_name,
+        metadataDestination.bankName,
+        metadata.bank_name,
+        metadata.bankName
+    );
+    const method = resolveCanonicalDestinationMethod(
+        firstString(
+            payoutAttempt?.method,
+            destination.method,
+            metadataDestination.method,
+            metadata.payout_method,
+            metadata.payment_method
+        ),
+        bankName
+    );
+    const accountNumber = digitValue(firstString(
+        destination.account_number,
+        destination.accountNumber,
+        destination.phone_number,
+        destination.phoneNumber,
+        metadataDestination.account_number,
+        metadataDestination.accountNumber,
+        metadataDestination.phone_number,
+        metadataDestination.phoneNumber,
+        metadata.account_number,
+        metadata.accountNumber,
+        metadata.phone_number,
+        metadata.phoneNumber
+    ));
+    const accountTail = firstString(
+        destination.account_number_last4,
+        destination.accountNumberLast4,
+        metadataDestination.account_number_last4,
+        metadataDestination.accountNumberLast4,
+        metadata.account_number_last4,
+        metadata.accountNumberLast4
+    );
+    const holder = firstString(
+        destination.account_holder_name,
+        destination.accountHolderName,
+        destination.account_holder,
+        destination.holder,
+        destination.holder_name,
+        metadataDestination.account_holder_name,
+        metadataDestination.accountHolderName,
+        metadataDestination.account_holder,
+        metadataDestination.holder,
+        metadataDestination.holder_name,
+        metadata.account_holder_name,
+        metadata.accountHolderName,
+        metadata.account_holder,
+        metadata.holder,
+        metadata.holder_name
+    );
+    const documentType = firstString(
+        destination.document_type,
+        destination.documentType,
+        metadataDestination.document_type,
+        metadataDestination.documentType,
+        metadata.document_type,
+        metadata.documentType
+    );
+    const documentNumber = digitValue(firstString(
+        destination.document_number,
+        destination.documentNumber,
+        metadataDestination.document_number,
+        metadataDestination.documentNumber,
+        metadata.document_number,
+        metadata.documentNumber
+    ));
 
     return {
-        method: stringValue(payoutAttempt?.method) || stringValue(destination.method) || 'manual',
-        provider: stringValue(payoutAttempt?.provider) || 'manual',
-        account_tail: maskTail(destination.account_number || destination.accountNumber || destination.phone_number || destination.phoneNumber),
-        holder: stringValue(destination.account_holder_name || destination.accountHolderName),
+        method,
+        provider: firstString(payoutAttempt?.provider, metadata.payout_provider) || 'manual',
+        bankName,
+        accountNumber,
+        accountTail,
+        holder,
+        documentType,
+        documentNumber,
+    };
+}
+
+export function hasCompletePayoutDestination(transaction: JsonRecord, payoutAttempt?: JsonRecord | null) {
+    const destination = resolveDestinationSnapshot(transaction, payoutAttempt);
+    const accountLength = destination.accountNumber?.length || 0;
+    const accountComplete = destination.method === 'nequi'
+        ? accountLength === 10
+        : accountLength >= 6;
+
+    return {
+        complete: Boolean(destination.method && destination.holder && accountComplete),
+        missingFields: [
+            !destination.method ? 'method' : null,
+            !destination.holder ? 'holder' : null,
+            !accountComplete ? 'account_number' : null,
+        ].filter((field): field is string => Boolean(field)),
+    };
+}
+
+function normalizeDestination(
+    transaction: JsonRecord,
+    payoutAttempt?: JsonRecord | null,
+    options: { includeSensitiveDestination?: boolean } = {}
+) {
+    const destination = resolveDestinationSnapshot(transaction, payoutAttempt);
+    const completeness = hasCompletePayoutDestination(transaction, payoutAttempt);
+
+    return {
+        method: destination.method,
+        provider: destination.provider,
+        bank_name: destination.bankName,
+        account_number: options.includeSensitiveDestination && completeness.complete
+            ? destination.accountNumber
+            : null,
+        account_tail: destination.accountNumber ? maskTail(destination.accountNumber) : maskTail(destination.accountTail),
+        holder: destination.holder,
+        document_type: destination.documentType,
+        document_number_tail: maskTail(destination.documentNumber),
+        is_complete: completeness.complete,
+        missing_fields: completeness.missingFields,
+        sensitive_visible: Boolean(options.includeSensitiveDestination && completeness.complete),
     };
 }
 
@@ -84,6 +247,7 @@ export function normalizeDriverPayout(
         trucker?: JsonRecord | null;
         offer?: JsonRecord | null;
         payment?: JsonRecord | null;
+        includeSensitiveDestination?: boolean;
     } = {}
 ) {
     const metadata = asRecord(transaction.metadata);
@@ -115,7 +279,9 @@ export function normalizeDriverPayout(
         failure_reason: payoutAttempt?.failure_reason || payoutAttempt?.failure_message || null,
         reference: payoutAttempt?.provider_transfer_id || payoutAttempt?.provider_reference || null,
         receipt_url: payoutAttempt?.receipt_url || null,
-        destination: normalizeDestination(payoutAttempt),
+        destination: normalizeDestination(transaction, payoutAttempt, {
+            includeSensitiveDestination: Boolean(context.includeSensitiveDestination),
+        }),
         driver: context.trucker
             ? {
                 id: context.trucker.id,
@@ -192,7 +358,8 @@ export async function listDriverPayouts(
 
 export async function getDriverPayout(
     supabaseAdmin: AdminClient,
-    payoutId: string
+    payoutId: string,
+    options: { includeSensitiveDestination?: boolean } = {}
 ) {
     const { data, error } = await supabaseAdmin
         .from('transactions')
@@ -209,7 +376,9 @@ export async function getDriverPayout(
         return null;
     }
 
-    const payouts = await enrichDriverPayouts(supabaseAdmin, [data], {});
+    const payouts = await enrichDriverPayouts(supabaseAdmin, [data], {
+        includeSensitiveDestination: Boolean(options.includeSensitiveDestination),
+    });
     return payouts[0] || null;
 }
 
@@ -278,6 +447,7 @@ async function enrichDriverPayouts(
                 trucker,
                 offer,
                 payment: paymentMap.get(transaction.offer_id) || null,
+                includeSensitiveDestination: Boolean(filters.includeSensitiveDestination),
             });
         })
         .filter((payout) => !filters.status || payout.status === filters.status)

@@ -56,9 +56,11 @@ export function resolvePrivateFleetProofDisplayUrl(
     row: PrivateFleetProofPointer | null | undefined,
     signedUrlsByStoragePath: Map<string, string>
 ) {
-    const directUrl = getPrivateFleetProofDirectUrl(row);
-    if (directUrl) return directUrl;
-
     const storagePath = getPrivateFleetProofStoragePath(row);
-    return storagePath ? signedUrlsByStoragePath.get(storagePath) || null : null;
+    if (storagePath) {
+        const signedUrl = signedUrlsByStoragePath.get(storagePath);
+        if (signedUrl) return signedUrl;
+    }
+
+    return getPrivateFleetProofDirectUrl(row);
 }

@@ -12,6 +12,7 @@ export async function GET(request: NextRequest) {
     }
 
     try {
+        const includeSensitiveDestination = auth.context.staff.capabilities.includes('payout:mark_paid');
         const data = await listDriverPayouts(auth.context.supabaseAdmin, {
             status: request.nextUrl.searchParams.get('status'),
             driverId: request.nextUrl.searchParams.get('driverId'),
@@ -19,6 +20,7 @@ export async function GET(request: NextRequest) {
             from: request.nextUrl.searchParams.get('from'),
             to: request.nextUrl.searchParams.get('to'),
             limit: Number(request.nextUrl.searchParams.get('limit') || 100),
+            includeSensitiveDestination,
         });
 
         return apiSuccess(data, {
