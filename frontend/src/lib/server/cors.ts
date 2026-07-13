@@ -38,9 +38,9 @@ function getRuntimeCorsOriginCandidates() {
     const productionCandidates = [
         process.env.NEXT_PUBLIC_APP_URL,
         process.env.VERCEL_PROJECT_PRODUCTION_URL,
-        'https://kargax.com',
-        'https://www.kargax.com',
-        'https://app.kargax.com',
+        'https://kargax.online',
+        'https://www.kargax.online',
+        'https://app.kargax.online',
     ];
 
     if (isStrictProductionEnvironment()) {

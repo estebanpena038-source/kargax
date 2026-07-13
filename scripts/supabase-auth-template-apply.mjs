@@ -5,7 +5,7 @@ import path from 'node:path';
 import process from 'node:process';
 
 const ROOT = process.cwd();
-const DEFAULT_BASE_URL = 'https://kargax.com';
+const DEFAULT_BASE_URL = 'https://kargax.online';
 const DEFAULT_STAGING_URL = 'https://kargax-staging.vercel.app';
 const DEFAULT_ENV_FILES = [
   'frontend/.env.example',

@@ -26,7 +26,7 @@ const benefits = [
 
 function referralText() {
   const url = typeof window === 'undefined'
-    ? 'https://kargax.com/registro?ref=camionero'
+    ? 'https://kargax.online/registro?ref=camionero'
     : `${window.location.origin}/registro?ref=camionero`;
 
   return `Estoy usando KargaX para viajes, evidencia y wallet. Regístrate aquí: ${url}`;

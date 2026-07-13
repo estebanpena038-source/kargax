@@ -28,7 +28,7 @@ function parseArgs(argv) {
     } else if (arg === '--help' || arg === '-h') {
       console.log(`Usage:
   npm run supabase:auth-url-check
-  npm run supabase:auth-url-check -- --base-url https://kargax.com
+  npm run supabase:auth-url-check -- --base-url https://kargax.online
 
 Options:
   --base-url <url>  Expected public app URL for generated auth redirects
@@ -121,7 +121,7 @@ async function main() {
   const supabaseUrl = env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, '');
   const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY;
   const expectedBaseUrl = normalizeBaseUrl(
-    args.baseUrl || env.KARGAX_CANONICAL_APP_URL || env.NEXT_PUBLIC_APP_URL || 'https://kargax.com'
+    args.baseUrl || env.KARGAX_CANONICAL_APP_URL || env.NEXT_PUBLIC_APP_URL || 'https://kargax.online'
   );
   const redirectChecks = [
     { type: 'magiclink', path: '/auth/invite/accept' },

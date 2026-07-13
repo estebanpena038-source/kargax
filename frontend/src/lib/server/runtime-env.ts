@@ -21,6 +21,101 @@ export function getConfiguredAppUrl() {
     return resolvePublicAppUrl({ allowLocalhost: true }) || 'http://localhost:3000';
 }
 
+const KARGAX_STAGING_HOSTS = new Set([
+    'kargax-staging.vercel.app',
+]);
+
+const KARGAX_PRODUCTION_HOSTS = new Set([
+    'www.kargax.online',
+    'kargax.online',
+    'app.kargax.online',
+]);
+
+interface RuntimeHostOptions {
+    requestHost?: string | null;
+    requestUrl?: string | URL | null;
+}
+
+function normalizeHostname(value?: string | URL | null) {
+    if (!value) {
+        return null;
+    }
+
+    if (value instanceof URL) {
+        return value.hostname.toLowerCase();
+    }
+
+    const candidate = value.trim();
+
+    if (!candidate) {
+        return null;
+    }
+
+    try {
+        const url = /^[a-z][a-z\d+\-.]*:\/\//i.test(candidate)
+            ? new URL(candidate)
+            : new URL(`https://${candidate}`);
+
+        return url.hostname.toLowerCase();
+    } catch {
+        return null;
+    }
+}
+
+export function getRuntimeAppHostname(options: RuntimeHostOptions = {}) {
+    return normalizeHostname(options.requestHost)
+        || normalizeHostname(options.requestUrl)
+        || normalizeHostname(getConfiguredAppUrl());
+}
+
+export function isKargaxStagingEnvironment(options: RuntimeHostOptions = {}) {
+    const hostname = getRuntimeAppHostname(options);
+
+    return isPreviewEnvironment() || (hostname ? KARGAX_STAGING_HOSTS.has(hostname) : false);
+}
+
+export function isKargaxProductionHost(options: RuntimeHostOptions = {}) {
+    const hostname = getRuntimeAppHostname(options);
+    return hostname ? KARGAX_PRODUCTION_HOSTS.has(hostname) : false;
+}
+
+export function getConfiguredNotificationProvider() {
+    return (process.env.NOTIFICATION_PROVIDER || 'console').trim().toLowerCase();
+}
+
+function hasTwilioSender() {
+    return Boolean(process.env.TWILIO_PHONE_NUMBER || process.env.TWILIO_MESSAGING_SERVICE_SID);
+}
+
+export function getNotificationRuntimeSnapshot(options: RuntimeHostOptions = {}) {
+    const hostname = getRuntimeAppHostname(options);
+    const strictProduction = isStrictProductionEnvironment();
+    const stagingEnvironment = isKargaxStagingEnvironment(options);
+    const productionHost = isKargaxProductionHost(options);
+    const configuredProvider = getConfiguredNotificationProvider();
+    const effectiveProvider = stagingEnvironment ? 'console' : configuredProvider;
+    const twilioConfigured = Boolean(
+        process.env.TWILIO_ACCOUNT_SID &&
+        process.env.TWILIO_AUTH_TOKEN &&
+        hasTwilioSender()
+    );
+    const requiresRealProvider = !stagingEnvironment && (strictProduction || productionHost);
+
+    return {
+        hostname,
+        strictProduction,
+        stagingEnvironment,
+        productionHost,
+        configuredProvider,
+        effectiveProvider,
+        requiresRealProvider,
+        realSmsEnabled: effectiveProvider === 'twilio' && !stagingEnvironment,
+        twilioConfigured,
+        hasMessagingServiceSid: Boolean(process.env.TWILIO_MESSAGING_SERVICE_SID),
+        hasFromNumber: Boolean(process.env.TWILIO_PHONE_NUMBER),
+    };
+}
+
 interface PaymentRuntimeConfigOptions {
     requireWebhookSecret?: boolean;
     requireInternalApiKey?: boolean;
@@ -32,6 +127,7 @@ interface PaymentRuntimeConfigOptions {
 export function getPaymentRuntimeConfig(options: PaymentRuntimeConfigOptions = {}) {
     const baseUrl = getConfiguredAppUrl();
     const isLocalhost = isLocalAppUrl(baseUrl);
+    const notificationRuntime = getNotificationRuntimeSnapshot({ requestUrl: baseUrl });
 
     if (isStrictProductionEnvironment()) {
         const missingVariables: string[] = [];
@@ -52,21 +148,22 @@ export function getPaymentRuntimeConfig(options: PaymentRuntimeConfigOptions = {
             missingVariables.push('INTERNAL_API_KEY');
         }
 
-        const notificationProvider = (process.env.NOTIFICATION_PROVIDER || '').trim().toLowerCase();
+        const notificationProviderSetting = (process.env.NOTIFICATION_PROVIDER || '').trim().toLowerCase();
+        const notificationProvider = notificationRuntime.effectiveProvider;
 
-        if (options.requireNotificationProvider && !notificationProvider) {
+        if (options.requireNotificationProvider && notificationRuntime.requiresRealProvider && !notificationProviderSetting) {
             missingVariables.push('NOTIFICATION_PROVIDER');
         }
 
-        if (options.requireNotificationProvider && notificationProvider === 'console') {
+        if (options.requireNotificationProvider && notificationRuntime.requiresRealProvider && notificationProvider === 'console') {
             throw new Error('NOTIFICATION_PROVIDER must use a real delivery provider in production');
         }
 
-        if (options.requireTwilio && notificationProvider && notificationProvider !== 'twilio') {
+        if (options.requireTwilio && notificationRuntime.requiresRealProvider && notificationProvider !== 'twilio') {
             throw new Error('NOTIFICATION_PROVIDER must be set to twilio for this production flow');
         }
 
-        if (options.requireTwilio && notificationProvider === 'twilio') {
+        if (options.requireTwilio && notificationRuntime.requiresRealProvider && notificationProvider === 'twilio') {
             if (!process.env.TWILIO_ACCOUNT_SID) {
                 missingVariables.push('TWILIO_ACCOUNT_SID');
             }
@@ -75,8 +172,8 @@ export function getPaymentRuntimeConfig(options: PaymentRuntimeConfigOptions = {
                 missingVariables.push('TWILIO_AUTH_TOKEN');
             }
 
-            if (!process.env.TWILIO_PHONE_NUMBER) {
-                missingVariables.push('TWILIO_PHONE_NUMBER');
+            if (!hasTwilioSender()) {
+                missingVariables.push('TWILIO_PHONE_NUMBER or TWILIO_MESSAGING_SERVICE_SID');
             }
         }
 

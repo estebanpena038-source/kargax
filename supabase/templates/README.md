@@ -35,14 +35,26 @@ No usar `{{ .ConfirmationURL }}` en emails productivos de KargaX.
 
 Produccion:
 
-- Site URL: `https://kargax.com`
+- Site URL: `https://kargax.online`
 - Redirect URLs:
-  - `https://kargax.com/auth/callback`
-  - `https://kargax.com/auth/reset-password`
-  - `https://kargax.com/auth/invite/accept`
-  - `https://app.kargax.com/auth/callback` si `app.kargax.com` esta aliasado al proyecto productivo
-  - `https://app.kargax.com/auth/reset-password` si `app.kargax.com` esta aliasado al proyecto productivo
-  - `https://app.kargax.com/auth/invite/accept` si `app.kargax.com` esta aliasado al proyecto productivo
+  - `https://kargax.online/auth/callback`
+  - `https://kargax.online/auth/reset-password`
+  - `https://kargax.online/auth/invite/accept`
+  - `https://www.kargax.online/auth/callback` si `www.kargax.online` esta aliasado al proyecto productivo
+  - `https://www.kargax.online/auth/reset-password` si `www.kargax.online` esta aliasado al proyecto productivo
+  - `https://www.kargax.online/auth/invite/accept` si `www.kargax.online` esta aliasado al proyecto productivo
+  - `https://app.kargax.online/auth/callback` si `app.kargax.online` esta aliasado al proyecto productivo
+  - `https://app.kargax.online/auth/reset-password` si `app.kargax.online` esta aliasado al proyecto productivo
+  - `https://app.kargax.online/auth/invite/accept` si `app.kargax.online` esta aliasado al proyecto productivo
+
+Dominios legacy, solo si deben seguir aceptando enlaces ya enviados:
+
+- `https://kargax.com/auth/callback`
+- `https://kargax.com/auth/reset-password`
+- `https://kargax.com/auth/invite/accept`
+- `https://app.kargax.com/auth/callback`
+- `https://app.kargax.com/auth/reset-password`
+- `https://app.kargax.com/auth/invite/accept`
 
 Staging, si sigue activo:
 
@@ -75,13 +87,13 @@ Con token de Supabase Management:
 
 ```bash
 $env:SUPABASE_ACCESS_TOKEN="..."
-npm run supabase:auth-config-check -- --project-ref kutgkfrjpujvtnimjnvo --base-url https://kargax.com --extra-origin https://app.kargax.com
+npm run supabase:auth-config-check -- --project-ref kutgkfrjpujvtnimjnvo --base-url https://kargax.online --extra-origin https://www.kargax.online
 ```
 
 Cuando SMTP propio este configurado, exigirlo en el gate:
 
 ```bash
-npm run supabase:auth-config-check -- --project-ref kutgkfrjpujvtnimjnvo --base-url https://kargax.com --extra-origin https://app.kargax.com --require-smtp
+npm run supabase:auth-config-check -- --project-ref kutgkfrjpujvtnimjnvo --base-url https://kargax.online --extra-origin https://www.kargax.online --require-smtp
 ```
 
 ## Aplicacion por Management API
@@ -90,7 +102,7 @@ Con token de Supabase Management:
 
 ```bash
 $env:SUPABASE_ACCESS_TOKEN="..."
-npm run supabase:auth-template-apply -- --project-ref kutgkfrjpujvtnimjnvo --base-url https://kargax.com --extra-origin https://app.kargax.com
+npm run supabase:auth-template-apply -- --project-ref kutgkfrjpujvtnimjnvo --base-url https://kargax.online --extra-origin https://www.kargax.online
 ```
 
 Para incluir SMTP en el mismo PATCH:
@@ -102,5 +114,5 @@ $env:SMTP_USER="resend"
 $env:SMTP_PASS="re_..."
 $env:SMTP_ADMIN_EMAIL="noreply@auth.kargax.com"
 $env:SMTP_SENDER_NAME="KargaX"
-npm run supabase:auth-template-apply -- --project-ref kutgkfrjpujvtnimjnvo --base-url https://kargax.com --extra-origin https://app.kargax.com --include-smtp
+npm run supabase:auth-template-apply -- --project-ref kutgkfrjpujvtnimjnvo --base-url https://kargax.online --extra-origin https://www.kargax.online --include-smtp
 ```

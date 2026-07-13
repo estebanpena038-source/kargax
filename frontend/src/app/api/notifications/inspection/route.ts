@@ -17,7 +17,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { isNonStrictProductionEnvironment, isStrictProductionEnvironment } from '@/lib/server/runtime-env';
+import { getNotificationRuntimeSnapshot, isNonStrictProductionEnvironment } from '@/lib/server/runtime-env';
 import { normalizePhoneForNotification, type AndeanCountryCode } from '@/lib/phone/andean';
 import { getInternalApiKeyFromRequest, safelyCompareSecrets } from '@/lib/server/route-auth';
 
@@ -156,17 +156,26 @@ class TwilioNotificationProvider implements NotificationProvider {
     }
 }
 
-function getNotificationProvider(): NotificationProvider {
-    const provider = process.env.NOTIFICATION_PROVIDER || 'console';
-    const isProduction = isStrictProductionEnvironment();
+type NotificationRuntimeSnapshot = ReturnType<typeof getNotificationRuntimeSnapshot>;
 
-    if (isProduction && provider === 'console') {
+function getNotificationRuntimeForRequest(request: NextRequest) {
+    return getNotificationRuntimeSnapshot({
+        requestHost: request.headers.get('host'),
+        requestUrl: request.nextUrl.href,
+    });
+}
+
+function getNotificationProvider(runtime: NotificationRuntimeSnapshot): NotificationProvider {
+    const provider = runtime.effectiveProvider;
+
+    if (runtime.requiresRealProvider && provider === 'console') {
         throw new Error('NOTIFICATION_PROVIDER must be configured with a real provider in production');
     }
 
     switch (provider) {
         case 'twilio': return new TwilioNotificationProvider();
-        default: return new ConsoleNotificationProvider();
+        case 'console': return new ConsoleNotificationProvider();
+        default: throw new Error(`Unsupported NOTIFICATION_PROVIDER: ${provider}`);
     }
 }
 
@@ -288,9 +297,10 @@ export async function POST(request: NextRequest) {
 
     // Send SMS
     let provider: NotificationProvider;
+    const notificationRuntime = getNotificationRuntimeForRequest(request);
 
     try {
-        provider = getNotificationProvider();
+        provider = getNotificationProvider(notificationRuntime);
     } catch (error) {
         return NextResponse.json(
             {
@@ -323,7 +333,10 @@ export async function POST(request: NextRequest) {
                 sms_sent: smsResult.success,
                 business_phone_last4: body.businessPhone.slice(-4),
                 country_code: body.countryCode || 'CO',
-                provider: process.env.NOTIFICATION_PROVIDER || 'console',
+                provider: notificationRuntime.effectiveProvider,
+                configured_provider: notificationRuntime.configuredProvider,
+                real_sms_enabled: notificationRuntime.realSmsEnabled,
+                runtime_hostname: notificationRuntime.hostname,
                 sms_sid: smsResult.sid,
                 summary: body.summary,
                 error: smsResult.error,
@@ -344,11 +357,18 @@ export async function POST(request: NextRequest) {
 // GET HANDLER - Health check
 // =============================================================================
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+    const notificationRuntime = getNotificationRuntimeForRequest(request);
+
     return NextResponse.json({
         service: 'inspection-notifications',
         status: 'healthy',
-        provider: process.env.NOTIFICATION_PROVIDER || 'console',
+        provider: notificationRuntime.effectiveProvider,
+        configuredProvider: notificationRuntime.configuredProvider,
+        realSmsEnabled: notificationRuntime.realSmsEnabled,
+        stagingEnvironment: notificationRuntime.stagingEnvironment,
+        productionHost: notificationRuntime.productionHost,
+        runtimeHostname: notificationRuntime.hostname,
         supportedTypes: ['loading_completed', 'delivery_completed', 'issue_reported'],
     });
 }

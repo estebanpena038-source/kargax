@@ -51,7 +51,7 @@ const env = {
 function parseArgs(argv) {
   const args = {
     projectRef: env.PROJECT_REF || env.SUPABASE_PROJECT_REF || projectRefFromSupabaseUrl(env.NEXT_PUBLIC_SUPABASE_URL),
-    baseUrl: env.KARGAX_CANONICAL_APP_URL || env.NEXT_PUBLIC_APP_URL || 'https://kargax.com',
+    baseUrl: env.KARGAX_CANONICAL_APP_URL || env.NEXT_PUBLIC_APP_URL || 'https://kargax.online',
     stagingUrl: env.KARGAX_STAGING_APP_URL || 'https://kargax-staging.vercel.app',
     extraOrigins: (env.KARGAX_EXTRA_AUTH_ORIGINS || '').split(/[\s,]+/).filter(Boolean),
     requireSmtp: false,
@@ -79,7 +79,7 @@ function parseArgs(argv) {
       args.requireSmtp = true;
     } else if (arg === '--help' || arg === '-h') {
       console.log(`Usage:
-  npm run supabase:auth-config-check -- --project-ref <project-ref> --base-url https://kargax.com
+  npm run supabase:auth-config-check -- --project-ref <project-ref> --base-url https://kargax.online
   npm run supabase:auth-config-check -- --project-ref <project-ref> --require-smtp
 
 Requires SUPABASE_ACCESS_TOKEN.

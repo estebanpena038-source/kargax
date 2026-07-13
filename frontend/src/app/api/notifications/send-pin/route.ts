@@ -23,7 +23,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { isNonStrictProductionEnvironment, isStrictProductionEnvironment } from '@/lib/server/runtime-env';
+import { getNotificationRuntimeSnapshot, isNonStrictProductionEnvironment } from '@/lib/server/runtime-env';
 import { normalizePhoneForNotification, type AndeanCountryCode } from '@/lib/phone/andean';
 import { requireInternalApiKeyRoute } from '@/lib/server/route-auth';
 
@@ -188,11 +188,19 @@ class TwilioNotificationProvider implements NotificationProvider {
 // PROVIDER FACTORY
 // =============================================================================
 
-function getNotificationProvider(): NotificationProvider {
-    const provider = process.env.NOTIFICATION_PROVIDER || 'console';
-    const isProduction = isStrictProductionEnvironment();
+type NotificationRuntimeSnapshot = ReturnType<typeof getNotificationRuntimeSnapshot>;
 
-    if (isProduction && provider === 'console') {
+function getNotificationRuntimeForRequest(request: NextRequest) {
+    return getNotificationRuntimeSnapshot({
+        requestHost: request.headers.get('host'),
+        requestUrl: request.nextUrl.href,
+    });
+}
+
+function getNotificationProvider(runtime: NotificationRuntimeSnapshot): NotificationProvider {
+    const provider = runtime.effectiveProvider;
+
+    if (runtime.requiresRealProvider && provider === 'console') {
         throw new Error('NOTIFICATION_PROVIDER must be configured with a real provider in production');
     }
 
@@ -223,18 +231,12 @@ function maskPhoneForLog(value: string) {
  * - No sensitive details exposed
  */
 
-function getPickupMessage(contactName: string, pin: string, cargo?: string): string {
-    return `KargaX: Hola ${contactName}. ` +
-        `Un vehiculo llegara a recoger ${cargo || 'la carga'}. ` +
-        `Tu PIN de SALIDA es: ${pin}. ` +
-        `Entregalo solo al conductor verificado.`;
+function getPickupMessage(pin: string): string {
+    return `KargaX: tu PIN de SALIDA es ${pin}. Entregalo solo al conductor verificado.`;
 }
 
-function getDeliveryMessage(contactName: string, pin: string, cargo?: string): string {
-    return `KargaX: Hola ${contactName}. ` +
-        `${cargo || 'Tu carga'} esta en camino. ` +
-        `Cuando llegue, tu PIN de ENTREGA es: ${pin}. ` +
-        `Entregalo al conductor para confirmar recepcion.`;
+function getDeliveryMessage(pin: string): string {
+    return `KargaX: tu PIN de ENTREGA es ${pin}. Entregalo solo al conductor verificado.`;
 }
 
 // =============================================================================
@@ -301,9 +303,10 @@ export async function POST(request: NextRequest) {
     // =========================================================================
 
     let provider: NotificationProvider;
+    const notificationRuntime = getNotificationRuntimeForRequest(request);
 
     try {
-        provider = getNotificationProvider();
+        provider = getNotificationProvider(notificationRuntime);
     } catch (error) {
         return NextResponse.json(
             {
@@ -322,7 +325,7 @@ export async function POST(request: NextRequest) {
     console.log(`[PIN Notification] Sending pickup PIN to ${maskPhoneForLog(body.pickupContactPhone)}`);
     const pickupResult = await provider.sendSMS(
         body.pickupContactPhone,
-        getPickupMessage(body.pickupContactName, body.pickupPin, body.cargoDescription),
+        getPickupMessage(body.pickupPin),
         countryCode
     );
 
@@ -334,7 +337,7 @@ export async function POST(request: NextRequest) {
     console.log(`[PIN Notification] Sending delivery PIN to ${maskPhoneForLog(body.deliveryContactPhone)}`);
     const deliveryResult = await provider.sendSMS(
         body.deliveryContactPhone,
-        getDeliveryMessage(body.deliveryContactName, body.deliveryPin, body.cargoDescription),
+        getDeliveryMessage(body.deliveryPin),
         countryCode
     );
 
@@ -367,7 +370,10 @@ export async function POST(request: NextRequest) {
                     pickup_phone_last4: body.pickupContactPhone.slice(-4),
                     delivery_phone_last4: body.deliveryContactPhone.slice(-4),
                     country_code: countryCode,
-                    provider: process.env.NOTIFICATION_PROVIDER || 'console',
+                    provider: notificationRuntime.effectiveProvider,
+                    configured_provider: notificationRuntime.configuredProvider,
+                    real_sms_enabled: notificationRuntime.realSmsEnabled,
+                    runtime_hostname: notificationRuntime.hostname,
                     pickup_sid: pickupResult.sid,
                     delivery_sid: deliveryResult.sid,
                     errors: errors.length > 0 ? errors : undefined,
@@ -399,21 +405,22 @@ export async function POST(request: NextRequest) {
 // GET HANDLER - Health check
 // =============================================================================
 
-export async function GET() {
-    const provider = process.env.NOTIFICATION_PROVIDER || 'console';
-    const isProduction = isStrictProductionEnvironment();
+export async function GET(request: NextRequest) {
+    const notificationRuntime = getNotificationRuntimeForRequest(request);
 
     return NextResponse.json({
         service: 'pin-notifications',
         status: 'healthy',
-        provider,
-        productionReady: !isProduction || provider !== 'console',
-        twilioConfigured: !!(
-            process.env.TWILIO_ACCOUNT_SID &&
-            process.env.TWILIO_AUTH_TOKEN &&
-            (process.env.TWILIO_PHONE_NUMBER || process.env.TWILIO_MESSAGING_SERVICE_SID)
-        ),
-        hasMessagingServiceSid: !!process.env.TWILIO_MESSAGING_SERVICE_SID,
-        hasFromNumber: !!process.env.TWILIO_PHONE_NUMBER,
+        provider: notificationRuntime.effectiveProvider,
+        configuredProvider: notificationRuntime.configuredProvider,
+        productionReady: !notificationRuntime.requiresRealProvider
+            || (notificationRuntime.effectiveProvider === 'twilio' && notificationRuntime.twilioConfigured),
+        realSmsEnabled: notificationRuntime.realSmsEnabled,
+        stagingEnvironment: notificationRuntime.stagingEnvironment,
+        productionHost: notificationRuntime.productionHost,
+        runtimeHostname: notificationRuntime.hostname,
+        twilioConfigured: notificationRuntime.twilioConfigured,
+        hasMessagingServiceSid: notificationRuntime.hasMessagingServiceSid,
+        hasFromNumber: notificationRuntime.hasFromNumber,
     });
 }

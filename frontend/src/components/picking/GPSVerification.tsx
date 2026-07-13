@@ -128,7 +128,7 @@ function buildLowAccuracyMessage(accuracyMeters: number, distanceMeters: number,
     const roundedAccuracy = Math.round(accuracyMeters);
 
     if (distanceMeters <= toleranceMeters) {
-        return `Estas en el punto. El celular sigue en ubicacion aproximada (+/- ${roundedAccuracy}m). Activa Ubicacion precisa para Chrome/kargax.com y vuelve a intentar.`;
+        return `Estas en el punto. El celular sigue en ubicacion aproximada (+/- ${roundedAccuracy}m). Activa Ubicacion precisa para Chrome/kargax.online y vuelve a intentar.`;
     }
 
     return `Acercate al ${targetLabel.toLowerCase()} y activa Ubicacion precisa. Precision actual: +/- ${roundedAccuracy}m.`;

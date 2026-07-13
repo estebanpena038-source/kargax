@@ -13,7 +13,7 @@ import type {
 } from '@/lib/warehouses/types';
 import { getBillingCheckoutInfrastructureStatus, isBusinessTeamMembersTableMissing, resolveBillingPlanPriceCop } from '@/lib/server/warehouses';
 import { createAdminNotification } from '@/lib/server/route-auth';
-import { isStrictProductionEnvironment } from '@/lib/server/runtime-env';
+import { getNotificationRuntimeSnapshot, isStrictProductionEnvironment } from '@/lib/server/runtime-env';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AdminClient = SupabaseClient<any, 'public', any>;
@@ -365,7 +365,8 @@ function getPaymentsReadinessSnapshot(options: { billingInfrastructureReady: boo
     const missingKeys: string[] = [];
     const warnings: string[] = [];
     const appUrl = (process.env.NEXT_PUBLIC_APP_URL || '').trim();
-    const notificationProvider = (process.env.NOTIFICATION_PROVIDER || 'console').trim().toLowerCase();
+    const notificationRuntime = getNotificationRuntimeSnapshot({ requestUrl: appUrl || undefined });
+    const notificationProvider = notificationRuntime.effectiveProvider;
     const hasSupabaseUrl = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL);
     const hasSupabaseAnon = Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
     const hasServiceRole = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -373,11 +374,7 @@ function getPaymentsReadinessSnapshot(options: { billingInfrastructureReady: boo
     const hasPublicKey = Boolean(process.env.NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY);
     const hasWebhookSecret = Boolean(process.env.MERCADOPAGO_WEBHOOK_SECRET);
     const hasInternalApiKey = Boolean(process.env.INTERNAL_API_KEY);
-    const hasTwilioCredentials = Boolean(
-        process.env.TWILIO_ACCOUNT_SID &&
-        process.env.TWILIO_AUTH_TOKEN &&
-        process.env.TWILIO_PHONE_NUMBER
-    );
+    const hasTwilioCredentials = notificationRuntime.twilioConfigured;
     const productionLikeUrl = Boolean(appUrl) && /^https:\/\//i.test(appUrl) && !/localhost/i.test(appUrl);
     const strictProduction = isStrictProductionEnvironment();
 
@@ -413,7 +410,11 @@ function getPaymentsReadinessSnapshot(options: { billingInfrastructureReady: boo
         warnings.push('La infraestructura de cobro de planes aun no esta lista en base de datos.');
     }
 
-    if ((strictProduction || productionLikeUrl) && notificationProvider === 'console') {
+    if (notificationRuntime.stagingEnvironment && notificationRuntime.configuredProvider === 'twilio') {
+        warnings.push('Staging tiene NOTIFICATION_PROVIDER=twilio, pero el runtime fuerza console para evitar SMS reales.');
+    }
+
+    if ((strictProduction || productionLikeUrl) && notificationRuntime.requiresRealProvider && notificationProvider === 'console') {
         warnings.push('Las notificaciones de PIN siguen en modo console y no en un proveedor real.');
     }
 
@@ -425,7 +426,7 @@ function getPaymentsReadinessSnapshot(options: { billingInfrastructureReady: boo
     const webhookCoreReady = hasWebhookSecret && hasServiceRole && productionLikeUrl;
     const notificationsReady = notificationProvider === 'twilio'
         ? hasTwilioCredentials && hasInternalApiKey
-        : !strictProduction && notificationProvider === 'console';
+        : !notificationRuntime.requiresRealProvider && notificationProvider === 'console';
     const freightWebhookReady = checkoutReady && webhookCoreReady && notificationsReady;
     const billingWebhookReady = checkoutReady && webhookCoreReady && options.billingInfrastructureReady;
 

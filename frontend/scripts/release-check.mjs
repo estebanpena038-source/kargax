@@ -169,7 +169,15 @@ const requiredStorageBuckets = [
   'warehouse-sku-images',
   'private-fleet-payment-proofs',
 ];
-const defaultCanonicalProductionAppUrl = 'https://kargax.com';
+const defaultCanonicalProductionAppUrl = 'https://www.kargax.online';
+const stagingAppHosts = new Set([
+  'kargax-staging.vercel.app',
+]);
+const productionAppHosts = new Set([
+  'www.kargax.online',
+  'kargax.online',
+  'app.kargax.online',
+]);
 const loadedEnvFiles = [];
 
 function parseEnvLine(line) {
@@ -311,6 +319,27 @@ function normalizeUrlOrigin(value) {
   }
 }
 
+function normalizeUrlHostname(value) {
+  try {
+    const candidate = /^[a-z][a-z\d+\-.]*:\/\//i.test(value)
+      ? value
+      : `https://${value}`;
+    return new URL(candidate).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+function isStagingAppUrl(value) {
+  const hostname = normalizeUrlHostname(value || '');
+  return hostname ? stagingAppHosts.has(hostname) : false;
+}
+
+function isProductionAppUrl(value) {
+  const hostname = normalizeUrlHostname(value || '');
+  return hostname ? productionAppHosts.has(hostname) : false;
+}
+
 function validateProductionAppUrl(appUrl, strictProduction) {
   const canonicalProductionAppUrl = process.env.KARGAX_CANONICAL_APP_URL || defaultCanonicalProductionAppUrl;
   const appOrigin = normalizeUrlOrigin(appUrl);
@@ -342,6 +371,15 @@ function validateProductionAppUrl(appUrl, strictProduction) {
     });
   }
 
+  if (isStagingAppUrl(appOrigin)) {
+    return pass('public-url-production', {
+      appUrl: appOrigin,
+      strictProduction,
+      canonicalAppUrl: canonicalOrigin,
+      stagingRuntime: true,
+    });
+  }
+
   if (appOrigin !== canonicalOrigin) {
     return fail('public-url-production', {
       appUrl: appOrigin,
@@ -355,6 +393,74 @@ function validateProductionAppUrl(appUrl, strictProduction) {
     appUrl: appOrigin,
     strictProduction,
     canonicalAppUrl: canonicalOrigin,
+  });
+}
+
+function validateNotificationRuntime(appUrl, strictProduction) {
+  const configuredProvider = (process.env.NOTIFICATION_PROVIDER || 'console').trim().toLowerCase();
+  const stagingRuntime = process.env.VERCEL_ENV === 'preview' || isStagingAppUrl(appUrl);
+  const productionHost = isProductionAppUrl(appUrl);
+  const hasTwilioEnv = Boolean(
+    process.env.TWILIO_ACCOUNT_SID
+    || process.env.TWILIO_AUTH_TOKEN
+    || process.env.TWILIO_PHONE_NUMBER
+    || process.env.TWILIO_MESSAGING_SERVICE_SID
+  );
+  const twilioConfigured = Boolean(
+    process.env.TWILIO_ACCOUNT_SID
+    && process.env.TWILIO_AUTH_TOKEN
+    && (process.env.TWILIO_PHONE_NUMBER || process.env.TWILIO_MESSAGING_SERVICE_SID)
+  );
+
+  if (stagingRuntime) {
+    if (configuredProvider === 'twilio' || hasTwilioEnv) {
+      return fail('notifications-runtime', {
+        appUrl: normalizeUrlOrigin(appUrl) || appUrl || null,
+        configuredProvider,
+        effectiveProvider: 'console',
+        stagingRuntime,
+        reason: 'Staging must not be configured with Twilio credentials or provider.',
+      });
+    }
+
+    return pass('notifications-runtime', {
+      appUrl: normalizeUrlOrigin(appUrl) || appUrl || null,
+      configuredProvider,
+      effectiveProvider: 'console',
+      stagingRuntime,
+      realSmsEnabled: false,
+    });
+  }
+
+  if (strictProduction || productionHost) {
+    if (configuredProvider !== 'twilio') {
+      return fail('notifications-runtime', {
+        appUrl: normalizeUrlOrigin(appUrl) || appUrl || null,
+        configuredProvider,
+        productionHost,
+        strictProduction,
+        reason: 'Production must use NOTIFICATION_PROVIDER=twilio.',
+      });
+    }
+
+    if (!twilioConfigured) {
+      return fail('notifications-runtime', {
+        appUrl: normalizeUrlOrigin(appUrl) || appUrl || null,
+        configuredProvider,
+        productionHost,
+        strictProduction,
+        reason: 'Production Twilio credentials or sender are incomplete.',
+      });
+    }
+  }
+
+  return pass('notifications-runtime', {
+    appUrl: normalizeUrlOrigin(appUrl) || appUrl || null,
+    configuredProvider,
+    effectiveProvider: configuredProvider,
+    stagingRuntime,
+    productionHost,
+    realSmsEnabled: configuredProvider === 'twilio',
   });
 }
 
@@ -489,6 +595,7 @@ checks.push(...requiredEnv.map((name) => (
 )));
 checks.push(validateProductionAppUrl(appUrl, strictProduction));
 checks.push(validateProductionObservability(strictProduction));
+checks.push(validateNotificationRuntime(appUrl, strictProduction));
 checks.push(existsSync(resolve(root, 'src/proxy.ts'))
   ? pass('rate-limit-proxy-present')
   : fail('rate-limit-proxy-present'));
