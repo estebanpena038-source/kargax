@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
 
     const { data: offer, error } = await supabaseAdmin
         .from('cargo_offers')
-        .select('id, cargo_description, pickup_pin, delivery_pin, pickup_contact_phone, pickup_contact_name, delivery_contact_phone, delivery_contact_name')
+        .select('id, cargo_description, pickup_pin, delivery_pin, pickup_contact_phone, pickup_contact_name, delivery_contact_phone, delivery_contact_name, country_code')
         .eq('id', offerId)
         .single();
 
@@ -98,7 +98,6 @@ export async function POST(request: NextRequest) {
     const { baseUrl: appUrl } = getPaymentRuntimeConfig({
         requireInternalApiKey: true,
         requireNotificationProvider: true,
-        requireTwilio: true,
     });
     const internalApiKey = process.env.INTERNAL_API_KEY;
 
@@ -117,6 +116,7 @@ export async function POST(request: NextRequest) {
             pickupContactName: offer.pickup_contact_name || 'Contacto de origen',
             deliveryContactPhone: offer.delivery_contact_phone,
             deliveryContactName: offer.delivery_contact_name || 'Contacto de destino',
+            countryCode: offer.country_code || 'CO',
         }),
     });
 
@@ -126,7 +126,7 @@ export async function POST(request: NextRequest) {
         await createAdminNotification(supabaseAdmin, {
             type: 'pin_incident',
             title: 'Error reenviando PIN',
-            message: `Fallo el reenvio de PIN para la oferta ${offer.id.slice(0, 8)}.`,
+            message: `Fallo la preparacion de PIN para la oferta ${offer.id.slice(0, 8)}.`,
             data: {
                 offer_id: offer.id,
                 response_status: response.status,
@@ -164,17 +164,19 @@ export async function POST(request: NextRequest) {
         });
 
         return NextResponse.json(
-            { error: result?.error || 'Failed to resend PIN notifications' },
+            { error: result?.error || 'Failed to prepare PIN messages' },
             { status: 500 }
         );
     }
+
+    const manualDeliveryRequired = Boolean(result?.manualDeliveryRequired);
 
     await recordCriticalOperation(supabaseAdmin, {
         requestId,
         actorUserId: auth.context.authUser.id,
         actorType: 'admin',
         domain: 'payments',
-        action: 'admin_resend_pin',
+        action: manualDeliveryRequired ? 'pin_manual_prepared' : 'admin_resend_pin',
         entityType: 'offer',
         entityId: offer.id,
         status: 'success',
@@ -182,6 +184,8 @@ export async function POST(request: NextRequest) {
         sourceReference: offer.id,
         metadata: {
             offerId: offer.id,
+            deliveryMode: result?.deliveryMode || null,
+            manualDeliveryRequired,
         },
     });
 

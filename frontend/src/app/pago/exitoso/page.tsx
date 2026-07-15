@@ -10,7 +10,7 @@
  * =============================================================================
  */
 
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createBrowserClient } from '@supabase/ssr';
 import { motion } from 'framer-motion';
@@ -21,6 +21,7 @@ import {
 import Link from 'next/link';
 import { DashboardLayout } from '@/components/layouts/DashboardLayout';
 import { getCityName } from '@/constants/colombia';
+import { getDeliveryPinMessage, getPickupPinMessage } from '@/lib/pins/messages';
 import type { FreightTripStatus } from '@/lib/payments/trip-state';
 
 interface OfferData {
@@ -40,6 +41,9 @@ interface OfferData {
     };
 }
 
+type PinEventSide = 'pickup' | 'delivery' | 'both';
+type PinEventName = 'pin_viewed' | 'pin_message_copied' | 'pin_copied';
+
 function PaymentSuccessPageContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -57,11 +61,31 @@ function PaymentSuccessPageContent() {
     const [tripStatus, setTripStatus] = useState<FreightTripStatus | null>(null);
     const [paymentSyncing, setPaymentSyncing] = useState(true);
     const [syncError, setSyncError] = useState<string | null>(null);
+    const [pinViewedRecorded, setPinViewedRecorded] = useState(false);
 
     const supabase = useMemo(() => createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     ), []);
+
+    const recordPinEvent = useCallback(async (event: PinEventName, side: PinEventSide) => {
+        if (!offerId) {
+            return;
+        }
+
+        await fetch('/api/payments/pin-events', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                offerId,
+                event,
+                side,
+                source: 'payment_success',
+            }),
+        }).catch(() => null);
+    }, [offerId]);
 
     const failureHref = useMemo(() => {
         if (!offerId) {
@@ -304,10 +328,11 @@ function PaymentSuccessPageContent() {
         };
     }, [offerId, supabase]);
 
-    const copyToClipboard = async (text: string, type: string) => {
+    const copyToClipboard = async (text: string, type: string, event: PinEventName, side: PinEventSide) => {
         try {
             await navigator.clipboard.writeText(text);
             setCopiedPin(type);
+            void recordPinEvent(event, side);
             setTimeout(() => setCopiedPin(null), 2000);
         } catch (err) {
             console.error('Failed to copy:', err);
@@ -325,6 +350,40 @@ function PaymentSuccessPageContent() {
             )
         )
         && !(offer?.pickup_pin && offer?.delivery_pin);
+
+    useEffect(() => {
+        if (!pinViewedRecorded && offer?.pickup_pin && offer.delivery_pin) {
+            setPinViewedRecorded(true);
+            void recordPinEvent('pin_viewed', 'both');
+        }
+    }, [offer?.delivery_pin, offer?.pickup_pin, pinViewedRecorded, recordPinEvent]);
+
+    const pickupPinMessage = offer?.pickup_pin ? getPickupPinMessage(offer.pickup_pin) : '';
+    const deliveryPinMessage = offer?.delivery_pin ? getDeliveryPinMessage(offer.delivery_pin) : '';
+    const pinCards = [
+        {
+            side: 'pickup' as const,
+            title: 'PIN de salida / cargue',
+            eyebrow: 'Origen',
+            pin: offer?.pickup_pin || '',
+            message: pickupPinMessage,
+            contact: offer?.pickup_contact_name,
+            instruction: 'Envia este mensaje al responsable de origen o bodega de salida para autorizar el cargue e iniciar el viaje.',
+            messageCopyKey: 'pickup-message',
+            pinCopyKey: 'pickup-pin',
+        },
+        {
+            side: 'delivery' as const,
+            title: 'PIN de entrega / descarga',
+            eyebrow: 'Destino',
+            pin: offer?.delivery_pin || '',
+            message: deliveryPinMessage,
+            contact: offer?.delivery_contact_name,
+            instruction: 'Envia este mensaje al receptor o bodega de destino para validar la entrega y cerrar la operacion.',
+            messageCopyKey: 'delivery-message',
+            pinCopyKey: 'delivery-pin',
+        },
+    ];
 
     if (loading) {
         return (
@@ -348,9 +407,9 @@ function PaymentSuccessPageContent() {
                     <div className="mb-4 inline-flex h-20 w-20 items-center justify-center rounded-lg bg-zinc-950 shadow-lg">
                         <CheckCircle2 className="h-10 w-10 text-white" />
                     </div>
-                    <h1 className="text-3xl font-bold text-slate-900 mb-2">¡Pago Exitoso!</h1>
+                    <h1 className="text-3xl font-bold text-slate-900 mb-2">Pago exitoso</h1>
                     <p className="text-slate-600">
-                        El camión ha sido asegurado para tu carga
+                        El camion ha sido asegurado para tu carga
                     </p>
                     {showSettlementBanner && (
                         <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700">
@@ -440,65 +499,59 @@ function PaymentSuccessPageContent() {
                                 <Shield className="h-5 w-5 text-zinc-700" />
                             </div>
                             <div>
-                                <h3 className="font-semibold text-slate-900">Códigos PIN de Verificación</h3>
+                                <h3 className="font-semibold text-slate-900">Codigos PIN de verificacion</h3>
                                 <p className="text-sm text-slate-500">
                                     {showSettlementBanner
                                         ? 'Estamos terminando de confirmar el pago con Mercado Pago y generando los PINs.'
-                                        : 'Los PINs han sido enviados por WhatsApp a los contactos. El camionero los necesitará.'}
+                                        : 'Copia cada mensaje y envialo al responsable correcto. El conductor solo debe recibir el codigo desde la persona verificada.'}
                                 </p>
                             </div>
                         </div>
 
                         <div className="grid gap-4 sm:grid-cols-2">
-                            {/* Pickup PIN */}
-                            <div className="rounded-lg bg-slate-50 p-4">
-                                <div className="flex items-center justify-between mb-2">
-                                    <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">PIN Recogida</span>
-                                    <button
-                                        onClick={() => offer?.pickup_pin && copyToClipboard(offer.pickup_pin, 'pickup')}
-                                        className="p-1.5 hover:bg-slate-200 rounded-lg transition-colors"
-                                    >
-                                        {copiedPin === 'pickup' ? (
-                                            <Check className="h-4 w-4 text-zinc-950" />
-                                        ) : (
-                                            <Copy className="w-4 h-4 text-slate-400" />
-                                        )}
-                                    </button>
-                                </div>
-                                <p className="font-money text-2xl font-bold tracking-widest text-zinc-950 min-[380px]:text-3xl">
-                                    {offer?.pickup_pin || '----'}
-                                </p>
-                                {offer?.pickup_contact_name && (
-                                    <p className="text-xs text-slate-500 mt-2">
-                                        Enviado a: {offer.pickup_contact_name}
+                            {pinCards.map((card) => (
+                                <div key={card.side} className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 shadow-sm">
+                                    <div className="mb-3 flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{card.eyebrow}</p>
+                                            <h4 className="mt-1 text-sm font-semibold text-zinc-950">{card.title}</h4>
+                                        </div>
+                                        <span className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-xs font-semibold text-zinc-700">
+                                            Manual
+                                        </span>
+                                    </div>
+                                    <p className="font-money text-3xl font-bold tracking-widest text-zinc-950">
+                                        {card.pin || '----'}
                                     </p>
-                                )}
-                            </div>
-
-                            {/* Delivery PIN */}
-                            <div className="rounded-lg bg-slate-50 p-4">
-                                <div className="flex items-center justify-between mb-2">
-                                    <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">PIN Entrega</span>
-                                    <button
-                                        onClick={() => offer?.delivery_pin && copyToClipboard(offer.delivery_pin, 'delivery')}
-                                        className="p-1.5 hover:bg-slate-200 rounded-lg transition-colors"
-                                    >
-                                        {copiedPin === 'delivery' ? (
-                                            <Check className="h-4 w-4 text-zinc-950" />
-                                        ) : (
-                                            <Copy className="w-4 h-4 text-slate-400" />
-                                        )}
-                                    </button>
+                                    {card.contact ? (
+                                        <p className="mt-2 text-xs text-zinc-500">Responsable: {card.contact}</p>
+                                    ) : null}
+                                    <p className="mt-3 text-sm leading-5 text-zinc-600">{card.instruction}</p>
+                                    <div className="mt-3 rounded-md border border-zinc-200 bg-white p-3 text-sm font-medium leading-5 text-zinc-800">
+                                        {card.message || 'Mensaje pendiente de generacion.'}
+                                    </div>
+                                    <div className="mt-4 grid gap-2 min-[420px]:grid-cols-[1fr_auto]">
+                                        <button
+                                            type="button"
+                                            disabled={!card.message}
+                                            onClick={() => copyToClipboard(card.message, card.messageCopyKey, 'pin_message_copied', card.side)}
+                                            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-zinc-950 px-3 py-2 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
+                                        >
+                                            {copiedPin === card.messageCopyKey ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                                            {copiedPin === card.messageCopyKey ? 'Mensaje copiado' : 'Copiar mensaje'}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            disabled={!card.pin}
+                                            onClick={() => copyToClipboard(card.pin, card.pinCopyKey, 'pin_copied', card.side)}
+                                            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-800 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                        >
+                                            {copiedPin === card.pinCopyKey ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                                            {copiedPin === card.pinCopyKey ? 'PIN copiado' : 'Copiar PIN'}
+                                        </button>
+                                    </div>
                                 </div>
-                                <p className="font-money text-2xl font-bold tracking-widest text-zinc-950 min-[380px]:text-3xl">
-                                    {offer?.delivery_pin || '----'}
-                                </p>
-                                {offer?.delivery_contact_name && (
-                                    <p className="text-xs text-slate-500 mt-2">
-                                        Enviado a: {offer.delivery_contact_name}
-                                    </p>
-                                )}
-                            </div>
+                            ))}
                         </div>
                     </div>
 
@@ -506,14 +559,14 @@ function PaymentSuccessPageContent() {
                     <div className="p-4 sm:p-6">
                         <h3 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
                             <Clock className="h-5 w-5 text-zinc-600" />
-                            Próximos Pasos
+                            Proximos pasos
                         </h3>
                         <div className="space-y-3">
                             {[
-                                'El camionero irá a recoger la carga en la fecha acordada',
-                                'El contacto en origen le dará el PIN de recogida',
+                                'El camionero ira a recoger la carga en la fecha acordada',
+                                'El contacto en origen dara el PIN de salida cuando el cargue este autorizado',
                                 'Al llegar a destino, entrega el PIN de entrega para liberar el pago',
-                                'Recibirás una notificación cuando el viaje esté completado',
+                                'Recibiras una notificacion cuando el viaje este completado',
                             ].map((step, index) => (
                                 <div key={index} className="flex items-start gap-3">
                                     <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-zinc-100 text-sm font-semibold text-zinc-700">

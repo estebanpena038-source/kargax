@@ -375,6 +375,7 @@ function getPaymentsReadinessSnapshot(options: { billingInfrastructureReady: boo
     const hasWebhookSecret = Boolean(process.env.MERCADOPAGO_WEBHOOK_SECRET);
     const hasInternalApiKey = Boolean(process.env.INTERNAL_API_KEY);
     const hasTwilioCredentials = notificationRuntime.twilioConfigured;
+    const manualPinDeliveryEnabled = notificationRuntime.manualPinDeliveryEnabled;
     const productionLikeUrl = Boolean(appUrl) && /^https:\/\//i.test(appUrl) && !/localhost/i.test(appUrl);
     const strictProduction = isStrictProductionEnvironment();
 
@@ -410,12 +411,16 @@ function getPaymentsReadinessSnapshot(options: { billingInfrastructureReady: boo
         warnings.push('La infraestructura de cobro de planes aun no esta lista en base de datos.');
     }
 
-    if (notificationRuntime.stagingEnvironment && notificationRuntime.configuredProvider === 'twilio') {
-        warnings.push('Staging tiene NOTIFICATION_PROVIDER=twilio, pero el runtime fuerza console para evitar SMS reales.');
+    if ((notificationRuntime.stagingEnvironment || strictProduction || productionLikeUrl) && notificationProvider === 'twilio') {
+        warnings.push('Twilio esta configurado, pero el modo fundador actual usa entrega manual de PIN.');
     }
 
     if ((strictProduction || productionLikeUrl) && notificationRuntime.requiresRealProvider && notificationProvider === 'console') {
-        warnings.push('Las notificaciones de PIN siguen en modo console y no en un proveedor real.');
+        warnings.push('Las notificaciones de PIN siguen en modo console. Usa NOTIFICATION_PROVIDER=manual para operar sin Twilio.');
+    }
+
+    if ((strictProduction || productionLikeUrl) && notificationProvider === 'manual' && !manualPinDeliveryEnabled) {
+        missingKeys.push('KARGAX_MANUAL_PIN_DELIVERY_ENABLED');
     }
 
     if (notificationProvider === 'twilio' && !hasTwilioCredentials) {
@@ -426,7 +431,9 @@ function getPaymentsReadinessSnapshot(options: { billingInfrastructureReady: boo
     const webhookCoreReady = hasWebhookSecret && hasServiceRole && productionLikeUrl;
     const notificationsReady = notificationProvider === 'twilio'
         ? hasTwilioCredentials && hasInternalApiKey
-        : !notificationRuntime.requiresRealProvider && notificationProvider === 'console';
+        : notificationProvider === 'manual'
+            ? manualPinDeliveryEnabled && hasInternalApiKey
+            : !notificationRuntime.requiresRealProvider && notificationProvider === 'console';
     const freightWebhookReady = checkoutReady && webhookCoreReady && notificationsReady;
     const billingWebhookReady = checkoutReady && webhookCoreReady && options.billingInfrastructureReady;
 

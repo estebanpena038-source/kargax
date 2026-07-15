@@ -498,58 +498,67 @@ function validateNotificationRuntime(appUrl, strictProduction) {
   const configuredProvider = (process.env.NOTIFICATION_PROVIDER || 'console').trim().toLowerCase();
   const stagingRuntime = process.env.VERCEL_ENV === 'preview' || isStagingAppUrl(appUrl);
   const productionHost = isProductionAppUrl(appUrl);
+  const productionRuntime = strictProduction || productionHost;
+  const manualPinDeliveryEnabled = process.env.KARGAX_MANUAL_PIN_DELIVERY_ENABLED === 'true';
+  const hasEnvValue = (name) => Boolean(process.env[name]?.trim());
   const hasTwilioEnv = Boolean(
-    process.env.TWILIO_ACCOUNT_SID
-    || process.env.TWILIO_AUTH_TOKEN
-    || process.env.TWILIO_PHONE_NUMBER
-    || process.env.TWILIO_MESSAGING_SERVICE_SID
+    hasEnvValue('TWILIO_ACCOUNT_SID')
+    || hasEnvValue('TWILIO_AUTH_TOKEN')
+    || hasEnvValue('TWILIO_PHONE_NUMBER')
+    || hasEnvValue('TWILIO_MESSAGING_SERVICE_SID')
   );
   const twilioConfigured = Boolean(
-    process.env.TWILIO_ACCOUNT_SID
-    && process.env.TWILIO_AUTH_TOKEN
-    && (process.env.TWILIO_PHONE_NUMBER || process.env.TWILIO_MESSAGING_SERVICE_SID)
+    hasEnvValue('TWILIO_ACCOUNT_SID')
+    && hasEnvValue('TWILIO_AUTH_TOKEN')
+    && (hasEnvValue('TWILIO_PHONE_NUMBER') || hasEnvValue('TWILIO_MESSAGING_SERVICE_SID'))
   );
 
-  if (stagingRuntime) {
+  if (stagingRuntime || productionRuntime) {
     if (configuredProvider === 'twilio' || hasTwilioEnv) {
       return fail('notifications-runtime', {
         appUrl: normalizeUrlOrigin(appUrl) || appUrl || null,
         configuredProvider,
-        effectiveProvider: 'console',
+        effectiveProvider: configuredProvider,
         stagingRuntime,
-        reason: 'Staging must not be configured with Twilio credentials or provider.',
+        productionHost,
+        strictProduction,
+        twilioEnvPresent: hasTwilioEnv,
+        reason: 'Production and staging must not be configured with Twilio provider or TWILIO_* variables while manual PIN delivery is active.',
+      });
+    }
+
+    if (configuredProvider !== 'manual') {
+      return fail('notifications-runtime', {
+        appUrl: normalizeUrlOrigin(appUrl) || appUrl || null,
+        configuredProvider,
+        productionHost,
+        strictProduction,
+        stagingRuntime,
+        reason: 'Production and staging must use NOTIFICATION_PROVIDER=manual for founder-mode PIN delivery.',
+      });
+    }
+
+    if (!manualPinDeliveryEnabled) {
+      return fail('notifications-runtime', {
+        appUrl: normalizeUrlOrigin(appUrl) || appUrl || null,
+        configuredProvider,
+        productionHost,
+        strictProduction,
+        stagingRuntime,
+        reason: 'KARGAX_MANUAL_PIN_DELIVERY_ENABLED=true is required for manual PIN delivery.',
       });
     }
 
     return pass('notifications-runtime', {
       appUrl: normalizeUrlOrigin(appUrl) || appUrl || null,
       configuredProvider,
-      effectiveProvider: 'console',
+      effectiveProvider: 'manual',
       stagingRuntime,
+      productionHost,
       realSmsEnabled: false,
+      manualPinDeliveryEnabled,
+      twilioEnvPresent: false,
     });
-  }
-
-  if (strictProduction || productionHost) {
-    if (configuredProvider !== 'twilio') {
-      return fail('notifications-runtime', {
-        appUrl: normalizeUrlOrigin(appUrl) || appUrl || null,
-        configuredProvider,
-        productionHost,
-        strictProduction,
-        reason: 'Production must use NOTIFICATION_PROVIDER=twilio.',
-      });
-    }
-
-    if (!twilioConfigured) {
-      return fail('notifications-runtime', {
-        appUrl: normalizeUrlOrigin(appUrl) || appUrl || null,
-        configuredProvider,
-        productionHost,
-        strictProduction,
-        reason: 'Production Twilio credentials or sender are incomplete.',
-      });
-    }
   }
 
   return pass('notifications-runtime', {
@@ -558,7 +567,9 @@ function validateNotificationRuntime(appUrl, strictProduction) {
     effectiveProvider: configuredProvider,
     stagingRuntime,
     productionHost,
-    realSmsEnabled: configuredProvider === 'twilio',
+    realSmsEnabled: configuredProvider === 'twilio' && twilioConfigured,
+    manualPinDeliveryEnabled,
+    twilioEnvPresent: hasTwilioEnv,
   });
 }
 

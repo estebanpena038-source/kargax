@@ -84,7 +84,20 @@ export function getConfiguredNotificationProvider() {
 }
 
 function hasTwilioSender() {
-    return Boolean(process.env.TWILIO_PHONE_NUMBER || process.env.TWILIO_MESSAGING_SERVICE_SID);
+    return Boolean(process.env.TWILIO_PHONE_NUMBER?.trim() || process.env.TWILIO_MESSAGING_SERVICE_SID?.trim());
+}
+
+export function hasTwilioEnvironmentVariables() {
+    return Boolean(
+        process.env.TWILIO_ACCOUNT_SID?.trim()
+        || process.env.TWILIO_AUTH_TOKEN?.trim()
+        || process.env.TWILIO_PHONE_NUMBER?.trim()
+        || process.env.TWILIO_MESSAGING_SERVICE_SID?.trim()
+    );
+}
+
+export function isManualPinDeliveryEnabled() {
+    return process.env.KARGAX_MANUAL_PIN_DELIVERY_ENABLED === 'true';
 }
 
 export function getNotificationRuntimeSnapshot(options: RuntimeHostOptions = {}) {
@@ -93,10 +106,12 @@ export function getNotificationRuntimeSnapshot(options: RuntimeHostOptions = {})
     const stagingEnvironment = isKargaxStagingEnvironment(options);
     const productionHost = isKargaxProductionHost(options);
     const configuredProvider = getConfiguredNotificationProvider();
-    const effectiveProvider = stagingEnvironment ? 'console' : configuredProvider;
+    const effectiveProvider = configuredProvider;
+    const manualPinDeliveryEnabled = isManualPinDeliveryEnabled();
+    const twilioEnvPresent = hasTwilioEnvironmentVariables();
     const twilioConfigured = Boolean(
-        process.env.TWILIO_ACCOUNT_SID &&
-        process.env.TWILIO_AUTH_TOKEN &&
+        process.env.TWILIO_ACCOUNT_SID?.trim() &&
+        process.env.TWILIO_AUTH_TOKEN?.trim() &&
         hasTwilioSender()
     );
     const requiresRealProvider = !stagingEnvironment && (strictProduction || productionHost);
@@ -109,10 +124,12 @@ export function getNotificationRuntimeSnapshot(options: RuntimeHostOptions = {})
         configuredProvider,
         effectiveProvider,
         requiresRealProvider,
-        realSmsEnabled: effectiveProvider === 'twilio' && !stagingEnvironment,
+        realSmsEnabled: effectiveProvider === 'twilio',
+        manualPinDeliveryEnabled,
+        twilioEnvPresent,
         twilioConfigured,
-        hasMessagingServiceSid: Boolean(process.env.TWILIO_MESSAGING_SERVICE_SID),
-        hasFromNumber: Boolean(process.env.TWILIO_PHONE_NUMBER),
+        hasMessagingServiceSid: Boolean(process.env.TWILIO_MESSAGING_SERVICE_SID?.trim()),
+        hasFromNumber: Boolean(process.env.TWILIO_PHONE_NUMBER?.trim()),
     };
 }
 
@@ -156,7 +173,16 @@ export function getPaymentRuntimeConfig(options: PaymentRuntimeConfigOptions = {
         }
 
         if (options.requireNotificationProvider && notificationRuntime.requiresRealProvider && notificationProvider === 'console') {
-            throw new Error('NOTIFICATION_PROVIDER must use a real delivery provider in production');
+            throw new Error('NOTIFICATION_PROVIDER must use manual or twilio in production');
+        }
+
+        if (
+            options.requireNotificationProvider
+            && notificationRuntime.requiresRealProvider
+            && notificationProvider === 'manual'
+            && !notificationRuntime.manualPinDeliveryEnabled
+        ) {
+            missingVariables.push('KARGAX_MANUAL_PIN_DELIVERY_ENABLED');
         }
 
         if (options.requireTwilio && notificationRuntime.requiresRealProvider && notificationProvider !== 'twilio') {

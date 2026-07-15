@@ -81,7 +81,6 @@ async function resendPins(
     const { baseUrl } = getPaymentRuntimeConfig({
         requireInternalApiKey: true,
         requireNotificationProvider: true,
-        requireTwilio: true,
     });
 
     const response = await fetch(`${baseUrl}/api/notifications/send-pin`, {

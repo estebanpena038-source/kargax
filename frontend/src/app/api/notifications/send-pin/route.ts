@@ -3,11 +3,12 @@
  * KARGAX - PIN NOTIFICATION SERVICE
  * /api/notifications/send-pin/route.ts
  *
- * Provider-agnostic SMS/WhatsApp notification service for sending PINs
+ * Provider-agnostic notification service for preparing or sending PINs
  * to pickup and delivery contacts after successful payment.
  *
  * Supported providers (set NOTIFICATION_PROVIDER env var):
  * - 'console' (default): Logs to console for development
+ * - 'manual': Returns the exact copy for manual delivery by the business
  * - 'twilio': Uses Twilio SMS API (requires TWILIO_* env vars)
  *
  * =============================================================================
@@ -23,6 +24,9 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getPickupPinMessage, getDeliveryPinMessage } from '@/lib/pins/messages';
+import { getRequestId } from '@/lib/server/api-response';
+import { recordOperationEvent } from '@/lib/server/operations';
 import { getNotificationRuntimeSnapshot, isNonStrictProductionEnvironment } from '@/lib/server/runtime-env';
 import { normalizePhoneForNotification, type AndeanCountryCode } from '@/lib/phone/andean';
 import { requireInternalApiKeyRoute } from '@/lib/server/route-auth';
@@ -47,6 +51,10 @@ interface NotificationResult {
     success: boolean;
     pickupSent: boolean;
     deliverySent: boolean;
+    deliveryMode: string;
+    manualDeliveryRequired: boolean;
+    pickupMessage?: string;
+    deliveryMessage?: string;
     errors?: string[];
 }
 
@@ -59,7 +67,7 @@ interface NotificationResult {
  * This allows easy switching between SMS, WhatsApp, etc.
  */
 interface NotificationProvider {
-    sendSMS(to: string, message: string, countryCode?: AndeanCountryCode): Promise<{ success: boolean; error?: string; sid?: string }>;
+    sendSMS(to: string, message: string, countryCode?: AndeanCountryCode): Promise<{ success: boolean; error?: string; sid?: string; manualDeliveryRequired?: boolean }>;
 }
 
 /**
@@ -70,11 +78,20 @@ class ConsoleNotificationProvider implements NotificationProvider {
         if (isNonStrictProductionEnvironment()) {
             console.log('[PIN Notification][dev]', {
                 toLast4: to.slice(-4),
-                message,
+                message: message.replace(/\b\d{4,6}\b/g, '****'),
             });
         }
 
         return { success: true };
+    }
+}
+
+class ManualNotificationProvider implements NotificationProvider {
+    async sendSMS(): Promise<{ success: boolean; manualDeliveryRequired: boolean }> {
+        return {
+            success: true,
+            manualDeliveryRequired: true,
+        };
     }
 }
 
@@ -201,12 +218,18 @@ function getNotificationProvider(runtime: NotificationRuntimeSnapshot): Notifica
     const provider = runtime.effectiveProvider;
 
     if (runtime.requiresRealProvider && provider === 'console') {
-        throw new Error('NOTIFICATION_PROVIDER must be configured with a real provider in production');
+        throw new Error('NOTIFICATION_PROVIDER must be configured as manual or twilio in production');
+    }
+
+    if (provider === 'manual' && !runtime.manualPinDeliveryEnabled) {
+        throw new Error('KARGAX_MANUAL_PIN_DELIVERY_ENABLED=true is required for manual PIN delivery');
     }
 
     switch (provider) {
         case 'twilio':
             return new TwilioNotificationProvider();
+        case 'manual':
+            return new ManualNotificationProvider();
         case 'console':
             return new ConsoleNotificationProvider();
         default:
@@ -220,30 +243,12 @@ function maskPhoneForLog(value: string) {
 }
 
 // =============================================================================
-// MESSAGE TEMPLATES
-// =============================================================================
-
-/**
- * Message templates following best practices for transactional SMS:
- * - Clear sender identification
- * - Concise and actionable
- * - PIN highlighted
- * - No sensitive details exposed
- */
-
-function getPickupMessage(pin: string): string {
-    return `KargaX: tu PIN de SALIDA es ${pin}. Entregalo solo al conductor verificado.`;
-}
-
-function getDeliveryMessage(pin: string): string {
-    return `KargaX: tu PIN de ENTREGA es ${pin}. Entregalo solo al conductor verificado.`;
-}
-
-// =============================================================================
 // API ROUTE HANDLER
 // =============================================================================
 
 export async function POST(request: NextRequest) {
+    const requestId = getRequestId(request);
+
     // =========================================================================
     // AUTHENTICATION
     // For internal webhook calls, we use a shared secret
@@ -320,12 +325,15 @@ export async function POST(request: NextRequest) {
     const errors: string[] = [];
 
     const countryCode = body.countryCode || 'CO';
+    const pickupMessage = getPickupPinMessage(body.pickupPin);
+    const deliveryMessage = getDeliveryPinMessage(body.deliveryPin);
+    const manualDeliveryRequired = notificationRuntime.effectiveProvider === 'manual';
 
     // Send pickup notification
-    console.log(`[PIN Notification] Sending pickup PIN to ${maskPhoneForLog(body.pickupContactPhone)}`);
+    console.log(`[PIN Notification] ${manualDeliveryRequired ? 'Preparing manual pickup PIN for' : 'Sending pickup PIN to'} ${maskPhoneForLog(body.pickupContactPhone)}`);
     const pickupResult = await provider.sendSMS(
         body.pickupContactPhone,
-        getPickupMessage(body.pickupPin),
+        pickupMessage,
         countryCode
     );
 
@@ -334,10 +342,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Send delivery notification
-    console.log(`[PIN Notification] Sending delivery PIN to ${maskPhoneForLog(body.deliveryContactPhone)}`);
+    console.log(`[PIN Notification] ${manualDeliveryRequired ? 'Preparing manual delivery PIN for' : 'Sending delivery PIN to'} ${maskPhoneForLog(body.deliveryContactPhone)}`);
     const deliveryResult = await provider.sendSMS(
         body.deliveryContactPhone,
-        getDeliveryMessage(body.deliveryPin),
+        deliveryMessage,
         countryCode
     );
 
@@ -348,6 +356,8 @@ export async function POST(request: NextRequest) {
     // =========================================================================
     // LOG TO DATABASE (for audit trail)
     // =========================================================================
+
+    const notificationSuccess = pickupResult.success && deliveryResult.success;
 
     try {
         const logSupabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -361,12 +371,15 @@ export async function POST(request: NextRequest) {
             // Log notification attempt (don't store actual PINs)
             await supabase.from('admin_notifications').insert({
                 type: 'pin_notification',
-                title: 'PIN Notifications Sent',
-                message: `PINs enviados para oferta ${body.offerId.substring(0, 8)}`,
+                title: manualDeliveryRequired ? 'PINs listos para entrega manual' : 'PIN Notifications Sent',
+                message: manualDeliveryRequired
+                    ? `PINs preparados para oferta ${body.offerId.substring(0, 8)}.`
+                    : `PINs enviados para oferta ${body.offerId.substring(0, 8)}`,
                 data: {
                     offer_id: body.offerId,
                     pickup_sent: pickupResult.success,
                     delivery_sent: deliveryResult.success,
+                    manual_delivery_required: manualDeliveryRequired,
                     pickup_phone_last4: body.pickupContactPhone.slice(-4),
                     delivery_phone_last4: body.deliveryContactPhone.slice(-4),
                     country_code: countryCode,
@@ -376,6 +389,26 @@ export async function POST(request: NextRequest) {
                     runtime_hostname: notificationRuntime.hostname,
                     pickup_sid: pickupResult.sid,
                     delivery_sid: deliveryResult.sid,
+                    errors: errors.length > 0 ? errors : undefined,
+                },
+            });
+
+            await recordOperationEvent(supabase, {
+                requestId,
+                actorType: 'system',
+                domain: 'payments',
+                action: manualDeliveryRequired ? 'pin_manual_prepared' : 'pin_notification_sent',
+                entityType: 'cargo_offer',
+                entityId: body.offerId,
+                countryCode,
+                status: notificationSuccess ? 'success' : 'warning',
+                metadata: {
+                    provider: notificationRuntime.effectiveProvider,
+                    configured_provider: notificationRuntime.configuredProvider,
+                    manual_delivery_required: manualDeliveryRequired,
+                    real_sms_enabled: notificationRuntime.realSmsEnabled,
+                    pickup_phone_last4: body.pickupContactPhone.slice(-4),
+                    delivery_phone_last4: body.deliveryContactPhone.slice(-4),
                     errors: errors.length > 0 ? errors : undefined,
                 },
             });
@@ -390,9 +423,13 @@ export async function POST(request: NextRequest) {
     // =========================================================================
 
     const result: NotificationResult = {
-        success: pickupResult.success && deliveryResult.success,
+        success: notificationSuccess,
         pickupSent: pickupResult.success,
         deliverySent: deliveryResult.success,
+        deliveryMode: notificationRuntime.effectiveProvider,
+        manualDeliveryRequired,
+        pickupMessage: manualDeliveryRequired ? pickupMessage : undefined,
+        deliveryMessage: manualDeliveryRequired ? deliveryMessage : undefined,
         errors: errors.length > 0 ? errors : undefined,
     };
 
@@ -414,11 +451,15 @@ export async function GET(request: NextRequest) {
         provider: notificationRuntime.effectiveProvider,
         configuredProvider: notificationRuntime.configuredProvider,
         productionReady: !notificationRuntime.requiresRealProvider
-            || (notificationRuntime.effectiveProvider === 'twilio' && notificationRuntime.twilioConfigured),
+            || (notificationRuntime.effectiveProvider === 'twilio' && notificationRuntime.twilioConfigured)
+            || (notificationRuntime.effectiveProvider === 'manual' && notificationRuntime.manualPinDeliveryEnabled),
+        manualDeliveryRequired: notificationRuntime.effectiveProvider === 'manual',
+        manualPinDeliveryEnabled: notificationRuntime.manualPinDeliveryEnabled,
         realSmsEnabled: notificationRuntime.realSmsEnabled,
         stagingEnvironment: notificationRuntime.stagingEnvironment,
         productionHost: notificationRuntime.productionHost,
         runtimeHostname: notificationRuntime.hostname,
+        twilioEnvPresent: notificationRuntime.twilioEnvPresent,
         twilioConfigured: notificationRuntime.twilioConfigured,
         hasMessagingServiceSid: notificationRuntime.hasMessagingServiceSid,
         hasFromNumber: notificationRuntime.hasFromNumber,

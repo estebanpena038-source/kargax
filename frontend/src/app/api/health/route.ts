@@ -4,6 +4,7 @@ import { getSupabaseAdmin } from '@/lib/server/route-auth';
 import { getReliabilitySnapshot } from '@/lib/server/operations';
 import {
     getConfiguredAppUrl,
+    getNotificationRuntimeSnapshot,
     isKargaxProductionHost,
     isKargaxStagingEnvironment,
     isLocalAppUrl,
@@ -98,6 +99,7 @@ export async function GET(request: NextRequest) {
         const appUrl = getConfiguredAppUrl();
         const appUrlLocalInStrictProduction = isStrictProductionEnvironment() && isLocalAppUrl(appUrl);
         const dbTarget = getDbTargetSnapshot(appUrl);
+        const notificationRuntime = getNotificationRuntimeSnapshot({ requestUrl: appUrl });
         const { data: buckets, error: bucketsError } = await supabaseAdmin.storage.listBuckets();
         const bucketIds = new Set((buckets || []).map((bucket: { id?: string | null }) => bucket.id).filter(Boolean));
         const missingBuckets = REQUIRED_STORAGE_BUCKETS.filter((bucketId) => !bucketIds.has(bucketId));
@@ -142,6 +144,14 @@ export async function GET(request: NextRequest) {
                 upstash_configured: upstashConfigured,
                 payment_webhook_signature_configured: paymentWebhookConfigured,
                 payout_automatic_enabled: snapshot.flags.some((flag) => flag.key === 'automatic_payouts_enabled' && flag.enabled),
+            },
+            notifications: {
+                provider: notificationRuntime.effectiveProvider,
+                configured_provider: notificationRuntime.configuredProvider,
+                manual_pin_delivery_enabled: notificationRuntime.manualPinDeliveryEnabled,
+                real_sms_enabled: notificationRuntime.realSmsEnabled,
+                twilio_env_present: notificationRuntime.twilioEnvPresent,
+                twilio_configured: notificationRuntime.twilioConfigured,
             },
             degraded_flags: degradedFlags.map((flag) => flag.key),
             integrations: snapshot.integrations,
