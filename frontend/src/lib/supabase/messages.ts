@@ -59,10 +59,8 @@ export const supabaseMessages = {
         offerId?: string
     ): Promise<MessageResult<string>> {
         try {
-            // Ordenar IDs para consistencia
             const [p1, p2] = [userId1, userId2].sort();
 
-            // Buscar conversación existente
             const { data: existing } = await (supabase.from('conversations' as any) as any)
                 .select('id')
                 .eq('participant1_id', p1)
@@ -75,7 +73,6 @@ export const supabaseMessages = {
                 return { success: true, data: existingConversation.id };
             }
 
-            // Crear nueva conversación
             const { data: newConv, error } = await (supabase.from('conversations' as any) as any)
                 .insert({
                     participant1_id: p1,
@@ -86,7 +83,6 @@ export const supabaseMessages = {
                 .single();
 
             if (error) {
-                // Puede ser race condition, intentar buscar otra vez
                 if (error.code === '23505') {
                     const { data: retry } = await (supabase.from('conversations' as any) as any)
                         .select('id')
@@ -136,14 +132,8 @@ export const supabaseMessages = {
             }
             const userId = userData.user.id;
 
-            // Obtener conversaciones donde el usuario es participante
             const { data, error } = await (supabase.from('conversations' as any) as any)
-                .select(`
-                    *,
-                    participant1:participant1_id (id, raw_user_meta_data),
-                    participant2:participant2_id (id, raw_user_meta_data),
-                    offer:offer_id (cargo_description)
-                `)
+                .select('*')
                 .or(`participant1_id.eq.${userId},participant2_id.eq.${userId}`)
                 .order('last_message_at', { ascending: false, nullsFirst: false });
 
@@ -152,19 +142,17 @@ export const supabaseMessages = {
                 return { success: false, error: error.message };
             }
 
-            // Mapear resultados
             const conversations = (data || []).map((c: any) => {
                 const isP1 = c.participant1_id === userId;
-                const otherUser = isP1 ? c.participant2 : c.participant1;
 
                 return {
                     id: c.id,
-                    otherParticipantName: otherUser?.raw_user_meta_data?.full_name || 'Usuario',
-                    otherParticipantEmail: otherUser?.raw_user_meta_data?.email || '',
-                    lastMessagePreview: c.last_message_preview,
-                    lastMessageAt: c.last_message_at,
-                    unreadCount: isP1 ? c.unread_count_1 : c.unread_count_2,
-                    offerTitle: c.offer?.cargo_description?.substring(0, 50) || null,
+                    otherParticipantName: c.title || 'Usuario',
+                    otherParticipantEmail: '',
+                    lastMessagePreview: c.last_message_preview || null,
+                    lastMessageAt: c.last_message_at || c.created_at,
+                    unreadCount: isP1 ? (c.unread_count_1 || 0) : (c.unread_count_2 || 0),
+                    offerTitle: c.title || null,
                 };
             });
 
@@ -190,12 +178,8 @@ export const supabaseMessages = {
             const limit = params?.limit || 50;
             const offset = (page - 1) * limit;
 
-            // Obtener mensajes
             const { data, error, count } = await (supabase.from('messages' as any) as any)
-                .select(`
-                    *,
-                    sender:sender_id (raw_user_meta_data)
-                `, { count: 'exact' })
+                .select('*', { count: 'exact' })
                 .eq('conversation_id', conversationId)
                 .order('created_at', { ascending: true })
                 .range(offset, offset + limit - 1);
@@ -207,7 +191,7 @@ export const supabaseMessages = {
 
             const messages = (data || []).map((m: any) => ({
                 ...m,
-                senderName: m.sender?.raw_user_meta_data?.full_name || 'Usuario',
+                senderName: m.sender_name || 'Usuario',
             }));
 
             return {
@@ -242,7 +226,6 @@ export const supabaseMessages = {
             }
             const senderId = userData.user.id;
 
-            // Obtener o crear conversación
             const convResult = await supabaseMessages.getOrCreateConversation(
                 senderId,
                 data.recipientId,
@@ -255,7 +238,6 @@ export const supabaseMessages = {
 
             const conversationId = convResult.data;
 
-            // Insertar mensaje
             const { data: message, error } = await (supabase.from('messages' as any) as any)
                 .insert({
                     conversation_id: conversationId,
