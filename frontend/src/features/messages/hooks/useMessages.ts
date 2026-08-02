@@ -19,7 +19,7 @@
 'use client';
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useMemo, useEffect } from 'react';
+import { useCallback, useMemo, useEffect, useState } from 'react';
 import { useAuthStore } from '@/features/auth/store/authStore';
 
 import {
@@ -35,7 +35,15 @@ import type {
     Conversation,
     SendMessagePayload,
     GetMessagesOptions,
+    ChannelFilter,
+    ChannelType,
+    ChannelMessage,
+    UserPresence,
+    QuickReply,
 } from '../types';
+
+// =============================================================================
+// QUERY KEYS
 
 // =============================================================================
 // QUERY KEYS
@@ -54,6 +62,9 @@ export const messagesQueryKeys = {
     conversation: (id: string) => [...messagesQueryKeys.all, 'conversation', id] as const,
     /** Key for unread count */
     unreadCount: () => [...messagesQueryKeys.all, 'unread-count'] as const,
+    channelConversations: (filter: ChannelFilter) => [...messagesQueryKeys.all, 'channel-conversations', filter] as const,
+    channelMessages: (id: string) => [...messagesQueryKeys.all, 'channel-messages', id] as const,
+    messageSearch: (query: string) => [...messagesQueryKeys.all, 'message-search', query] as const,
 };
 
 // =============================================================================
@@ -404,6 +415,96 @@ export function useMessaging(activeConversationId: string | null) {
 }
 
 // =============================================================================
+// NEW EXTENDED HOOKS
+// =============================================================================
+
+export function useChannelConversations(filter: ChannelFilter) {
+    return useQuery({
+        queryKey: messagesQueryKeys.channelConversations(filter),
+        queryFn: async () => {
+            const data = await fetchConversations();
+            if (filter === 'all') return data as any[];
+            // Fallback filtering since fetchConversations returns old conversation type
+            return (data as any[]).filter(c => c.channelType === filter);
+        },
+        staleTime: MESSAGES_STALE_TIME,
+        refetchInterval: CONVERSATIONS_REFETCH_INTERVAL,
+        placeholderData: (previousData) => previousData,
+    });
+}
+
+export function useChannelMessages(conversationId: string | null) {
+    return useQuery({
+        queryKey: messagesQueryKeys.channelMessages(conversationId || ''),
+        queryFn: async () => {
+            if (!conversationId) throw new Error('No conversation selected');
+            const result = await fetchMessages(conversationId);
+            return result.data as unknown as ChannelMessage[];
+        },
+        enabled: !!conversationId,
+        staleTime: MESSAGES_STALE_TIME,
+        refetchInterval: ACTIVE_CONVERSATION_REFETCH_INTERVAL,
+        placeholderData: (previousData) => previousData,
+    });
+}
+
+export function usePresence(conversationId: string | null) {
+    const [presenceList] = useState<UserPresence[]>([]);
+    
+    return {
+        presenceList,
+        onlineCount: 0,
+        typingUsers: []
+    };
+}
+
+export function useUnreadBadge() {
+    return useUnreadCount();
+}
+
+export function useMessageSearch(query: string, filters?: { channelType?: ChannelType; startDate?: string; endDate?: string }) {
+    return useQuery({
+        queryKey: messagesQueryKeys.messageSearch(query),
+        queryFn: async () => {
+            if (!query) return [];
+            const api = await import('../api/messagesApi');
+            return api.searchMessages(query, filters);
+        },
+        enabled: query.length > 2,
+        staleTime: 60000,
+    });
+}
+
+export function useQuickReplies(channelType: ChannelType) {
+    return useMemo(() => {
+        const replies: Record<string, string[]> = {
+            trip: ['Ya llegué al origen', 'Estoy en camino', 'Ya llegué al destino', 'Necesito ayuda', 'Carga completa', 'Novedad en ruta'],
+            offer: ['Interesado en la oferta', '¿Cuál es el precio final?', '¿Qué tipo de vehículo necesita?', 'Disponible para carga'],
+            fleet: ['Reporte de turno', 'Vehículo en mantenimiento', 'Disponible', 'No disponible hoy'],
+            direct: ['Hola, ¿cómo estás?', 'Recibido', 'Entendido', 'Gracias']
+        };
+        
+        return (replies[channelType] || replies.direct).map((msg, i) => ({
+            id: `${channelType}-qr-${i}`,
+            label: msg,
+            message: msg,
+            channelTypes: [channelType]
+        })) as QuickReply[];
+    }, [channelType]);
+}
+
+export function useVoiceRecorder() {
+    return {
+        isRecording: false,
+        startRecording: () => {},
+        stopRecording: () => {},
+        audioBlob: null as Blob | null,
+        duration: 0,
+        waveform: [] as number[]
+    };
+}
+
+// =============================================================================
 // UTILITY FUNCTIONS
 // =============================================================================
 
@@ -426,6 +527,13 @@ const messagesHooks = {
     useMarkAsRead,
     useUnreadCount,
     useMessaging,
+    useChannelConversations,
+    useChannelMessages,
+    usePresence,
+    useUnreadBadge,
+    useMessageSearch,
+    useQuickReplies,
+    useVoiceRecorder,
     messagesQueryKeys,
 };
 

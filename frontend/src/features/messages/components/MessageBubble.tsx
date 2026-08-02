@@ -23,12 +23,19 @@ import {
     Download,
     Clock,
     AlertCircle,
+    Reply,
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { useTranslation } from '@/lib/i18n';
 
 import type { Message, MessageStatus, MessageType } from '../types';
+import { SystemMessageBubble } from './SystemMessageBubble';
+import { LocationMessage } from './LocationMessage';
+import { EvidenceMessage } from './EvidenceMessage';
+import { VoiceMessage } from './VoiceMessage';
+import { ReplyPreview } from './ReplyPreview';
+import { MessageReactions } from './MessageReactions';
 
 // =============================================================================
 // TYPES
@@ -36,11 +43,14 @@ import type { Message, MessageStatus, MessageType } from '../types';
 
 interface MessageBubbleProps {
     /** The message to display */
-    message: Message;
+    message: any;
     /** Whether this message was sent by the current user */
     isMine: boolean;
     /** Whether to show the sender name (for group chats, future feature) */
     showSenderName?: boolean;
+    onReply?: (message: any) => void;
+    onReact?: (messageId: string, emoji: string) => void;
+    currentUserId?: string;
 }
 
 // =============================================================================
@@ -144,19 +154,6 @@ function FileAttachment({
     );
 }
 
-/**
- * System message display (e.g., "Offer accepted").
- */
-function SystemMessage({ content }: { content: string }) {
-    return (
-        <div className="flex justify-center my-4">
-            <div className="px-4 py-1.5 bg-zinc-100 text-zinc-500 text-xs rounded-full">
-                {content}
-            </div>
-        </div>
-    );
-}
-
 // =============================================================================
 // MAIN COMPONENT
 // =============================================================================
@@ -182,12 +179,17 @@ export function MessageBubble({
     message,
     isMine,
     showSenderName = false,
+    onReply,
+    onReact,
+    currentUserId,
 }: MessageBubbleProps) {
     const { locale } = useTranslation();
 
+    const mType = message.expandedType || message.messageType;
+
     // System messages have special rendering
-    if (message.messageType === 'system') {
-        return <SystemMessage content={message.content} />;
+    if (mType === 'system' || mType === 'status_update') {
+        return <SystemMessageBubble content={message.content} timestamp={message.createdAt || message.timestamp || new Date().toISOString()} />;
     }
 
     return (
@@ -196,10 +198,26 @@ export function MessageBubble({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             transition={{ duration: 0.2 }}
             className={cn(
-                'flex',
+                'flex group relative w-full',
                 isMine ? 'justify-end' : 'justify-start'
             )}
         >
+            {/* Reply action button on hover */}
+            {onReply && (
+                <div className={cn(
+                    "absolute top-2 opacity-0 group-hover:opacity-100 transition-opacity z-10",
+                    isMine ? "-left-10" : "-right-10"
+                )}>
+                    <button
+                        onClick={() => onReply(message)}
+                        className="p-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-500 rounded-full transition-colors"
+                        aria-label="Responder"
+                    >
+                        <Reply className="w-4 h-4" />
+                    </button>
+                </div>
+            )}
+
             <div className={cn(
                 'max-w-[92%] sm:max-w-[82%] lg:max-w-[70%]',
                 isMine ? 'order-2' : 'order-1'
@@ -210,6 +228,13 @@ export function MessageBubble({
                         {message.senderName}
                     </p>
                 )}
+                
+                {/* Reply Preview inline */}
+                {message.replyTo && (
+                    <div className="mb-1">
+                        <ReplyPreview replyContext={message.replyTo} variant="inline" />
+                    </div>
+                )}
 
                 {/* Message Bubble */}
                 <div
@@ -217,23 +242,22 @@ export function MessageBubble({
                         'rounded-lg px-3 py-2.5 shadow-sm sm:px-4',
                         isMine
                             ? 'bg-zinc-950 text-white rounded-br-sm'
-                            : 'bg-white border border-zinc-200 text-zinc-950 rounded-bl-sm'
+                            : 'bg-white border border-zinc-200 text-zinc-900 rounded-bl-sm'
                     )}
                 >
-                    {/* Content */}
-                    {message.messageType === 'file' && message.attachmentUrl && message.attachmentName ? (
-                        <FileAttachment
-                            fileName={message.attachmentName}
-                            fileUrl={message.attachmentUrl}
-                            isMine={isMine}
-                        />
-                    ) : message.messageType === 'image' && message.attachmentUrl ? (
-                        <div className="rounded-lg overflow-hidden mb-2">
+                    {/* Content by Type */}
+                    {mType === 'location' && message.metadata?.location ? (
+                        <LocationMessage location={message.metadata.location} isMine={isMine} />
+                    ) : mType === 'evidence' && message.metadata?.evidence ? (
+                        <EvidenceMessage evidence={message.metadata.evidence} isMine={isMine} />
+                    ) : mType === 'audio' && message.metadata?.audio ? (
+                        <VoiceMessage audio={message.metadata.audio} isMine={isMine} />
+                    ) : mType === 'image' && message.imageUrl ? (
+                        <div className="mb-2 -mx-1 -mt-1">
                             <img
-                                src={message.attachmentUrl}
-                                alt={message.attachmentName || 'Imagen'}
-                                className="max-w-full h-auto"
-                                loading="lazy"
+                                src={message.imageUrl}
+                                alt={message.content || 'Imagen'}
+                                className="rounded-lg max-w-full h-auto"
                             />
                         </div>
                     ) : (
@@ -242,17 +266,34 @@ export function MessageBubble({
                         </p>
                     )}
 
-                    {/* Timestamp and Status */}
+                    {/* Timestamp */}
                     <div className={cn(
-                        'flex items-center justify-end gap-1 mt-1',
-                        isMine ? 'text-white/70' : 'text-zinc-400'
+                        'flex items-center gap-1 mt-1',
+                        isMine ? 'justify-end' : 'justify-start'
                     )}>
-                        <span className="text-xs">
-                            {formatTime(message.createdAt, locale)}
-                        </span>
-                        {getStatusIcon(message.status, isMine)}
+                        <time className={cn(
+                            'text-[11px]',
+                            isMine ? 'text-zinc-400' : 'text-zinc-400'
+                        )}>
+                            {new Date(message.createdAt || message.timestamp || '').toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}
+                        </time>
+                        {message.editedAt && (
+                            <span className={cn('text-[10px]', isMine ? 'text-zinc-400' : 'text-zinc-400')}>
+                                (editado)
+                            </span>
+                        )}
                     </div>
                 </div>
+
+                {/* Reactions */}
+                {onReact && message.reactions && message.reactions.length > 0 && (
+                    <MessageReactions
+                        reactions={message.reactions}
+                        onReact={(emoji) => onReact(message.id, emoji)}
+                        onRemoveReaction={(emoji) => onReact(message.id, emoji)}
+                        currentUserId={currentUserId || ''}
+                    />
+                )}
             </div>
         </motion.div>
     );

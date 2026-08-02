@@ -38,7 +38,8 @@ import { cn } from '@/lib/utils';
 import { useTranslation } from '@/lib/i18n';
 import { Button, Input } from '@/components/ui';
 
-import type { Conversation, ConversationPriority } from '../types';
+import type { Conversation, ConversationPriority, ChannelFilter, ChannelType } from '../types';
+import { PresenceIndicator } from './PresenceIndicator';
 
 // =============================================================================
 // TYPES
@@ -46,7 +47,7 @@ import type { Conversation, ConversationPriority } from '../types';
 
 interface ConversationsListProps {
     /** Array of conversations to display */
-    conversations: Conversation[];
+    conversations: any[]; // Using any to support both Conversation and ChannelConversation
     /** Currently selected conversation ID */
     activeConversationId: string | null;
     /** Handler for when a conversation is selected */
@@ -59,6 +60,10 @@ interface ConversationsListProps {
     isLoading?: boolean;
     /** Handler for creating new conversation */
     onNewConversation?: () => void;
+    /** Current channel filter */
+    channelFilter?: ChannelFilter;
+    /** Handler for channel filter change */
+    onChannelFilterChange?: (filter: ChannelFilter) => void;
 }
 
 // =============================================================================
@@ -135,7 +140,7 @@ const ConversationItem = React.memo(function ConversationItem({
     onClick,
     locale,
 }: {
-    conversation: Conversation;
+    conversation: any;
     isActive: boolean;
     onClick: () => void;
     locale: string;
@@ -147,7 +152,7 @@ const ConversationItem = React.memo(function ConversationItem({
         const name = conversation.otherParticipantName || 'U';
         return name
             .split(' ')
-            .map((n) => n[0])
+            .map((n: string) => n[0])
             .join('')
             .slice(0, 2)
             .toUpperCase();
@@ -161,7 +166,7 @@ const ConversationItem = React.memo(function ConversationItem({
             exit={{ opacity: 0, y: -10 }}
             onClick={onClick}
             className={cn(
-                'cursor-pointer p-3 transition-all duration-200 sm:p-4',
+                'cursor-pointer p-3 transition-all duration-200 sm:p-4 relative overflow-hidden group',
                 'hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950/20',
                 isActive && 'bg-zinc-950 text-white'
             )}
@@ -170,7 +175,12 @@ const ConversationItem = React.memo(function ConversationItem({
             onKeyDown={(e) => e.key === 'Enter' && onClick()}
             aria-label={t('messages.selectConversation') || `Conversacion con ${conversation.otherParticipantName}`}
         >
-            <div className="flex min-w-0 items-start gap-3">
+            {/* Swipe to archive hint (visual only) */}
+            <div className="absolute inset-y-0 right-0 w-16 bg-red-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-0 translate-x-full transition-all" aria-hidden="true">
+                {/* Visual hint container, implementation of gesture would be here */}
+            </div>
+
+            <div className="flex min-w-0 items-start gap-3 relative z-10">
                 {/* Avatar Section */}
                 <div className="relative flex-shrink-0">
                     <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-zinc-950 sm:h-12 sm:w-12">
@@ -189,7 +199,11 @@ const ConversationItem = React.memo(function ConversationItem({
                     </div>
 
                     {/* Online Indicator */}
-                    {conversation.isOnline && (
+                    {conversation.channelType === 'direct' ? (
+                        <div className="absolute -bottom-0.5 -right-0.5">
+                            <PresenceIndicator status={conversation.isOnline ? 'online' : 'offline'} size="sm" />
+                        </div>
+                    ) : conversation.isOnline && (
                         <div
                             className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-zinc-950 border-2 border-white rounded-full"
                             aria-label={t('messages.online') || 'En linea'}
@@ -202,6 +216,11 @@ const ConversationItem = React.memo(function ConversationItem({
                     {/* Header Row */}
                     <div className="mb-1 flex items-start justify-between gap-2">
                         <div className="flex items-center gap-2 min-w-0">
+                            {conversation.channelType && conversation.channelType !== 'direct' && (
+                                <span className="text-xs">
+                                    {conversation.channelType === 'trip' ? '🚛' : conversation.channelType === 'offer' ? '📦' : conversation.channelType === 'fleet' ? '👥' : '🛟'}
+                                </span>
+                            )}
                             <h3 className={cn('font-semibold truncate', isActive ? 'text-white' : 'text-zinc-950')}>
                                 {conversation.otherParticipantName || t('messages.unknownUser') || 'Usuario'}
                             </h3>
@@ -226,9 +245,9 @@ const ConversationItem = React.memo(function ConversationItem({
                         </div>
                     </div>
 
-                    {/* Company/Email */}
+                    {/* Company/Email/Entity ID */}
                     <p className={cn('text-sm truncate mb-1', isActive ? 'text-white/70' : 'text-zinc-500')}>
-                        {conversation.company || conversation.otherParticipantEmail}
+                        {conversation.entityId ? `Ref: ${conversation.entityId}` : conversation.company || conversation.otherParticipantEmail}
                     </p>
 
                     {/* Last Message Preview */}
@@ -352,10 +371,20 @@ export function ConversationsList({
     isMobile = false,
     isLoading = false,
     onNewConversation,
+    channelFilter = 'all',
+    onChannelFilterChange,
 }: ConversationsListProps) {
     const { t, locale } = useTranslation();
     const [searchTerm, setSearchTerm] = React.useState('');
     const [debouncedSearchTerm, setDebouncedSearchTerm] = React.useState('');
+
+    const tabs = [
+        { id: 'all', label: 'Todos' },
+        { id: 'trip', label: '🚛 Viajes' },
+        { id: 'offer', label: '📦 Ofertas' },
+        { id: 'fleet', label: '👥 Flota' },
+        { id: 'support', label: '🛟 Soporte' },
+    ];
 
     // =========================================================================
     // Search Debounce
@@ -372,19 +401,26 @@ export function ConversationsList({
     // Filtered Conversations
     // =========================================================================
     const filteredConversations = React.useMemo(() => {
+        let filtered = conversations;
+
+        if (channelFilter !== 'all') {
+            filtered = filtered.filter(c => c.channelType === channelFilter);
+        }
+
         if (!debouncedSearchTerm.trim()) {
-            return conversations;
+            return filtered;
         }
 
         const term = debouncedSearchTerm.toLowerCase();
-        return conversations.filter(
+        return filtered.filter(
             (conv) =>
                 conv.otherParticipantName?.toLowerCase().includes(term) ||
                 conv.company?.toLowerCase().includes(term) ||
                 conv.lastMessagePreview?.toLowerCase().includes(term) ||
-                conv.otherParticipantEmail?.toLowerCase().includes(term)
+                conv.otherParticipantEmail?.toLowerCase().includes(term) ||
+                conv.entityId?.toLowerCase().includes(term)
         );
-    }, [conversations, debouncedSearchTerm]);
+    }, [conversations, debouncedSearchTerm, channelFilter]);
 
     // =========================================================================
     // Total Unread Count
@@ -433,26 +469,25 @@ export function ConversationsList({
                     {/* New Conversation Button */}
                     {onNewConversation && (
                         <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={onNewConversation}
-                        aria-label={t('messages.newConversation') || 'Nueva conversacion'}
-                    >
-                        <Plus className="w-5 h-5" />
+                            variant="ghost"
+                            size="icon"
+                            onClick={onNewConversation}
+                            aria-label={t('messages.newConversation') || 'Nueva conversacion'}
+                        >
+                            <Plus className="w-5 h-5" />
                         </Button>
                     )}
                 </div>
 
-                {/* Search Input */}
+                {/* Search Bar */}
                 <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-                    <Input
+                    <input
                         type="search"
                         placeholder={t('messages.searchPlaceholder') || 'Buscar conversaciones...'}
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-10"
-                        size="sm"
+                        className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2 pl-10 pr-4 text-sm placeholder:text-zinc-400 focus:border-zinc-950 focus:outline-none focus:ring-1 focus:ring-zinc-950"
                     />
                 </div>
             </div>

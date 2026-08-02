@@ -23,6 +23,8 @@ import {
     MoreVertical,
     MessageSquare,
     Package,
+    PanelRightClose,
+    PanelRightOpen,
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
@@ -31,8 +33,10 @@ import { Button } from '@/components/ui';
 
 import { MessageBubble } from './MessageBubble';
 import { MessageInput } from './MessageInput';
+import { ChannelHeader } from './ChannelHeader';
+import { usePresence, useQuickReplies } from '../hooks/useMessages';
 
-import type { Conversation, Message } from '../types';
+import type { Conversation, Message, ReplyContext, ConversationParticipant, ChannelType } from '../types';
 
 // =============================================================================
 // TYPES
@@ -55,6 +59,12 @@ interface ChatAreaProps {
     isSending?: boolean;
     /** Current user ID for determining message ownership */
     currentUserId?: string;
+    /** Toggle info panel */
+    onToggleInfoPanel?: () => void;
+    /** Show info panel */
+    showInfoPanel?: boolean;
+    /** Participants list */
+    participants?: ConversationParticipant[];
 }
 
 // =============================================================================
@@ -296,10 +306,21 @@ export function ChatArea({
     isLoading = false,
     isSending = false,
     currentUserId,
+    onToggleInfoPanel,
+    showInfoPanel,
+    participants = [],
 }: ChatAreaProps) {
     const { t } = useTranslation();
     const messagesEndRef = React.useRef<HTMLDivElement>(null);
     const messagesContainerRef = React.useRef<HTMLDivElement>(null);
+    const [replyingTo, setReplyingTo] = React.useState<ReplyContext | null>(null);
+
+    const { typingUsers } = usePresence(conversation?.id || null);
+    
+    // Type assertion to support channelType
+    const conv = conversation as any;
+    const channelType: ChannelType = conv?.channelType || 'direct';
+    const quickReplies = useQuickReplies(channelType);
 
     // =========================================================================
     // Auto-scroll to bottom on new messages
@@ -317,17 +338,45 @@ export function ChatArea({
         return <EmptyConversation />;
     }
 
+    const handleSendMessage = (text: string) => {
+        onSendMessage(text);
+        setReplyingTo(null);
+    };
+
+    const handleReply = (message: any) => {
+        setReplyingTo({
+            messageId: message.id,
+            content: message.content,
+            senderName: message.senderName || 'Usuario',
+            messageType: message.expandedType || message.messageType || 'text'
+        });
+    };
+
+    const handleReact = (messageId: string, emoji: string) => {
+        // Handle reaction logic
+        console.log('Reacting to', messageId, 'with', emoji);
+    };
+
     // =========================================================================
     // Render
     // =========================================================================
     return (
         <div className="flex h-full min-w-0 flex-1 flex-col bg-zinc-50/30">
             {/* Header */}
-            <ChatHeader
-                conversation={conversation}
-                onBackToList={onBackToList}
-                isMobile={isMobile}
-            />
+            {channelType !== 'direct' ? (
+                <ChannelHeader 
+                    conversation={conversation as any}
+                    onBack={isMobile ? onBackToList : undefined}
+                    onToggleInfo={onToggleInfoPanel}
+                    isMobile={isMobile}
+                />
+            ) : (
+                <ChatHeader
+                    conversation={conversation}
+                    onBackToList={onBackToList}
+                    isMobile={isMobile}
+                />
+            )}
 
             {/* Messages Area */}
             <div
@@ -357,13 +406,17 @@ export function ChatArea({
                                 key={message.id}
                                 message={message}
                                 isMine={message.isMine || message.senderId === currentUserId}
+                                onReply={handleReply}
+                                onReact={handleReact}
+                                currentUserId={currentUserId}
+                                showSenderName={channelType !== 'direct'}
                             />
                         ))}
                     </AnimatePresence>
                 )}
 
                 {/* Typing Indicator */}
-                {conversation.isTyping && <TypingIndicator />}
+                {(conversation.isTyping || typingUsers.length > 0) && <TypingIndicator />}
 
                 {/* Scroll anchor */}
                 <div ref={messagesEndRef} />
@@ -371,8 +424,12 @@ export function ChatArea({
 
             {/* Message Input */}
             <MessageInput
-                onSendMessage={onSendMessage}
+                onSendMessage={handleSendMessage}
                 isSending={isSending}
+                replyingTo={replyingTo}
+                onCancelReply={() => setReplyingTo(null)}
+                channelType={channelType}
+                quickReplies={quickReplies}
             />
         </div>
     );

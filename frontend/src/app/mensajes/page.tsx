@@ -15,9 +15,10 @@ import {
     ChatArea,
     ConversationsList,
     MessageNotifications,
+    ChannelSidebar
 } from '@/features/messages/components';
 import { useMessaging } from '@/features/messages/hooks';
-import type { MessageNotification } from '@/features/messages/types';
+import type { MessageNotification, ChannelFilter } from '@/features/messages/types';
 import { useTranslation } from '@/lib/i18n';
 
 const MOBILE_BREAKPOINT = 1024;
@@ -57,6 +58,10 @@ function MensajesPageContent() {
     const [activeConversationId, setActiveConversationId] = React.useState<string | null>(null);
     const [showConversationList, setShowConversationList] = React.useState(true);
     const [notifications, setNotifications] = React.useState<MessageNotification[]>([]);
+    
+    // New states for channels
+    const [channelFilter, setChannelFilter] = React.useState<ChannelFilter>('all');
+    const [showInfoPanel, setShowInfoPanel] = React.useState(false);
 
     const {
         conversations,
@@ -72,6 +77,12 @@ function MensajesPageContent() {
 
     React.useEffect(() => {
         const conversationId = searchParams?.get('c');
+        const channel = searchParams?.get('channel');
+        
+        if (channel) {
+            setChannelFilter(channel as ChannelFilter);
+        }
+        
         if (conversationId && conversationId !== activeConversationId) {
             setActiveConversationId(conversationId);
             if (isMobile) {
@@ -170,6 +181,8 @@ function MensajesPageContent() {
                                     onConversationSelect={handleConversationSelect}
                                     isMobile
                                     isLoading={isLoadingConversations}
+                                    channelFilter={channelFilter}
+                                    onChannelFilterChange={setChannelFilter}
                                 />
                             </motion.div>
                         ) : (
@@ -189,29 +202,56 @@ function MensajesPageContent() {
                                     isMobile
                                     isLoading={isLoadingMessages}
                                     isSending={isSending}
+                                    onToggleInfoPanel={() => setShowInfoPanel(!showInfoPanel)}
+                                    showInfoPanel={showInfoPanel}
                                 />
                             </motion.div>
                         )}
                     </AnimatePresence>
                 ) : (
                     <>
-                        <div className="h-full w-72 flex-shrink-0 border-r border-zinc-200 xl:w-96">
+                        <div className="h-full w-80 flex-shrink-0 border-r border-zinc-200">
                             <ConversationsList
                                 conversations={conversations}
                                 activeConversationId={activeConversationId}
                                 onConversationSelect={handleConversationSelect}
                                 isLoading={isLoadingConversations}
+                                channelFilter={channelFilter}
+                                onChannelFilterChange={setChannelFilter}
                             />
                         </div>
 
-                        <div className="h-full min-w-0 flex-1">
-                            <ChatArea
-                                conversation={activeConversation}
-                                messages={messages}
-                                onSendMessage={handleSendMessage}
-                                isLoading={isLoadingMessages}
-                                isSending={isSending}
-                            />
+                        <div className="h-full min-w-0 flex-1 relative flex">
+                            <div className="h-full min-w-0 flex-1">
+                                <ChatArea
+                                    conversation={activeConversation}
+                                    messages={messages}
+                                    onSendMessage={handleSendMessage}
+                                    isLoading={isLoadingMessages}
+                                    isSending={isSending}
+                                    onToggleInfoPanel={() => setShowInfoPanel(!showInfoPanel)}
+                                    showInfoPanel={showInfoPanel}
+                                />
+                            </div>
+                            
+                            <AnimatePresence>
+                                {showInfoPanel && activeConversation && (
+                                    <motion.div 
+                                        initial={{ width: 0, opacity: 0 }}
+                                        animate={{ width: 320, opacity: 1 }}
+                                        exit={{ width: 0, opacity: 0 }}
+                                        className="h-full border-l border-zinc-200 bg-white overflow-hidden flex-shrink-0"
+                                    >
+                                        <ChannelSidebar 
+                                            conversation={activeConversation as any}
+                                            participants={(activeConversation as any).participants || []}
+                                            presenceMap={new Map()}
+                                            isOpen={showInfoPanel}
+                                            onClose={() => setShowInfoPanel(false)}
+                                        />
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
                         </div>
                     </>
                 )}
