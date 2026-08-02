@@ -399,16 +399,37 @@ function buildTimeline(
 
     if (offer) {
         const assignmentStatus = asString(offer.private_fleet_assignment_status);
+        const pickupVerifiedAt = asString(offer.pickup_verified_at);
+        const pickupPin = asString(offer.pickup_pin);
+        const deliveryVerifiedAt = asString(offer.delivery_verified_at);
+        const deliveryPin = asString(offer.delivery_pin);
+
         events.push(
             timelineEvent('trip-created', 'assignment', 'Viaje enlazado', 'offer', asString(offer.created_at), asString(offer.id)),
             timelineEvent('trip-accepted', 'assignment', 'Conductor acepto viaje', 'offer', asString(offer.private_fleet_confirmed_at), getTimelineDetailLabel(assignmentStatus)),
             timelineEvent('arrival-origin', 'origin', 'Llegada a origen', 'offer', asString(offer.arrived_at_origin_at), null),
             timelineEvent('loading-started', 'loading', 'Carga iniciada', 'offer', asString(offer.loading_started_at), null),
-            timelineEvent('pickup-pin', 'pickup_pin', 'PIN salida verificado', 'offer', asString(offer.pickup_verified_at), null),
+            timelineEvent(
+                'pickup-pin',
+                'pickup_pin',
+                pickupVerifiedAt ? 'PIN salida verificado' : (pickupPin ? 'PIN salida registrado' : 'PIN salida pendiente'),
+                'offer',
+                pickupVerifiedAt || (pickupPin ? asString(offer.created_at) : null),
+                pickupVerifiedAt ? 'PIN de salida verificado en origen (OK)' : (pickupPin ? `PIN Salida: ${pickupPin}` : 'Pendiente'),
+                pickupVerifiedAt ? 'complete' : (pickupPin ? 'complete' : 'pending')
+            ),
             timelineEvent('tracking-started', 'tracking', 'Tracking activo', 'tracking', trackingSessions.length ? asString(trackingSessions[0]?.started_at) : null, `${trackingSessions.length} sesiones`),
             timelineEvent('arrival-destination', 'destination', 'Llegada a destino', 'offer', asString(offer.arrived_at_destination_at), null),
             timelineEvent('unloading-started', 'delivery', 'Entrega iniciada', 'offer', asString(offer.unloading_started_at), null),
-            timelineEvent('delivery-pin', 'delivery_pin', 'PIN entrega verificado', 'offer', asString(offer.delivery_verified_at), null),
+            timelineEvent(
+                'delivery-pin',
+                'delivery_pin',
+                deliveryVerifiedAt ? 'PIN entrega verificado' : (deliveryPin ? 'PIN entrega registrado' : 'PIN entrega pendiente'),
+                'offer',
+                deliveryVerifiedAt || (deliveryPin ? asString(offer.created_at) : null),
+                deliveryVerifiedAt ? 'PIN de entrega verificado en destino (OK)' : (deliveryPin ? `PIN Entrega: ${deliveryPin}` : 'Pendiente'),
+                deliveryVerifiedAt ? 'complete' : (deliveryPin ? 'complete' : 'pending')
+            )
         );
 
         if (asString(offer.private_fleet_rejected_at) || assignmentStatus === 'rejected') {
