@@ -20,6 +20,7 @@ import {
     Users,
     Warehouse,
     TrendingDown,
+    MessageSquare,
 } from 'lucide-react';
 import type { NavItem, SidebarNavCounts, SidebarSectionKey, SidebarSectionMeta, SidebarUserType } from './types';
 
@@ -83,7 +84,19 @@ export function getNavigationItems(
             section: 'command',
             description: 'Resumen ejecutivo de tu operacion.',
             priority: 'primary',
-            allowedUserTypes: ['trucker', 'business', 'admin'],
+            allowedUserTypes: ['trucker', 'business', 'admin', 'staff'],
+        },
+        {
+            id: 'messages',
+            labelKey: 'nav.messages',
+            fallbackLabel: 'Mensajes',
+            icon: MessageSquare,
+            href: '/mensajes',
+            section: 'command',
+            badge: counts?.unreadMessages || undefined,
+            description: 'Canales de comunicación directa, viajes y flota.',
+            priority: 'primary',
+            allowedUserTypes: ['trucker', 'business', 'admin', 'staff'],
         },
         {
             id: 'warehouses',

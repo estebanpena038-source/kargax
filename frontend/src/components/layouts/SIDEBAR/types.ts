@@ -32,6 +32,7 @@ export interface SidebarNavCounts {
     applications: number;
     applicationUpdates: number;
     acceptedJobs: number;
+    unreadMessages?: number;
 }
 
 export interface SidebarSectionMeta {
