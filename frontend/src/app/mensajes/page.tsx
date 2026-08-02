@@ -15,11 +15,13 @@ import {
     ChatArea,
     ConversationsList,
     MessageNotifications,
-    ChannelSidebar
+    ChannelSidebar,
+    NewConversationModal
 } from '@/features/messages/components';
 import { useMessaging } from '@/features/messages/hooks';
 import type { MessageNotification, ChannelFilter } from '@/features/messages/types';
 import { useTranslation } from '@/lib/i18n';
+import { createEntityChannel } from '@/features/messages/api/messagesApi';
 
 const MOBILE_BREAKPOINT = 1024;
 
@@ -59,9 +61,10 @@ function MensajesPageContent() {
     const [showConversationList, setShowConversationList] = React.useState(true);
     const [notifications, setNotifications] = React.useState<MessageNotification[]>([]);
     
-    // New states for channels
+    // New states for channels & modals
     const [channelFilter, setChannelFilter] = React.useState<ChannelFilter>('all');
     const [showInfoPanel, setShowInfoPanel] = React.useState(false);
+    const [isNewModalOpen, setIsNewModalOpen] = React.useState(false);
 
     const {
         conversations,
@@ -73,6 +76,7 @@ function MensajesPageContent() {
         sendMessage,
         isSending,
         sendError,
+        refetchConversations
     } = useMessaging(activeConversationId);
 
     React.useEffect(() => {
@@ -128,6 +132,40 @@ function MensajesPageContent() {
         }
     }, [sendMessage, t]);
 
+    const handleSelectContact = React.useCallback(async (contact: {
+        type: 'user' | 'trip' | 'fleet';
+        id: string;
+        name: string;
+        offerId?: string;
+    }) => {
+        try {
+            if (contact.type === 'trip' && contact.offerId) {
+                const channelId = await createEntityChannel({
+                    channelType: 'trip',
+                    entityType: 'trip',
+                    entityId: contact.offerId,
+                    title: contact.name,
+                });
+                if (channelId) {
+                    await refetchConversations();
+                    handleConversationSelect(channelId);
+                    return;
+                }
+            }
+
+            // Fallback: check if existing conversation exists or set ID directly
+            const existing = conversations.find(c => c.id === contact.id || c.offerId === contact.offerId);
+            if (existing) {
+                handleConversationSelect(existing.id);
+            } else {
+                handleConversationSelect(contact.id);
+            }
+        } catch (err: any) {
+            console.error('[MensajesPage] Error selecting contact:', err);
+            handleConversationSelect(contact.id);
+        }
+    }, [conversations, refetchConversations, handleConversationSelect]);
+
     const handleNotificationDismiss = React.useCallback((id: string) => {
         setNotifications((previousNotifications) =>
             previousNotifications.filter((notification) => notification.id !== id)
@@ -181,6 +219,7 @@ function MensajesPageContent() {
                                     onConversationSelect={handleConversationSelect}
                                     isMobile
                                     isLoading={isLoadingConversations}
+                                    onNewConversation={() => setIsNewModalOpen(true)}
                                     channelFilter={channelFilter}
                                     onChannelFilterChange={setChannelFilter}
                                 />
@@ -216,6 +255,7 @@ function MensajesPageContent() {
                                 activeConversationId={activeConversationId}
                                 onConversationSelect={handleConversationSelect}
                                 isLoading={isLoadingConversations}
+                                onNewConversation={() => setIsNewModalOpen(true)}
                                 channelFilter={channelFilter}
                                 onChannelFilterChange={setChannelFilter}
                             />
@@ -256,6 +296,12 @@ function MensajesPageContent() {
                     </>
                 )}
             </div>
+
+            <NewConversationModal
+                isOpen={isNewModalOpen}
+                onClose={() => setIsNewModalOpen(false)}
+                onSelectContact={handleSelectContact}
+            />
 
             <MessageNotifications
                 notifications={notifications}

@@ -212,7 +212,7 @@ export interface CreateChannelPayload {
     entityType?: string;
     entityId?: string;
     title?: string;
-    participantIds: string[];
+    participantIds?: string[];
 }
 
 export type ChannelFilter = 'all' | ChannelType;

@@ -490,6 +490,24 @@ export function ConversationsList({
                         className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2 pl-10 pr-4 text-sm placeholder:text-zinc-400 focus:border-zinc-950 focus:outline-none focus:ring-1 focus:ring-zinc-950"
                     />
                 </div>
+
+                {/* Channel Filter Tabs */}
+                <div className="mt-3 flex gap-1 overflow-x-auto pb-0.5 scrollbar-none">
+                    {tabs.map((tab) => (
+                        <button
+                            key={tab.id}
+                            onClick={() => onChannelFilterChange?.(tab.id as ChannelFilter)}
+                            className={cn(
+                                "whitespace-nowrap px-2.5 py-1 text-xs font-semibold rounded-md transition-colors",
+                                channelFilter === tab.id
+                                    ? "bg-zinc-950 text-white"
+                                    : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 text-zinc-900"
+                            )}
+                        >
+                            {tab.label}
+                        </button>
+                    ))}
+                </div>
             </div>
 
             {/* Conversations List */}

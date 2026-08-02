@@ -21,3 +21,4 @@ export { QuickReplies } from './QuickReplies';
 export { TripChatButton } from './TripChatButton';
 export { FleetChatColumn } from './FleetChatColumn';
 export { TrackingChatOverlay } from './TrackingChatOverlay';
+export { NewConversationModal } from './NewConversationModal';
