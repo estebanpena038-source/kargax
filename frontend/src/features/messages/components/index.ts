@@ -21,4 +21,7 @@ export { QuickReplies } from './QuickReplies';
 export { TripChatButton } from './TripChatButton';
 export { FleetChatColumn } from './FleetChatColumn';
 export { TrackingChatOverlay } from './TrackingChatOverlay';
+export { SlackSidebar } from './SlackSidebar';
+export { JoinOrgModal } from './JoinOrgModal';
 export { NewConversationModal } from './NewConversationModal';
+

@@ -32,6 +32,10 @@ import {
     Clock,
     Package,
     Check,
+    Truck,
+    Users,
+    LifeBuoy,
+    Hash,
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
@@ -217,8 +221,16 @@ const ConversationItem = React.memo(function ConversationItem({
                     <div className="mb-1 flex items-start justify-between gap-2">
                         <div className="flex items-center gap-2 min-w-0">
                             {conversation.channelType && conversation.channelType !== 'direct' && (
-                                <span className="text-xs">
-                                    {conversation.channelType === 'trip' ? '🚛' : conversation.channelType === 'offer' ? '📦' : conversation.channelType === 'fleet' ? '👥' : '🛟'}
+                                <span className="text-zinc-400">
+                                    {conversation.channelType === 'trip' ? (
+                                        <Truck className="w-3.5 h-3.5 text-amber-500" />
+                                    ) : conversation.channelType === 'offer' ? (
+                                        <Package className="w-3.5 h-3.5 text-zinc-500" />
+                                    ) : conversation.channelType === 'fleet' ? (
+                                        <Users className="w-3.5 h-3.5 text-zinc-500" />
+                                    ) : (
+                                        <LifeBuoy className="w-3.5 h-3.5 text-red-500" />
+                                    )}
                                 </span>
                             )}
                             <h3 className={cn('font-semibold truncate', isActive ? 'text-white' : 'text-zinc-950')}>
@@ -380,10 +392,10 @@ export function ConversationsList({
 
     const tabs = [
         { id: 'all', label: 'Todos' },
-        { id: 'trip', label: '🚛 Viajes' },
-        { id: 'offer', label: '📦 Ofertas' },
-        { id: 'fleet', label: '👥 Flota' },
-        { id: 'support', label: '🛟 Soporte' },
+        { id: 'trip', label: 'Viajes' },
+        { id: 'offer', label: 'Ofertas' },
+        { id: 'fleet', label: 'Flota' },
+        { id: 'support', label: 'Soporte' },
     ];
 
     // =========================================================================

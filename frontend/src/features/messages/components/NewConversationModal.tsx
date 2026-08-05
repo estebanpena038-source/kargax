@@ -298,7 +298,7 @@ export function NewConversationModal({
                                         <button
                                             key={trip.id}
                                             onClick={() => {
-                                                onSelectContact({ type: 'trip', id: trip.id, name: `🚛 ${trip.origin_city} → ${trip.destination_city}`, offerId: trip.id });
+                                                onSelectContact({ type: 'trip', id: trip.id, name: `#viaje-${trip.origin_city.toLowerCase()}-${trip.destination_city.toLowerCase()}`, offerId: trip.id });
                                                 onClose();
                                             }}
                                             className="w-full flex items-center justify-between p-3 rounded-lg border border-zinc-200 hover:border-zinc-950 hover:bg-zinc-50 transition-all text-left group"

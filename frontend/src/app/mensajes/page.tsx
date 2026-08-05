@@ -13,13 +13,14 @@ import { DashboardLayout } from '@/components/layouts/DashboardLayout';
 import { toast } from '@/components/ui';
 import {
     ChatArea,
-    ConversationsList,
+    SlackSidebar,
     MessageNotifications,
     ChannelSidebar,
-    NewConversationModal
+    NewConversationModal,
+    JoinOrgModal
 } from '@/features/messages/components';
 import { useMessaging } from '@/features/messages/hooks';
-import type { MessageNotification, ChannelFilter } from '@/features/messages/types';
+import type { MessageNotification } from '@/features/messages/types';
 import { useTranslation } from '@/lib/i18n';
 import { createEntityChannel } from '@/features/messages/api/messagesApi';
 
@@ -61,10 +62,9 @@ function MensajesPageContent() {
     const [showConversationList, setShowConversationList] = React.useState(true);
     const [notifications, setNotifications] = React.useState<MessageNotification[]>([]);
     
-    // New states for channels & modals
-    const [channelFilter, setChannelFilter] = React.useState<ChannelFilter>('all');
     const [showInfoPanel, setShowInfoPanel] = React.useState(false);
     const [isNewModalOpen, setIsNewModalOpen] = React.useState(false);
+    const [isJoinOrgModalOpen, setIsJoinOrgModalOpen] = React.useState(false);
 
     const {
         conversations,
@@ -81,11 +81,6 @@ function MensajesPageContent() {
 
     React.useEffect(() => {
         const conversationId = searchParams?.get('c');
-        const channel = searchParams?.get('channel');
-        
-        if (channel) {
-            setChannelFilter(channel as ChannelFilter);
-        }
         
         if (conversationId && conversationId !== activeConversationId) {
             setActiveConversationId(conversationId);
@@ -95,7 +90,30 @@ function MensajesPageContent() {
         }
     }, [searchParams, activeConversationId, isMobile]);
 
-    const handleConversationSelect = React.useCallback((conversationId: string) => {
+    const handleConversationSelect = React.useCallback(async (conversationId: string) => {
+        // If it's a virtual default channel (e.g. default-general), create/ensure it
+        if (conversationId.startsWith('default-')) {
+            const title = conversationId.replace('default-', '#');
+            try {
+                const channelId = await createEntityChannel({
+                    channelType: title === '#alertas' ? 'system' : 'fleet',
+                    entityType: title === '#alertas' ? 'support' : 'fleet',
+                    title: title,
+                });
+                if (channelId) {
+                    await refetchConversations();
+                    setActiveConversationId(channelId);
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('c', channelId);
+                    router.replace(url.pathname + url.search, { scroll: false });
+                    if (isMobile) setShowConversationList(false);
+                    return;
+                }
+            } catch (e) {
+                console.error('[MensajesPage] Error ensuring default channel:', e);
+            }
+        }
+
         setActiveConversationId(conversationId);
 
         const url = new URL(window.location.href);
@@ -105,7 +123,7 @@ function MensajesPageContent() {
         if (isMobile) {
             setShowConversationList(false);
         }
-    }, [isMobile, router]);
+    }, [isMobile, router, refetchConversations]);
 
     const handleBackToList = React.useCallback(() => {
         setShowConversationList(true);
@@ -153,7 +171,6 @@ function MensajesPageContent() {
                 }
             }
 
-            // Fallback: check if existing conversation exists or set ID directly
             const existing = conversations.find(c => c.id === contact.id || c.offerId === contact.offerId);
             if (existing) {
                 handleConversationSelect(existing.id);
@@ -201,7 +218,7 @@ function MensajesPageContent() {
             pageTitle={t('messages.pageTitle') || 'Mensajes'}
             showHeader={false}
         >
-            <div className="flex h-[calc(100dvh-6rem)] min-h-[34rem] overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-[0_18px_44px_-38px_rgba(10,10,10,.55)] sm:h-[calc(100dvh-7rem)] lg:h-[calc(100dvh-3rem)]">
+            <div className="flex h-[calc(100dvh-6rem)] min-h-[34rem] overflow-hidden rounded-2xl border border-zinc-200/90 bg-white shadow-xl dark:border-zinc-800 dark:bg-zinc-950 sm:h-[calc(100dvh-7rem)] lg:h-[calc(100dvh-3rem)]">
                 {isMobile ? (
                     <AnimatePresence mode="wait" initial={false}>
                         {showConversationList ? (
@@ -213,15 +230,14 @@ function MensajesPageContent() {
                                 transition={{ duration: 0.2 }}
                                 className="h-full min-w-0 w-full"
                             >
-                                <ConversationsList
+                                <SlackSidebar
                                     conversations={conversations}
                                     activeConversationId={activeConversationId}
                                     onConversationSelect={handleConversationSelect}
                                     isMobile
                                     isLoading={isLoadingConversations}
                                     onNewConversation={() => setIsNewModalOpen(true)}
-                                    channelFilter={channelFilter}
-                                    onChannelFilterChange={setChannelFilter}
+                                    onOpenJoinOrgModal={() => setIsJoinOrgModalOpen(true)}
                                 />
                             </motion.div>
                         ) : (
@@ -249,19 +265,18 @@ function MensajesPageContent() {
                     </AnimatePresence>
                 ) : (
                     <>
-                        <div className="h-full w-80 flex-shrink-0 border-r border-zinc-200">
-                            <ConversationsList
+                        <div className="h-full w-72 lg:w-80 flex-shrink-0 border-r border-zinc-200/90 dark:border-zinc-800">
+                            <SlackSidebar
                                 conversations={conversations}
                                 activeConversationId={activeConversationId}
                                 onConversationSelect={handleConversationSelect}
                                 isLoading={isLoadingConversations}
                                 onNewConversation={() => setIsNewModalOpen(true)}
-                                channelFilter={channelFilter}
-                                onChannelFilterChange={setChannelFilter}
+                                onOpenJoinOrgModal={() => setIsJoinOrgModalOpen(true)}
                             />
                         </div>
 
-                        <div className="h-full min-w-0 flex-1 relative flex">
+                        <div className="h-full min-w-0 flex-1 relative flex bg-white dark:bg-zinc-950">
                             <div className="h-full min-w-0 flex-1">
                                 <ChatArea
                                     conversation={activeConversation}
@@ -280,7 +295,7 @@ function MensajesPageContent() {
                                         initial={{ width: 0, opacity: 0 }}
                                         animate={{ width: 320, opacity: 1 }}
                                         exit={{ width: 0, opacity: 0 }}
-                                        className="h-full border-l border-zinc-200 bg-white overflow-hidden flex-shrink-0"
+                                        className="h-full border-l border-zinc-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden flex-shrink-0"
                                     >
                                         <ChannelSidebar 
                                             conversation={activeConversation as any}
@@ -301,6 +316,14 @@ function MensajesPageContent() {
                 isOpen={isNewModalOpen}
                 onClose={() => setIsNewModalOpen(false)}
                 onSelectContact={handleSelectContact}
+            />
+
+            <JoinOrgModal
+                isOpen={isJoinOrgModalOpen}
+                onClose={() => setIsJoinOrgModalOpen(false)}
+                onJoinedSuccess={async () => {
+                    await refetchConversations();
+                }}
             />
 
             <MessageNotifications

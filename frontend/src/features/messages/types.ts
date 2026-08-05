@@ -295,3 +295,19 @@ export interface ChatAreaProps {
     onBackToList?: () => void;
     isMobile?: boolean;
 }
+
+export interface OrganizationInfo {
+    businessId: string | null;
+    companyName: string;
+    inviteCode: string;
+    isOwner: boolean;
+    role: string;
+}
+
+export interface SlackCategorizedConversations {
+    defaultChannels: Conversation[];
+    tripChannels: Conversation[];
+    directMessages: Conversation[];
+    archivedChannels: Conversation[];
+}
+

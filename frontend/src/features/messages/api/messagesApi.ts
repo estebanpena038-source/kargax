@@ -25,39 +25,190 @@ import type {
 } from '../types';
 
 /**
- * Fetches all conversations for the current user.
+ * Fetches organization info including company name and unique invite code.
  */
-export async function fetchConversations(): Promise<Conversation[]> {
-    const result = await supabaseMessages.getConversations();
+export async function fetchOrganizationInfo(): Promise<{
+    businessId: string | null;
+    companyName: string;
+    inviteCode: string;
+    isOwner: boolean;
+    role: string;
+}> {
+    try {
+        const res = await fetch('/api/business/organization');
+        if (!res.ok) {
+            throw new Error('Error al obtener organización');
+        }
+        const json = await res.json();
+        return json.data || {
+            businessId: null,
+            companyName: 'KargaX Logística',
+            inviteCode: 'KX-KARGAX-2026',
+            isOwner: false,
+            role: 'member',
+        };
+    } catch (e) {
+        console.error('[fetchOrganizationInfo] error:', e);
+        return {
+            businessId: null,
+            companyName: 'KargaX Logística',
+            inviteCode: 'KX-KARGAX-2026',
+            isOwner: false,
+            role: 'member',
+        };
+    }
+}
 
-    if (!result.success || !result.data) {
-        throw new Error(result.error || 'Error al cargar conversaciones');
+/**
+ * Joins a business organization using an invite code (e.g. KX-TONOITO-2026).
+ */
+export async function joinOrganizationByInviteCode(inviteCode: string): Promise<{
+    success: boolean;
+    message: string;
+    data?: any;
+}> {
+    const res = await fetch('/api/business/team/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inviteCode: inviteCode.trim().toUpperCase() }),
+    });
+
+    const json = await res.json();
+    if (!res.ok || !json.success) {
+        throw new Error(json.error || 'Error al unirse a la organización');
     }
 
-    return result.data.data.map((conv) => ({
-        id: conv.id,
-        participant1Id: '',
-        participant2Id: '',
-        offerId: null,
-        otherParticipantName: conv.otherParticipantName,
-        otherParticipantEmail: conv.otherParticipantEmail,
-        lastMessagePreview: conv.lastMessagePreview || null,
-        lastMessageAt: conv.lastMessageAt || null,
-        unreadCount: conv.unreadCount,
-        createdAt: conv.lastMessageAt || new Date().toISOString(),
-        offerTitle: conv.offerTitle || undefined,
-        avatar: conv.otherParticipantName
-            ? `https://ui-avatars.com/api/?name=${encodeURIComponent(conv.otherParticipantName)}&background=f59e0b&color=fff`
-            : undefined,
-        priority: conv.unreadCount > 5 ? 'high' : 'normal',
-        cargoContext: conv.offerTitle ? {
-            offerId: '',
-            title: conv.offerTitle,
-            route: conv.offerTitle,
-            status: 'Activa',
-        } : undefined,
-    }));
+    return json;
 }
+
+/**
+ * Fetches all conversations (Channels, Active Trips, DMs, Archived) for the current user.
+ */
+export async function fetchConversations(): Promise<Conversation[]> {
+    try {
+        const { data: userData } = await supabase.auth.getUser();
+        const userId = userData?.user?.id;
+
+        if (!userId) {
+            return [];
+        }
+
+        // 1. Get conversation IDs where user is in conversation_participants
+        const { data: participations } = await (supabase.from('conversation_participants' as any) as any)
+            .select('conversation_id, unread_count')
+            .eq('user_id', userId);
+
+        const participantConvIds = (participations || []).map((p: any) => p.conversation_id);
+
+        // 2. Query conversations: either by direct participant IDs or in participantConvIds
+        let query = (supabase.from('conversations' as any) as any)
+            .select('*')
+            .order('last_message_at', { ascending: false, nullsFirst: false });
+
+        if (participantConvIds.length > 0) {
+            query = query.or(`participant1_id.eq.${userId},participant2_id.eq.${userId},id.in.(${participantConvIds.join(',')})`);
+        } else {
+            query = query.or(`participant1_id.eq.${userId},participant2_id.eq.${userId}`);
+        }
+
+        const { data: rawConvs, error } = await query;
+
+        if (error) {
+            console.error('[fetchConversations] Supabase query error:', error);
+            // Fallback to supabaseMessages
+            const fallback = await supabaseMessages.getConversations();
+            if (fallback.success && fallback.data) {
+                return fallback.data.data.map((c) => ({
+                    id: c.id,
+                    participant1Id: '',
+                    participant2Id: '',
+                    offerId: null,
+                    otherParticipantName: c.otherParticipantName,
+                    otherParticipantEmail: c.otherParticipantEmail,
+                    lastMessagePreview: c.lastMessagePreview,
+                    lastMessageAt: c.lastMessageAt,
+                    unreadCount: c.unreadCount,
+                    createdAt: c.lastMessageAt || new Date().toISOString(),
+                    channelType: 'direct',
+                    title: c.otherParticipantName,
+                    isArchived: false,
+                }));
+            }
+            return [];
+        }
+
+        // 3. Extract other user IDs for direct messages to fetch real names
+        const otherUserIds = new Set<string>();
+        for (const c of rawConvs || []) {
+            if (c.participant1_id && c.participant1_id !== userId) otherUserIds.add(c.participant1_id);
+            if (c.participant2_id && c.participant2_id !== userId) otherUserIds.add(c.participant2_id);
+        }
+
+        let userNamesMap = new Map<string, { name: string; avatar?: string }>();
+        if (otherUserIds.size > 0) {
+            const { data: profiles } = await (supabase.from('user_profiles' as any) as any)
+                .select('id, full_name, avatar_url, user_type')
+                .in('id', Array.from(otherUserIds));
+
+            for (const p of profiles || []) {
+                userNamesMap.set(p.id, {
+                    name: p.full_name || 'Usuario KargaX',
+                    avatar: p.avatar_url,
+                });
+            }
+        }
+
+        // 4. Transform into structured Conversation models
+        const mapped: Conversation[] = (rawConvs || []).map((c: any) => {
+            const isP1 = c.participant1_id === userId;
+            const otherUserId = isP1 ? c.participant2_id : c.participant1_id;
+            const otherProfile = otherUserId ? userNamesMap.get(otherUserId) : undefined;
+
+            let displayName = c.title;
+            if (!displayName && otherProfile) {
+                displayName = otherProfile.name;
+            } else if (!displayName && c.channel_type === 'direct') {
+                displayName = 'Mensaje Directo';
+            } else if (!displayName) {
+                displayName = '#general';
+            }
+
+            // Unread count
+            const pInfo = participations?.find((p: any) => p.conversation_id === c.id);
+            let unread = pInfo?.unread_count ?? (isP1 ? c.unread_count_1 : c.unread_count_2) ?? 0;
+
+            const channelType: ChannelType = c.channel_type || (c.entity_type === 'trip' ? 'trip' : c.participant1_id ? 'direct' : 'fleet');
+
+            return {
+                id: c.id,
+                participant1Id: c.participant1_id,
+                participant2Id: c.participant2_id,
+                offerId: c.entity_type === 'trip' ? c.entity_id : c.offer_id,
+                otherParticipantName: displayName,
+                otherParticipantEmail: '',
+                lastMessagePreview: c.last_message_preview || null,
+                lastMessageAt: c.last_message_at || c.created_at,
+                unreadCount: unread || 0,
+                createdAt: c.created_at || new Date().toISOString(),
+                offerTitle: c.title || undefined,
+                channelType,
+                title: displayName,
+                entityId: c.entity_id,
+                entityType: c.entity_type,
+                businessId: c.business_id,
+                isArchived: !!c.is_archived,
+                avatar: otherProfile?.avatar,
+                priority: unread > 5 ? 'high' : 'normal',
+            };
+        });
+
+        return mapped;
+    } catch (err: any) {
+        console.error('[fetchConversations] exception:', err);
+        return [];
+    }
+}
+
 
 /**
  * Fetches messages for a specific conversation.
@@ -529,6 +680,8 @@ export async function pinMessage(conversationId: string, messageId: string): Pro
 }
 
 export default {
+    fetchOrganizationInfo,
+    joinOrganizationByInviteCode,
     fetchConversations,
     fetchMessages,
     sendMessage,
@@ -554,3 +707,4 @@ export default {
     archiveConversation,
     pinMessage,
 };
+
