@@ -210,34 +210,98 @@ export function useSendMessage() {
 
     return useMutation({
         mutationFn: async (payload: SendMessagePayload) => {
-            // Validate before sending
             validateMessagePayload(payload);
             return sendMessage(payload);
         },
 
-        // Optimistic update: Add message to cache immediately
-        onMutate: async () => {
-            // We'll implement optimistic updates when we have the conversation ID
-            // For now, just return context for rollback
-            return { previousMessages: null };
+        // Optimistic update: Add message to cache immediately (<1ms latency)
+        onMutate: async (newPayload) => {
+            const conversationId = newPayload.conversationId;
+            if (!conversationId) return { previousMessages: null, conversationId: null };
+
+            // Cancel any outgoing refetches so they don't overwrite our optimistic update
+            await queryClient.cancelQueries({
+                queryKey: messagesQueryKeys.conversation(conversationId),
+            });
+
+            // Snapshot previous messages
+            const previousMessages = queryClient.getQueryData<any>(
+                messagesQueryKeys.conversation(conversationId)
+            );
+
+            const currentUserId = getCurrentUserIdFromStore();
+            const optimisticMsg = {
+                id: `temp-${Date.now()}`,
+                conversationId,
+                senderId: currentUserId,
+                senderName: 'Tú',
+                content: newPayload.content,
+                isRead: false,
+                messageType: newPayload.messageType || 'text',
+                attachmentUrl: newPayload.attachmentUrl,
+                attachmentName: newPayload.attachmentName,
+                createdAt: new Date().toISOString(),
+                status: 'delivered' as const,
+                isMine: true,
+            };
+
+            // Update conversation messages cache instantly
+            queryClient.setQueryData(
+                messagesQueryKeys.conversation(conversationId),
+                (old: any) => {
+                    if (!old) {
+                        return {
+                            data: [optimisticMsg],
+                            meta: { page: 1, limit: 50, total: 1 },
+                        };
+                    }
+                    return {
+                        ...old,
+                        data: [...(old.data || []), optimisticMsg],
+                    };
+                }
+            );
+
+            // Optimistically update conversation preview in sidebar
+            queryClient.setQueryData<any[]>(
+                messagesQueryKeys.conversations(),
+                (old) => {
+                    if (!old) return old;
+                    return old.map((conv) => {
+                        if (conv.id === conversationId) {
+                            return {
+                                ...conv,
+                                lastMessagePreview: newPayload.content,
+                                lastMessageAt: new Date().toISOString(),
+                            };
+                        }
+                        return conv;
+                    });
+                }
+            );
+
+            return { previousMessages, conversationId };
         },
 
-        // On success, invalidate related queries to refetch fresh data
-        onSuccess: (data) => {
-            // Invalidate conversations to update last message preview
+        onError: (error, _newPayload, context) => {
+            console.error('[useSendMessage] Error:', error);
+            if (context?.conversationId && context?.previousMessages) {
+                queryClient.setQueryData(
+                    messagesQueryKeys.conversation(context.conversationId),
+                    context.previousMessages
+                );
+            }
+        },
+
+        onSettled: (_data, _error, variables) => {
+            if (variables.conversationId) {
+                queryClient.invalidateQueries({
+                    queryKey: messagesQueryKeys.conversation(variables.conversationId),
+                });
+            }
             queryClient.invalidateQueries({
                 queryKey: messagesQueryKeys.conversations(),
             });
-
-            // Invalidate the specific conversation to get the new message
-            queryClient.invalidateQueries({
-                queryKey: messagesQueryKeys.conversation(data.conversationId),
-            });
-        },
-
-        // On error, show toast (handled by component)
-        onError: (error) => {
-            console.error('[useSendMessage] Error:', error);
         },
     });
 }
@@ -366,22 +430,25 @@ export function useMessaging(activeConversationId: string | null) {
             : activeConversation.participant1Id;
     }, [activeConversation]);
 
-    // Wrapped send function that automatically sets recipient
+    // Wrapped send function that automatically sets recipient and conversationId
     const handleSendMessage = useCallback(
         async (content: string, options?: Partial<SendMessagePayload>) => {
             const recipientId = getRecipientId();
-            if (!recipientId) {
-                throw new Error('No se pudo determinar el destinatario');
+            const targetConversationId = activeConversationId || undefined;
+
+            if (!recipientId && !targetConversationId) {
+                throw new Error('No se pudo determinar el destinatario o la conversación');
             }
 
             return sendMessageMutation.mutateAsync({
-                recipientId,
+                conversationId: targetConversationId,
+                recipientId: recipientId || undefined,
                 content,
                 messageType: 'text',
                 ...options,
             });
         },
-        [getRecipientId, sendMessageMutation]
+        [activeConversationId, getRecipientId, sendMessageMutation]
     );
 
     return {

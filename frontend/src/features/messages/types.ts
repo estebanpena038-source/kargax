@@ -77,6 +77,7 @@ export interface LocationData {
     longitude: number;
     accuracy?: number;
     label?: string;
+    address?: string;
 }
 
 export interface VoiceMessageData {

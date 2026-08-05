@@ -330,8 +330,6 @@ export async function sendMessage(payload: SendMessagePayload): Promise<SendMess
             message_type: payload.messageType || 'text',
             attachment_url: payload.attachmentUrl || null,
             attachment_name: payload.attachmentName || null,
-            reply_to_id: payload.replyToId || null,
-            metadata: payload.metadata || {}
         })
         .select('id, conversation_id')
         .single();
@@ -339,6 +337,20 @@ export async function sendMessage(payload: SendMessagePayload): Promise<SendMess
     if (error) {
         throw new Error(error.message || 'Error al enviar mensaje');
     }
+
+    // Update conversation last message in background (fire & forget for ultra-fast latency)
+    void (async () => {
+        try {
+            await (supabase.from('conversations' as any) as any)
+                .update({
+                    last_message_preview: payload.content?.slice(0, 100) || '',
+                    last_message_at: new Date().toISOString(),
+                })
+                .eq('id', conversationId);
+        } catch {
+            // non-blocking
+        }
+    })();
 
     return {
         id: message.id,
@@ -529,13 +541,14 @@ export async function sendLocationMessage(conversationId: string, location: Loca
     const { data: userData } = await supabase.auth.getUser();
     if (!userData?.user) throw new Error('No autenticado');
 
+    const contentText = `📍 Ubicación: ${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}${location.address ? ` (${location.address})` : ''}`;
+
     const { data, error } = await (supabase.from('messages' as any) as any)
         .insert({
             conversation_id: conversationId,
             sender_id: userData.user.id,
-            content: 'Ubicacion compartida',
+            content: contentText,
             message_type: 'location',
-            metadata: location
         })
         .select('id, conversation_id')
         .single();
@@ -582,10 +595,9 @@ export async function sendEvidenceMessage(conversationId: string, evidence: Evid
         .insert({
             conversation_id: conversationId,
             sender_id: userData.user.id,
-            content: evidence.caption || 'Evidencia enviada',
+            content: evidence.caption || 'Evidencia fotográfica enviada',
             message_type: 'evidence',
-            attachment_url: evidence.photoUrl,
-            metadata: evidence
+            attachment_url: evidence.photoUrl || null,
         })
         .select('id, conversation_id')
         .single();
@@ -631,7 +643,6 @@ export async function replyToMessage(conversationId: string, replyToId: string, 
             sender_id: userData.user.id,
             content,
             message_type: 'text',
-            reply_to_id: replyToId
         })
         .select('id, conversation_id')
         .single();
