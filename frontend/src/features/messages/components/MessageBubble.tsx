@@ -210,10 +210,10 @@ export function MessageBubble({
                 )}>
                     <button
                         onClick={() => onReply(message)}
-                        className="p-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-500 rounded-full transition-colors"
+                        className="p-1.5 bg-white border border-zinc-200 shadow-xs hover:bg-zinc-100 text-zinc-600 rounded-full transition-colors dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300"
                         aria-label="Responder"
                     >
-                        <Reply className="w-4 h-4" />
+                        <Reply className="w-3.5 h-3.5" />
                     </button>
                 </div>
             )}
@@ -224,7 +224,7 @@ export function MessageBubble({
             )}>
                 {/* Sender Name (for group chats) */}
                 {showSenderName && !isMine && message.senderName && (
-                    <p className="text-xs text-zinc-500 mb-1 ml-3">
+                    <p className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 mb-1 ml-3">
                         {message.senderName}
                     </p>
                 )}
@@ -239,10 +239,10 @@ export function MessageBubble({
                 {/* Message Bubble */}
                 <div
                     className={cn(
-                        'rounded-lg px-3 py-2.5 shadow-sm sm:px-4',
+                        'rounded-2xl px-3.5 py-2.5 shadow-xs sm:px-4',
                         isMine
-                            ? 'bg-zinc-950 text-white rounded-br-sm'
-                            : 'bg-white border border-zinc-200 text-zinc-900 rounded-bl-sm'
+                            ? 'bg-zinc-950 text-white rounded-br-sm dark:bg-zinc-100 dark:text-zinc-950'
+                            : 'bg-white border border-zinc-200 text-zinc-950 rounded-bl-sm dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-50'
                     )}
                 >
                     {/* Content by Type */}

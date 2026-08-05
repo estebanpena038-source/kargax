@@ -104,23 +104,23 @@ function EmptyConversation() {
     const { t } = useTranslation();
 
     return (
-        <div className="flex-1 flex flex-col items-center justify-center bg-zinc-50/50 p-4 sm:p-8">
+        <div className="flex-1 flex flex-col items-center justify-center bg-white dark:bg-zinc-950 p-4 sm:p-8">
             <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
+                initial={{ opacity: 0, scale: 0.96 }}
                 animate={{ opacity: 1, scale: 1 }}
                 className="text-center max-w-md"
             >
                 {/* Illustration */}
-                <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-lg border border-zinc-200 bg-white shadow-[0_18px_44px_-38px_rgba(10,10,10,.55)] sm:h-24 sm:w-24">
-                    <MessageSquare className="w-12 h-12 text-zinc-950" />
+                <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900 sm:h-24 sm:w-24">
+                    <MessageSquare className="w-10 h-10 text-zinc-950 dark:text-zinc-100" />
                 </div>
 
                 {/* Text */}
-                <h3 className="text-xl font-bold text-zinc-950 mb-2">
-                    {t('messages.selectConversationTitle') || 'Selecciona una conversacion'}
+                <h3 className="text-xl font-bold text-zinc-950 dark:text-zinc-50 mb-2">
+                    {t('messages.selectConversationTitle') || 'Selecciona una conversación'}
                 </h3>
-                <p className="text-zinc-500">
-                    {t('messages.selectConversationDescription') || 'Elige una conversacion de la lista para comenzar a chatear con transportadores o empresas.'}
+                <p className="text-zinc-500 dark:text-zinc-400 text-sm">
+                    {t('messages.selectConversationDescription') || 'Elige un canal o contacto para comenzar a comunicarte en tiempo real.'}
                 </p>
             </motion.div>
         </div>
@@ -143,10 +143,10 @@ function MessagesSkeleton() {
                 >
                     <div
                         className={cn(
-                            'animate-pulse rounded-lg',
+                            'animate-pulse rounded-2xl',
                             i % 2 === 0
-                                ? 'bg-zinc-200 w-48 h-16 rounded-br-sm'
-                                : 'bg-zinc-200 w-56 h-12 rounded-bl-sm'
+                                ? 'bg-zinc-100 dark:bg-zinc-800 w-48 h-14 rounded-br-sm'
+                                : 'bg-zinc-100 dark:bg-zinc-800 w-56 h-12 rounded-bl-sm'
                         )}
                     />
                 </div>
@@ -181,7 +181,7 @@ function ChatHeader({
     }, [conversation.otherParticipantName]);
 
     return (
-        <div className="border-b border-zinc-200 bg-white p-3 sm:p-4">
+        <div className="border-b border-zinc-200/80 bg-white p-3 sm:p-4 dark:border-zinc-800 dark:bg-zinc-950">
             <div className="flex min-w-0 items-center gap-2 sm:gap-3">
                 {/* Back Button (Mobile) */}
                 {isMobile && onBackToList && (
@@ -190,6 +190,7 @@ function ChatHeader({
                         size="icon"
                         onClick={onBackToList}
                         aria-label={t('common.back') || 'Volver'}
+                        className="text-zinc-700 hover:text-zinc-950 dark:text-zinc-300 dark:hover:text-white"
                     >
                         <ArrowLeft className="w-5 h-5" />
                     </Button>
@@ -197,7 +198,7 @@ function ChatHeader({
 
                 {/* Avatar */}
                 <div className="relative flex-shrink-0">
-                    <div className="w-10 h-10 rounded-full overflow-hidden bg-zinc-950 flex items-center justify-center">
+                    <div className="w-10 h-10 rounded-full overflow-hidden bg-zinc-950 dark:bg-zinc-100 flex items-center justify-center text-white dark:text-zinc-950">
                         {conversation.avatar ? (
                             <img
                                 src={conversation.avatar}
@@ -205,7 +206,7 @@ function ChatHeader({
                                 className="w-full h-full object-cover"
                             />
                         ) : (
-                            <span className="text-white font-semibold text-sm">
+                            <span className="font-semibold text-sm">
                                 {initials}
                             </span>
                         )}
@@ -213,16 +214,16 @@ function ChatHeader({
 
                     {/* Online Indicator */}
                     {conversation.isOnline && (
-                        <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-zinc-950 border-2 border-white rounded-full" />
+                        <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 border-2 border-white dark:border-zinc-950 rounded-full" />
                     )}
                 </div>
 
                 {/* Contact Info */}
                 <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-zinc-950 truncate">
+                    <h3 className="font-bold text-sm sm:text-base text-zinc-950 dark:text-zinc-50 truncate">
                         {conversation.otherParticipantName || t('messages.unknownUser') || 'Usuario'}
                     </h3>
-                    <p className="text-sm text-zinc-500 truncate">
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate">
                         {conversation.company || conversation.otherParticipantEmail}
                     </p>
                 </div>
@@ -234,35 +235,28 @@ function ChatHeader({
                         size="icon"
                         aria-label={t('messages.call') || 'Llamar'}
                     >
-                        <Phone className="w-5 h-5" />
+                        <Phone className="w-4 h-4 text-zinc-600 dark:text-zinc-400" />
                     </Button>
                     <Button
                         variant="ghost"
                         size="icon"
                         aria-label={t('messages.moreOptions') || 'Mas opciones'}
                     >
-                        <MoreVertical className="w-5 h-5" />
+                        <MoreVertical className="w-4 h-4 text-zinc-600 dark:text-zinc-400" />
                     </Button>
                 </div>
             </div>
 
             {/* Cargo Context */}
             {conversation.cargoContext && (
-                <div className="mt-3 rounded-lg bg-zinc-50 p-3">
-                    <div className="flex flex-wrap items-center gap-2 text-sm">
-                        <Package className="w-4 h-4 text-zinc-950" />
-                        <span className="font-medium text-zinc-950">
+                <div className="mt-2.5 rounded-xl border border-zinc-200/80 bg-white p-2.5 dark:border-zinc-800 dark:bg-zinc-900">
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <Package className="w-4 h-4 text-zinc-950 dark:text-zinc-100" />
+                        <span className="font-semibold text-zinc-950 dark:text-zinc-100">
                             {conversation.cargoContext.route}
                         </span>
-                        <span className="text-zinc-400">-</span>
-                        <span className={cn(
-                            'px-2 py-0.5 rounded-full text-xs font-medium',
-                            conversation.cargoContext.status === 'Activa'
-                                ? 'bg-zinc-950 text-white'
-                                : conversation.cargoContext.status === 'Completado'
-                                    ? 'bg-zinc-100 text-zinc-950'
-                                    : 'bg-zinc-100 text-zinc-950'
-                        )}>
+                        <span className="text-zinc-300 dark:text-zinc-700">•</span>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-zinc-950 text-white dark:bg-zinc-100 dark:text-zinc-950">
                             {conversation.cargoContext.status}
                         </span>
                     </div>
@@ -361,7 +355,7 @@ export function ChatArea({
     // Render
     // =========================================================================
     return (
-        <div className="flex h-full min-w-0 flex-1 flex-col bg-zinc-50/30">
+        <div className="flex h-full min-w-0 flex-1 flex-col bg-white dark:bg-zinc-950">
             {/* Header */}
             {channelType !== 'direct' ? (
                 <ChannelHeader 
@@ -381,21 +375,21 @@ export function ChatArea({
             {/* Messages Area */}
             <div
                 ref={messagesContainerRef}
-                className="flex-1 space-y-3 overflow-y-auto p-3 sm:p-4"
+                className="flex-1 space-y-3 overflow-y-auto p-3 sm:p-4 bg-white dark:bg-zinc-950"
             >
                 {isLoading ? (
                     <MessagesSkeleton />
                 ) : messages.length === 0 ? (
                     // No messages yet
-                    <div className="flex-1 flex flex-col items-center justify-center py-12">
-                        <div className="w-16 h-16 rounded-lg bg-zinc-100 flex items-center justify-center mb-4">
-                            <MessageSquare className="w-8 h-8 text-zinc-400" />
+                    <div className="flex-1 flex flex-col items-center justify-center py-16">
+                        <div className="w-14 h-14 rounded-2xl border border-zinc-200 bg-white flex items-center justify-center mb-3 shadow-xs dark:border-zinc-800 dark:bg-zinc-900">
+                            <MessageSquare className="w-7 h-7 text-zinc-950 dark:text-zinc-100" />
                         </div>
-                        <p className="text-zinc-500 text-center">
-                            {t('messages.noMessagesYet') || 'No hay mensajes aun'}
+                        <p className="text-zinc-950 font-semibold text-sm dark:text-zinc-50 text-center">
+                            {t('messages.noMessagesYet') || 'No hay mensajes aún'}
                         </p>
-                        <p className="text-sm text-zinc-400 text-center mt-1">
-                            {t('messages.startConversation') || 'Envia el primer mensaje!'}
+                        <p className="text-xs text-zinc-400 text-center mt-1">
+                            {t('messages.startConversation') || 'Envía el primer mensaje para iniciar la conversación'}
                         </p>
                     </div>
                 ) : (

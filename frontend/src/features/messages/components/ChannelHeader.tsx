@@ -56,13 +56,13 @@ const getChannelIcon = (type: ChannelType) => {
 };
 
 const getStatusColor = (status?: string) => {
-    if (!status) return 'bg-zinc-100 text-zinc-600';
+    if (!status) return 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100';
     const s = status.toLowerCase();
-    if (s.includes('activ') || s.includes('curso')) return 'bg-green-100 text-green-700';
-    if (s.includes('complet')) return 'bg-zinc-900 text-white';
-    if (s.includes('cancel')) return 'bg-red-100 text-red-700';
-    if (s.includes('pendient')) return 'bg-amber-100 text-amber-700';
-    return 'bg-zinc-100 text-zinc-600';
+    if (s.includes('activ') || s.includes('curso')) return 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400';
+    if (s.includes('complet')) return 'bg-zinc-950 text-white dark:bg-zinc-100 dark:text-zinc-950';
+    if (s.includes('cancel')) return 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400';
+    if (s.includes('pendient')) return 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400';
+    return 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100';
 };
 
 export function ChannelHeader({
@@ -82,27 +82,27 @@ export function ChannelHeader({
         <motion.div 
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="flex items-center justify-between border-b border-zinc-200 bg-white px-4 py-3 sm:px-6 sm:py-4 shadow-sm z-10"
+            className="flex items-center justify-between border-b border-zinc-200/80 bg-white px-4 py-3 sm:px-6 sm:py-3.5 shadow-xs z-10 dark:border-zinc-800 dark:bg-zinc-950"
         >
             <div className="flex items-center gap-3 min-w-0">
                 {isMobile && onBack && (
-                    <Button variant="ghost" size="icon" onClick={onBack} className="shrink-0 -ml-2">
-                        <ArrowLeft className="w-5 h-5 text-zinc-600" />
+                    <Button variant="ghost" size="icon" onClick={onBack} className="shrink-0 -ml-2 text-zinc-700 hover:text-zinc-950 dark:text-zinc-300 dark:hover:text-white">
+                        <ArrowLeft className="w-5 h-5" />
                     </Button>
                 )}
 
-                <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-zinc-50 border border-zinc-100 shrink-0 text-zinc-900">
+                <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-zinc-950 text-white dark:bg-zinc-100 dark:text-zinc-950 shrink-0 shadow-sm">
                     {getChannelIcon(conversation.channelType)}
                 </div>
 
                 <div className="flex flex-col min-w-0">
                     <div className="flex items-center gap-2">
-                        <h2 className="text-base sm:text-lg font-semibold text-zinc-900 truncate">
+                        <h2 className="text-sm sm:text-base font-bold text-zinc-950 dark:text-zinc-50 truncate">
                             {conversation.title || 'Canal sin título'}
                         </h2>
                         {conversation.cargoContext?.status && (
                             <span className={cn(
-                                'text-[10px] sm:text-xs font-medium px-2 py-0.5 rounded-full shrink-0',
+                                'text-[10px] sm:text-xs font-semibold px-2.5 py-0.5 rounded-full shrink-0',
                                 getStatusColor(conversation.cargoContext.status)
                             )}>
                                 {conversation.cargoContext.status}
@@ -110,26 +110,26 @@ export function ChannelHeader({
                         )}
                     </div>
                     
-                    <div className="flex items-center gap-2 text-xs text-zinc-500">
+                    <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
                         {isDirect ? (
                             <PresenceIndicator status="online" showText />
                         ) : (
                             <div className="flex items-center gap-2">
                                 <span className="font-medium">{participants.length} participantes</span>
-                                <span className="text-zinc-300">•</span>
+                                <span className="text-zinc-300 dark:text-zinc-700">•</span>
                                 <div className="flex -space-x-1.5">
                                     {visibleParticipants.map((p, i) => (
-                                        <div key={p.id} className="w-4 h-4 rounded-full bg-zinc-200 border border-white flex items-center justify-center overflow-hidden z-[3] relative" style={{ zIndex: 3 - i }}>
+                                        <div key={p.id} className="w-4 h-4 rounded-full bg-zinc-950 text-white border border-white dark:border-zinc-950 flex items-center justify-center overflow-hidden z-[3] relative" style={{ zIndex: 3 - i }}>
                                             {p.userAvatar ? (
                                                 <img src={p.userAvatar} alt="" className="w-full h-full object-cover" />
                                             ) : (
-                                                <span className="text-[8px] font-bold text-zinc-600">{(p.userName || 'U')[0]}</span>
+                                                <span className="text-[8px] font-bold text-white">{(p.userName || 'U')[0]}</span>
                                             )}
                                         </div>
                                     ))}
                                     {extraParticipants > 0 && (
-                                        <div className="w-4 h-4 rounded-full bg-zinc-100 border border-white flex items-center justify-center z-0 relative">
-                                            <span className="text-[8px] font-bold text-zinc-600">+{extraParticipants}</span>
+                                        <div className="w-4 h-4 rounded-full bg-zinc-200 text-zinc-800 border border-white dark:border-zinc-950 flex items-center justify-center z-0 relative">
+                                            <span className="text-[8px] font-bold">+{extraParticipants}</span>
                                         </div>
                                     )}
                                 </div>
@@ -139,15 +139,15 @@ export function ChannelHeader({
                 </div>
             </div>
 
-            <div className="flex items-center gap-1 shrink-0 ml-4">
+            <div className="flex items-center gap-1 shrink-0 ml-3">
                 <Button variant="ghost" size="icon" onClick={onMute} aria-label="Silenciar canal">
-                    <BellOff className="w-5 h-5 text-zinc-500" />
+                    <BellOff className="w-4 h-4 text-zinc-500 hover:text-zinc-950 dark:hover:text-zinc-100" />
                 </Button>
                 <Button variant="ghost" size="icon" onClick={onArchive} aria-label="Archivar canal">
-                    <Archive className="w-5 h-5 text-zinc-500" />
+                    <Archive className="w-4 h-4 text-zinc-500 hover:text-zinc-950 dark:hover:text-zinc-100" />
                 </Button>
                 <Button variant="ghost" size="icon" onClick={onToggleInfo} aria-label="Información del canal">
-                    <Info className="w-5 h-5 text-zinc-900" />
+                    <Info className="w-4 h-4 text-zinc-950 dark:text-zinc-100" />
                 </Button>
             </div>
         </motion.div>

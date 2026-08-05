@@ -18,10 +18,10 @@ export interface SystemMessageBubbleProps {
 }
 
 const variantStyles = {
-    system: 'bg-zinc-100/60 text-zinc-600 border-zinc-200',
-    status_update: 'bg-blue-50/60 text-blue-800 border-blue-200',
-    evidence: 'bg-green-50/60 text-green-800 border-green-200',
-    pin_verification: 'bg-amber-50/60 text-amber-800 border-amber-200'
+    system: 'bg-white text-zinc-950 border-zinc-200/90 dark:bg-zinc-900 dark:text-zinc-50 dark:border-zinc-800',
+    status_update: 'bg-white text-zinc-950 border-zinc-200/90 dark:bg-zinc-900 dark:text-zinc-50 dark:border-zinc-800',
+    evidence: 'bg-white text-zinc-950 border-zinc-200/90 dark:bg-zinc-900 dark:text-zinc-50 dark:border-zinc-800',
+    pin_verification: 'bg-white text-zinc-950 border-zinc-200/90 dark:bg-zinc-900 dark:text-zinc-50 dark:border-zinc-800'
 };
 
 export function SystemMessageBubble({

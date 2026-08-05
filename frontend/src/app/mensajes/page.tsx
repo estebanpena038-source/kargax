@@ -24,7 +24,7 @@ import type { MessageNotification } from '@/features/messages/types';
 import { useTranslation } from '@/lib/i18n';
 import { createEntityChannel, getOrCreateDirectConversation } from '@/features/messages/api/messagesApi';
 
-const MOBILE_BREAKPOINT = 1024;
+const MOBILE_BREAKPOINT = 768;
 
 function useIsMobile(): boolean {
     const [isMobile, setIsMobile] = React.useState(false);
@@ -228,22 +228,31 @@ function MensajesPageContent() {
         }
     }, [sendError, t]);
 
+    React.useEffect(() => {
+        if (!isMobile && !activeConversationId && conversations.length > 0) {
+            const general = conversations.find(c => c.title === '#general') || conversations[0];
+            if (general) {
+                setActiveConversationId(general.id);
+            }
+        }
+    }, [isMobile, activeConversationId, conversations]);
+
     return (
         <DashboardLayout
             pageTitle={t('messages.pageTitle') || 'Mensajes'}
             showHeader={false}
         >
-            <div className="flex h-[calc(100dvh-6rem)] min-h-[34rem] overflow-hidden rounded-2xl border border-zinc-200/90 bg-white shadow-xl dark:border-zinc-800 dark:bg-zinc-950 sm:h-[calc(100dvh-7rem)] lg:h-[calc(100dvh-3rem)]">
+            <div className="flex h-[calc(100dvh-4.5rem)] min-h-[28rem] overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-950 sm:h-[calc(100dvh-5.5rem)] lg:h-[calc(100dvh-4.5rem)]">
                 {isMobile ? (
                     <AnimatePresence mode="wait" initial={false}>
                         {showConversationList ? (
                             <motion.div
                                 key="list"
-                                initial={{ opacity: 0, x: -20 }}
+                                initial={{ opacity: 0, x: -16 }}
                                 animate={{ opacity: 1, x: 0 }}
-                                exit={{ opacity: 0, x: -20 }}
-                                transition={{ duration: 0.2 }}
-                                className="h-full min-w-0 w-full"
+                                exit={{ opacity: 0, x: -16 }}
+                                transition={{ duration: 0.18, ease: 'easeOut' }}
+                                className="h-full min-w-0 w-full bg-white dark:bg-zinc-950"
                             >
                                 <SlackSidebar
                                     conversations={conversations}
@@ -258,11 +267,11 @@ function MensajesPageContent() {
                         ) : (
                             <motion.div
                                 key="chat"
-                                initial={{ opacity: 0, x: 20 }}
+                                initial={{ opacity: 0, x: 16 }}
                                 animate={{ opacity: 1, x: 0 }}
-                                exit={{ opacity: 0, x: 20 }}
-                                transition={{ duration: 0.2 }}
-                                className="h-full min-w-0 w-full"
+                                exit={{ opacity: 0, x: 16 }}
+                                transition={{ duration: 0.18, ease: 'easeOut' }}
+                                className="h-full min-w-0 w-full bg-white dark:bg-zinc-950"
                             >
                                 <ChatArea
                                     conversation={activeConversation}
@@ -280,7 +289,7 @@ function MensajesPageContent() {
                     </AnimatePresence>
                 ) : (
                     <>
-                        <div className="h-full w-72 lg:w-80 flex-shrink-0 border-r border-zinc-200/90 dark:border-zinc-800">
+                        <div className="h-full w-64 md:w-72 lg:w-80 flex-shrink-0 border-r border-zinc-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-950">
                             <SlackSidebar
                                 conversations={conversations}
                                 activeConversationId={activeConversationId}

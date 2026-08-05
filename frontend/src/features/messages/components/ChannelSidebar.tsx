@@ -62,24 +62,24 @@ export function ChannelSidebar({
                         )}
                     >
                         {/* Header */}
-                        <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-200 bg-zinc-50/50">
-                            <h3 className="font-semibold text-zinc-900">Info. del canal</h3>
+                        <div className="flex items-center justify-between px-4 py-3.5 border-b border-zinc-200/80 bg-white dark:border-zinc-800 dark:bg-zinc-950">
+                            <h3 className="font-bold text-sm text-zinc-950 dark:text-zinc-50">Info. del canal</h3>
                             <Button variant="ghost" size="icon" onClick={onClose}>
-                                <X className="w-5 h-5" />
+                                <X className="w-4 h-4 text-zinc-600 dark:text-zinc-400" />
                             </Button>
                         </div>
 
                         {/* Scrollable Content */}
-                        <div className="flex-1 overflow-y-auto p-4 space-y-6">
+                        <div className="flex-1 overflow-y-auto p-4 space-y-6 bg-white dark:bg-zinc-950">
                             
                             {/* Entity Link */}
                             {conversation.entityId && (
                                 <div>
-                                    <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">Entidad Vinculada</h4>
-                                    <div className="p-3 bg-zinc-50 rounded-lg border border-zinc-100 flex items-center justify-between">
+                                    <h4 className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider mb-2">Entidad Vinculada</h4>
+                                    <div className="p-3 bg-white rounded-xl border border-zinc-200 flex items-center justify-between shadow-xs dark:bg-zinc-900 dark:border-zinc-800">
                                         <div className="flex flex-col">
-                                            <span className="text-sm font-medium text-zinc-900">{conversation.entityType === 'offer' ? 'Oferta' : 'Viaje'} #{conversation.entityId.slice(0,6)}</span>
-                                            <span className="text-xs text-zinc-500">Ver detalles operacionales</span>
+                                            <span className="text-xs font-bold text-zinc-950 dark:text-zinc-50">{conversation.entityType === 'offer' ? 'Oferta' : 'Viaje'} #{conversation.entityId.slice(0,6)}</span>
+                                            <span className="text-[11px] text-zinc-500">Ver detalles operacionales</span>
                                         </div>
                                         <Button size="sm" variant="outline">Ver</Button>
                                     </div>
@@ -88,7 +88,7 @@ export function ChannelSidebar({
 
                             {/* Participants */}
                             <div>
-                                <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">
+                                <h4 className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider mb-3">
                                     Participantes ({participants.length})
                                 </h4>
                                 <div className="space-y-3">
@@ -97,23 +97,23 @@ export function ChannelSidebar({
                                         return (
                                             <div key={p.id} className="flex items-center justify-between">
                                                 <div className="flex items-center gap-3 min-w-0">
-                                                    <div className="w-8 h-8 rounded-full bg-zinc-100 shrink-0 overflow-hidden flex items-center justify-center relative">
+                                                    <div className="w-8 h-8 rounded-full bg-zinc-950 text-white dark:bg-zinc-100 dark:text-zinc-950 shrink-0 overflow-hidden flex items-center justify-center relative font-bold text-xs">
                                                         {p.userAvatar ? (
                                                             <img src={p.userAvatar} alt="" className="w-full h-full object-cover" />
                                                         ) : (
-                                                            <span className="text-xs font-bold text-zinc-600">{(p.userName || 'U')[0]}</span>
+                                                            <span>{(p.userName || 'U')[0]}</span>
                                                         )}
                                                         {presence && (
-                                                            <div className="absolute -bottom-0.5 -right-0.5 border border-white rounded-full bg-white">
+                                                            <div className="absolute -bottom-0.5 -right-0.5 border border-white rounded-full bg-white dark:border-zinc-950">
                                                                 <PresenceIndicator status={presence.status} size="sm" />
                                                             </div>
                                                         )}
                                                     </div>
                                                     <div className="flex flex-col min-w-0">
-                                                        <span className="text-sm font-medium text-zinc-900 truncate">
+                                                        <span className="text-xs font-bold text-zinc-950 dark:text-zinc-50 truncate">
                                                             {p.userName || 'Usuario desconocido'}
                                                         </span>
-                                                        <span className="text-xs text-zinc-500 truncate">{roleLabels[p.role] || p.role}</span>
+                                                        <span className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate">{roleLabels[p.role] || p.role}</span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -124,15 +124,15 @@ export function ChannelSidebar({
 
                             {/* Media & Files Tabs Placeholder */}
                             <div>
-                                <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">Archivos Compartidos</h4>
+                                <h4 className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider mb-3">Archivos Compartidos</h4>
                                 <div className="grid grid-cols-2 gap-2 mb-3">
-                                    <button className="flex flex-col items-center justify-center p-4 bg-zinc-50 rounded-lg border border-zinc-100 hover:border-zinc-300 transition-colors">
-                                        <ImageIcon className="w-5 h-5 text-zinc-400 mb-1" />
-                                        <span className="text-xs font-medium text-zinc-600">Fotos (12)</span>
+                                    <button className="flex flex-col items-center justify-center p-4 bg-white rounded-xl border border-zinc-200 hover:border-zinc-950 transition-colors shadow-xs dark:bg-zinc-900 dark:border-zinc-800 dark:hover:border-zinc-400">
+                                        <ImageIcon className="w-5 h-5 text-zinc-950 dark:text-zinc-100 mb-1" />
+                                        <span className="text-xs font-bold text-zinc-950 dark:text-zinc-50">Fotos (12)</span>
                                     </button>
-                                    <button className="flex flex-col items-center justify-center p-4 bg-zinc-50 rounded-lg border border-zinc-100 hover:border-zinc-300 transition-colors">
-                                        <FileText className="w-5 h-5 text-zinc-400 mb-1" />
-                                        <span className="text-xs font-medium text-zinc-600">Docs (4)</span>
+                                    <button className="flex flex-col items-center justify-center p-4 bg-white rounded-xl border border-zinc-200 hover:border-zinc-950 transition-colors shadow-xs dark:bg-zinc-900 dark:border-zinc-800 dark:hover:border-zinc-400">
+                                        <FileText className="w-5 h-5 text-zinc-950 dark:text-zinc-100 mb-1" />
+                                        <span className="text-xs font-bold text-zinc-950 dark:text-zinc-50">Docs (4)</span>
                                     </button>
                                 </div>
                             </div>

@@ -241,10 +241,10 @@ export function NewConversationModal({
                     className="w-full max-w-lg bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col max-h-[85vh]"
                 >
                     {/* Modal Header */}
-                    <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-900 text-white">
+                    <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-950 text-white">
                         <div className="flex items-center gap-2.5">
-                            <Send className="w-5 h-5 text-amber-400" />
-                            <h3 className="font-semibold text-base tracking-tight">Nueva conversación KargaX</h3>
+                            <Send className="w-5 h-5 text-white" />
+                            <h3 className="font-bold text-base tracking-tight">Nueva conversación KargaX</h3>
                         </div>
                         <button
                             onClick={onClose}
