@@ -22,7 +22,7 @@ import {
 import { useMessaging } from '@/features/messages/hooks';
 import type { MessageNotification } from '@/features/messages/types';
 import { useTranslation } from '@/lib/i18n';
-import { createEntityChannel } from '@/features/messages/api/messagesApi';
+import { createEntityChannel, getOrCreateDirectConversation } from '@/features/messages/api/messagesApi';
 
 const MOBILE_BREAKPOINT = 1024;
 
@@ -157,29 +157,44 @@ function MensajesPageContent() {
         offerId?: string;
     }) => {
         try {
-            if (contact.type === 'trip' && contact.offerId) {
+            if (contact.type === 'trip' && (contact.offerId || contact.id)) {
+                const tripId = contact.offerId || contact.id;
                 const channelId = await createEntityChannel({
                     channelType: 'trip',
                     entityType: 'trip',
-                    entityId: contact.offerId,
+                    entityId: tripId,
                     title: contact.name,
                 });
                 if (channelId) {
                     await refetchConversations();
-                    handleConversationSelect(channelId);
+                    await handleConversationSelect(channelId);
+                    return;
+                }
+            }
+
+            if (contact.type === 'user' || contact.type === 'fleet') {
+                const conversationId = await getOrCreateDirectConversation(
+                    contact.id,
+                    contact.name,
+                    contact.offerId
+                );
+                if (conversationId) {
+                    await refetchConversations();
+                    await handleConversationSelect(conversationId);
                     return;
                 }
             }
 
             const existing = conversations.find(c => c.id === contact.id || c.offerId === contact.offerId);
             if (existing) {
-                handleConversationSelect(existing.id);
-            } else {
-                handleConversationSelect(contact.id);
+                await handleConversationSelect(existing.id);
             }
         } catch (err: any) {
             console.error('[MensajesPage] Error selecting contact:', err);
-            handleConversationSelect(contact.id);
+            toast.error(
+                'Error al abrir conversación',
+                err instanceof Error ? err.message : 'No se pudo iniciar el chat'
+            );
         }
     }, [conversations, refetchConversations, handleConversationSelect]);
 

@@ -82,6 +82,48 @@ export async function joinOrganizationByInviteCode(inviteCode: string): Promise<
 }
 
 /**
+ * Gets or creates a direct conversation between the current user and another user.
+ */
+export async function getOrCreateDirectConversation(
+    targetUserId: string,
+    title?: string,
+    offerId?: string
+): Promise<string> {
+    try {
+        const res = await fetch('/api/messages/direct', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                targetUserId,
+                title,
+                offerId,
+            }),
+        });
+
+        const json = await res.json();
+        if (!res.ok || !json.success || !json.conversationId) {
+            throw new Error(json.error || 'Error al iniciar conversación');
+        }
+
+        return json.conversationId;
+    } catch (e: any) {
+        console.error('[getOrCreateDirectConversation] fallback to client:', e);
+        const { data: userData } = await supabase.auth.getUser();
+        if (!userData?.user) throw new Error('No autenticado');
+
+        const fallback = await supabaseMessages.getOrCreateConversation(
+            userData.user.id,
+            targetUserId,
+            offerId
+        );
+        if (!fallback.success || !fallback.data) {
+            throw new Error(fallback.error || 'Error al crear conversación');
+        }
+        return fallback.data;
+    }
+}
+
+/**
  * Fetches all conversations (Channels, Active Trips, DMs, Archived) for the current user.
  */
 export async function fetchConversations(): Promise<Conversation[]> {
@@ -413,20 +455,39 @@ export function subscribeToConversations(
 }
 
 export async function createEntityChannel(payload: CreateChannelPayload): Promise<string> {
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData?.user) throw new Error('No autenticado');
+    try {
+        const res = await fetch('/api/messages/channel', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
 
-    const { data, error } = await (supabase.rpc as any)('create_entity_channel', {
-        p_channel_type: payload.channelType,
-        p_entity_type: payload.entityType || null,
-        p_entity_id: payload.entityId || null,
-        p_title: payload.title || null,
-        p_participant_ids: payload.participantIds,
-        p_creator_id: userData.user.id
-    });
+        const json = await res.json();
+        if (!res.ok || !json.success || !json.channelId) {
+            throw new Error(json.error || 'Error al crear canal');
+        }
 
-    if (error) throw new Error(error.message || 'Error al crear canal');
-    return data as string;
+        return json.channelId;
+    } catch (e: any) {
+        console.error('[createEntityChannel] fallback to client:', e);
+        const { data: userData } = await supabase.auth.getUser();
+        if (!userData?.user) throw new Error('No autenticado');
+
+        const { data, error } = await (supabase.from('conversations' as any) as any)
+            .insert({
+                channel_type: payload.channelType || 'fleet',
+                entity_type: payload.entityType || null,
+                entity_id: payload.entityId || null,
+                title: payload.title || '#canal',
+                business_id: userData.user.id,
+                is_archived: false,
+            })
+            .select('id')
+            .single();
+
+        if (error) throw new Error(error.message || 'Error al crear canal');
+        return data.id as string;
+    }
 }
 
 export async function fetchChannelByEntity(entityType: string, entityId: string): Promise<ChannelConversation | null> {
@@ -682,6 +743,7 @@ export async function pinMessage(conversationId: string, messageId: string): Pro
 export default {
     fetchOrganizationInfo,
     joinOrganizationByInviteCode,
+    getOrCreateDirectConversation,
     fetchConversations,
     fetchMessages,
     sendMessage,

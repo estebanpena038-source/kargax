@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-06-13T17:12:11.310Z",
+  "generated_at": "2026-07-14T23:50:34.219Z",
   "status": "pass",
   "mode": {
     "static_only": true,
@@ -147,7 +147,7 @@
       "key": "source:legacy-color-utilities-neutralized-by-css",
       "evidence": {
         "files": 39,
-        "hits": 686,
+        "hits": 688,
         "samples": [
           {
             "file": "frontend/src/app/billetera/page.tsx",
@@ -276,7 +276,7 @@
           },
           {
             "file": "frontend/src/app/staff/payouts/page.tsx",
-            "count": 16,
+            "count": 18,
             "samples": [
               "border-amber-",
               "bg-amber-",
