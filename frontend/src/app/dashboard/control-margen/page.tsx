@@ -1,5 +1,6 @@
-import LastMileDashboard from '@/components/last-mile/LastMileDashboard';
+import { redirect } from 'next/navigation';
 
 export default function ControlMargenPage() {
-    return <LastMileDashboard />;
+    redirect('/dashboard');
 }
+

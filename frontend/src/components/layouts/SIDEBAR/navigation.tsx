@@ -139,16 +139,6 @@ export function getNavigationItems(
             allowedUserTypes: ['business', 'admin'],
         },
         {
-            id: 'margin-control',
-            labelKey: 'nav.marginControl',
-            fallbackLabel: 'Control de margen',
-            icon: TrendingDown,
-            href: '/dashboard/control-margen',
-            section: 'operations',
-            description: 'Last Mile: costo, margen, evidencia y proveedores por ruta.',
-            allowedUserTypes: ['business', 'admin'],
-        },
-        {
             id: 'offers-browse',
             labelKey: 'nav.browseOffers',
             fallbackLabel: userType === 'trucker' ? 'Cargas disponibles' : 'Explorar marketplace',
@@ -429,16 +419,6 @@ export function getWarehouseScopedNavigation(warehouseId: string, counts?: Pick<
             href: `/bodegas/${warehouseId}/analitica`,
             section: 'operations',
             description: 'Indicadores de bodega.',
-            allowedUserTypes: ['business'],
-        },
-        {
-            id: 'margin-control',
-            labelKey: 'nav.marginControl',
-            fallbackLabel: 'Control de margen',
-            icon: TrendingDown,
-            href: '/dashboard/control-margen',
-            section: 'money',
-            description: 'Last Mile: margen y evidencia de la bodega.',
             allowedUserTypes: ['business'],
         },
         {
