@@ -1,4 +1,5 @@
 export type AlgorithmModule =
+    | 'intelligence'
     | 'lastmile'
     | 'evidence'
     | 'reports'

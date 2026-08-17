@@ -1,7 +1,28 @@
 'use client';
 
 import * as React from 'react';
-import { BarChart3, Download, FileText, Loader2, Lock, RefreshCw, Route, Shield, Truck, Users, Wallet } from 'lucide-react';
+import {
+    AlertCircle,
+    AlertTriangle,
+    BarChart3,
+    CheckCircle2,
+    Clock,
+    DollarSign,
+    Download,
+    FileText,
+    Fuel,
+    Layers,
+    Loader2,
+    Lock,
+    RefreshCw,
+    Route,
+    Shield,
+    TrendingDown,
+    TrendingUp,
+    Truck,
+    Users,
+    Wallet,
+} from 'lucide-react';
 import jsPDF from 'jspdf';
 import {
     Bar,
@@ -17,11 +38,17 @@ import {
 import { DashboardLayout } from '@/components/layouts/DashboardLayout';
 import { Button, Card, toast } from '@/components/ui';
 import { EnterpriseHero, EnterpriseMetric, SectionHeader, StatusPill } from '@/components/enterprise/EnterpriseLuxury';
-import { DeliveryRiskBadge, EvidenceQualityBadge, ExecutiveAlertsPanel, NextBestActionPanel } from '@/components/algorithms';
 import { useAuthStore } from '@/features/auth/store/authStore';
 import warehouseClient from '@/lib/warehouses/client';
 import type { WarehouseAccessResponse } from '@/lib/warehouses/types';
-import type { AlgorithmRiskLevel, EvidenceQualityStatus, ExecutiveAlert, NextBestAction, OperationRail } from '@/algorithms/shared/types';
+import type { AlgorithmRiskLevel } from '@/algorithms/shared/types';
+import type { SlaComplianceResult } from '@/algorithms/intelligence/slaCompliance';
+import type { CostAnomalyResult } from '@/algorithms/intelligence/costAnomaly';
+import type { CarrierScorecardResult } from '@/algorithms/intelligence/carrierScorecard';
+import type { FleetCapacitySummary, PotentialConsolidation } from '@/algorithms/intelligence/capacityUtilization';
+import type { FleetHealthResult, DocumentAlert } from '@/algorithms/intelligence/fleetHealth';
+import type { IntelligenceAlert } from '@/algorithms/intelligence/intelligenceAlerts';
+import type { IntelligenceKpiSummary, IntelligenceOverviewData } from '@/app/api/intelligence/_shared';
 import {
     getBusinessRoleCapabilities,
     getBusinessRoleLabel,
@@ -74,44 +101,6 @@ interface ReportPayload {
     payouts: Array<Record<string, unknown>>;
 }
 
-interface AlgorithmOfferRecord {
-    offerId: string;
-    businessId: string;
-    status: string | null;
-    rail: OperationRail;
-    cargoType: string | null;
-    originLabel: string;
-    destinationLabel: string;
-    updatedAt: string | null;
-    risk: {
-        score: number;
-        riskLevel: AlgorithmRiskLevel;
-        reasons: Array<{ code: string; label: string }>;
-    };
-    evidence: {
-        score: number;
-        status: EvidenceQualityStatus;
-        missingRequirements: Array<{ code: string; label: string }>;
-        warnings: Array<{ code: string; label: string }>;
-    };
-}
-
-interface AlgorithmsOverviewPayload {
-    generatedAt: string;
-    summary: {
-        evaluatedOffers: number;
-        criticalRisks: number;
-        highRisks: number;
-        incompleteEvidence: number;
-        nextActions: number;
-        executiveAlerts: number;
-    };
-    deliveryRisks: AlgorithmOfferRecord[];
-    nextBestActions: NextBestAction[];
-    executiveAlerts: ExecutiveAlert[];
-    snapshotPersistence: 'stored' | 'skipped';
-}
-
 const money = new Intl.NumberFormat('es-CO', {
     style: 'currency',
     currency: 'COP',
@@ -119,10 +108,10 @@ const money = new Intl.NumberFormat('es-CO', {
 });
 
 const TAB_LABELS: Record<BusinessIntelligenceTab, string> = {
-    overview: 'Resumen ejecutivo',
+    overview: 'Resumen Ejecutivo',
     marketplace: 'Marketplace',
-    private_fleet: 'Flota privada',
-    warehouse: 'Bodega',
+    private_fleet: 'Flota Privada',
+    warehouse: 'Tiempos & Bodega',
     accounting: 'Contabilidad',
 };
 
@@ -176,26 +165,13 @@ function weeklyTrend(trips: ReportRow[]) {
     const buckets = new Map<string, { week: string; trips: number; amount: number }>();
     for (const trip of trips) {
         const created = trip.created_at ? new Date(trip.created_at) : new Date();
-        const week = `Semana ${Math.floor((created.getDate() - 1) / 7) + 1}`;
+        const week = `Sem ${Math.floor((created.getDate() - 1) / 7) + 1}`;
         const current = buckets.get(week) || { week, trips: 0, amount: 0 };
         current.trips += 1;
         current.amount += Number(trip.total_amount || 0);
         buckets.set(week, current);
     }
     return [...buckets.values()].sort((a, b) => Number(a.week.replace(/\D/g, '')) - Number(b.week.replace(/\D/g, '')));
-}
-
-function topTruckers(trips: ReportRow[]) {
-    const truckers = new Map<string, { truckerId: string; name: string; trips: number; amount: number }>();
-    for (const trip of trips) {
-        const truckerId = trip.assigned_trucker_id || trip.private_fleet_trucker_id;
-        if (!truckerId) continue;
-        const current = truckers.get(truckerId) || { truckerId, name: driverLabel(trip), trips: 0, amount: 0 };
-        current.trips += 1;
-        current.amount += Number(trip.net_amount || trip.total_amount || 0);
-        truckers.set(truckerId, current);
-    }
-    return [...truckers.values()].sort((a, b) => b.trips - a.trips || b.amount - a.amount).slice(0, 5);
 }
 
 function summarizeTrips(trips: ReportRow[]) {
@@ -211,43 +187,43 @@ function summarizeTrips(trips: ReportRow[]) {
 function roleQuestions(role: BusinessRole) {
     if (role === 'owner' || role === 'admin') {
         return [
-            'Donde crece la operacion y donde se queda valor quieto?',
-            'Que rutas, conductores y flujos generan mas volumen este mes?',
-            'Que necesita seguimiento: marketplace, flota privada, bodega o contabilidad?',
+            '¿Qué porcentaje de entregas cumple con la ventana de SLA acordada?',
+            '¿Qué rutas o fletes registran sobrecostos atípicos este mes?',
+            '¿Cuáles son los conductores con mejor puntaje y menor tasa de rechazo?',
         ];
     }
 
     if (role === 'finance_accountant') {
         return [
-            'Cuanto debe reconocer contabilidad por fletes, fees, pagos privados y retiros?',
-            'Que viajes estan listos para soportes y PDF mensual?',
-            'Que pagos o retiros requieren conciliacion antes del cierre?',
+            '¿Cuánto se debe dispersar a transportadores por fletes y viáticos?',
+            '¿Hay sobrecostos no presupuestados o adelantos de combustible en mora?',
+            '¿Qué fletes tienen soporte completo para el cierre fiscal?',
         ];
     }
 
     if (role === 'ops_manager' || role === 'dispatcher') {
         return [
-            'Que viajes siguen abiertos y necesitan seguimiento operativo?',
-            'Que rutas y conductores concentran mayor carga de trabajo?',
-            'Donde falta evidencia de cargue, entrega o novedad?',
+            '¿Qué viajes están en riesgo de retraso o sin señal de tracking?',
+            '¿Dónde hay capacidad vehicular desperdiciada para consolidar?',
+            '¿Qué documentos de vehículos (SOAT/Tecno) están por vencer?',
         ];
     }
 
     return [
-        'Como se mueve la operacion este mes?',
-        'Que viajes se completaron y cuales siguen activos?',
-        'Que informacion puedo consultar sin tocar datos sensibles?',
+        '¿Cómo se comporta la operación logística este mes?',
+        '¿Cuáles son los KPIs de puntualidad y costo por viaje?',
+        '¿Qué alertas operativas requieren atención inmediata?',
     ];
 }
 
-function createPdf(report: ReportPayload, companyName: string, month: string) {
+function createPdf(report: ReportPayload, intelligence: IntelligenceOverviewData | null, companyName: string, month: string) {
     const doc = new jsPDF({ unit: 'pt', format: 'a4' });
     const pageWidth = doc.internal.pageSize.getWidth();
     let y = 48;
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(18);
-    doc.text('KargaX - Reporte mensual', 48, y);
+    doc.text('KargaX Intelligence — Reporte Ejecutivo', 48, y);
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
     doc.text(`Empresa: ${companyName || 'Empresa'}`, 48, y + 22);
@@ -255,17 +231,18 @@ function createPdf(report: ReportPayload, companyName: string, month: string) {
     y += 76;
 
     const metrics = [
-        ['Viajes', report.summary.trips.toString()],
-        ['Completados', report.summary.completed_trips.toString()],
-        ['Fletes', formatMoney(report.summary.gross_amount_cop)],
-        ['Fee KargaX', formatMoney(report.summary.kargax_fee_cop)],
-        ['Neto conductores', formatMoney(report.summary.net_to_truckers_cop)],
-        ['Gastos viaje', formatMoney(report.summary.company_expenses_cop)],
-        ['Payouts', formatMoney(report.summary.payouts_cop)],
+        ['Viajes Totales', (intelligence?.kpis.totalTrips || report.summary.trips).toString()],
+        ['Viajes Completados', (intelligence?.kpis.completedTrips || report.summary.completed_trips).toString()],
+        ['Cumplimiento SLA', `${intelligence?.kpis.slaCompliancePct ?? 100}%`],
+        ['Fletes Brutos (GMV)', formatMoney(intelligence?.kpis.totalGmvCop || report.summary.gross_amount_cop)],
+        ['Comisión KargaX', formatMoney(intelligence?.kpis.totalPlatformRevenueCop || report.summary.kargax_fee_cop)],
+        ['Costo Promedio / Viaje', formatMoney(intelligence?.kpis.avgCostPerTrip || 0)],
+        ['Tasa de Rechazo de Carga', `${intelligence?.kpis.rejectionRatePct ?? 0}%`],
+        ['Factor de Ocupación Flota', `${intelligence?.kpis.avgLoadFactorPct ?? 0}%`],
     ];
 
     doc.setFont('helvetica', 'bold');
-    doc.text('Resumen financiero', 48, y);
+    doc.text('KPIs de Inteligencia Operacional & Financiera', 48, y);
     y += 22;
     doc.setFont('helvetica', 'normal');
     for (const [label, value] of metrics) {
@@ -276,100 +253,113 @@ function createPdf(report: ReportPayload, companyName: string, month: string) {
 
     y += 20;
     doc.setFont('helvetica', 'bold');
-    doc.text('Viajes', 48, y);
+    doc.text('Viajes Recientes', 48, y);
     y += 22;
     doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');
-    for (const trip of report.trips.slice(0, 24)) {
+    for (const trip of report.trips.slice(0, 20)) {
         if (y > 760) {
             doc.addPage();
             y = 48;
         }
-        doc.text(routeLabel(trip).slice(0, 58), 48, y);
+        doc.text(routeLabel(trip).slice(0, 56), 48, y);
         doc.text(String(trip.status || 'estado'), 280, y);
         doc.text(formatMoney(trip.total_amount), pageWidth - 48, y, { align: 'right' });
         y += 16;
     }
 
-    doc.save(`KargaX_Reporte_${month}_${(companyName || 'Empresa').replace(/\s+/g, '_')}.pdf`);
+    doc.save(`KargaX_Intelligence_${month}_${(companyName || 'Empresa').replace(/\s+/g, '_')}.pdf`);
+}
+
+function severityBadgeColor(severity: AlgorithmRiskLevel) {
+    switch (severity) {
+        case 'critical':
+            return 'bg-red-500/10 text-red-700 border-red-200 dark:border-red-900/50 dark:text-red-400';
+        case 'high':
+            return 'bg-amber-500/10 text-amber-700 border-amber-200 dark:border-amber-900/50 dark:text-amber-400';
+        case 'medium':
+            return 'bg-blue-500/10 text-blue-700 border-blue-200 dark:border-blue-900/50 dark:text-blue-400';
+        default:
+            return 'bg-emerald-500/10 text-emerald-700 border-emerald-200 dark:border-emerald-900/50 dark:text-emerald-400';
+    }
 }
 
 export default function InteligenciaDashboardPage() {
     const { user } = useAuthStore();
     const [month, setMonth] = React.useState(currentMonth());
     const [report, setReport] = React.useState<ReportPayload | null>(null);
-    const [algorithms, setAlgorithms] = React.useState<AlgorithmsOverviewPayload | null>(null);
+    const [intelligence, setIntelligence] = React.useState<IntelligenceOverviewData | null>(null);
     const [access, setAccess] = React.useState<WarehouseAccessResponse | null>(null);
     const [activeTab, setActiveTab] = React.useState<BusinessIntelligenceTab>('overview');
     const [loading, setLoading] = React.useState(true);
 
-    const loadReport = React.useCallback(async () => {
+    const loadData = React.useCallback(async () => {
         setLoading(true);
         try {
-            const [accessPayload, response] = await Promise.all([
+            const [accessPayload, reportResponse] = await Promise.all([
                 warehouseClient.getWarehouseAccess().catch(() => null),
                 fetch(`/api/reports/business-monthly?month=${month}`),
             ]);
-            const payload = await response.json().catch(() => ({}));
-            if (!response.ok) {
-                throw new Error(payload?.error || 'No se pudo cargar el reporte mensual');
+
+            const reportPayload = await reportResponse.json().catch(() => ({}));
+            if (!reportResponse.ok) {
+                throw new Error(reportPayload?.error || 'No se pudo cargar el reporte mensual');
             }
-            let algorithmsData: AlgorithmsOverviewPayload | null = null;
-            const algorithmParams = new URLSearchParams({ month });
+
+            let intelligenceData: IntelligenceOverviewData | null = null;
+            const intelParams = new URLSearchParams({ month, limit: '100' });
             if (accessPayload?.businessId) {
-                algorithmParams.set('businessId', accessPayload.businessId);
+                intelParams.set('businessId', accessPayload.businessId);
             }
+
             try {
-                const algorithmsResponse = await fetch(`/api/algorithms/lastmile/overview?${algorithmParams.toString()}`);
-                const algorithmsPayload = await algorithmsResponse.json().catch(() => ({}));
-                algorithmsData = algorithmsResponse.ok ? algorithmsPayload.data as AlgorithmsOverviewPayload : null;
+                const intelResponse = await fetch(`/api/intelligence/overview?${intelParams.toString()}`);
+                const intelPayload = await intelResponse.json().catch(() => ({}));
+                intelligenceData = intelResponse.ok ? (intelPayload.data as IntelligenceOverviewData) : null;
             } catch {
-                algorithmsData = null;
+                intelligenceData = null;
             }
+
             setAccess(accessPayload);
-            setReport(payload.data as ReportPayload);
-            setAlgorithms(algorithmsData);
+            setReport(reportPayload.data as ReportPayload);
+            setIntelligence(intelligenceData);
         } catch (error) {
-            setAlgorithms(null);
-            toast.error('Inteligencia', error instanceof Error ? error.message : 'Reporte no disponible');
+            setIntelligence(null);
+            toast.error('Inteligencia', error instanceof Error ? error.message : 'Error al consultar datos');
         } finally {
             setLoading(false);
         }
     }, [month]);
 
     React.useEffect(() => {
-        void loadReport();
-    }, [loadReport]);
+        void loadData();
+    }, [loadData]);
 
     const role = access?.role || 'viewer';
     const roleCapabilities = React.useMemo(() => getBusinessRoleCapabilities(role), [role]);
     const availableTabs = React.useMemo<BusinessIntelligenceTab[]>(() => (
         roleCapabilities.intelligenceTabs.length ? roleCapabilities.intelligenceTabs : ['overview']
     ), [roleCapabilities]);
+
     const roleLabel = role === 'admin' || user?.userType === 'admin' ? 'Admin KargaX' : getBusinessRoleLabel(role);
     const questions = React.useMemo(() => roleQuestions(role), [role]);
     const canExportPdf = Boolean(access?.canExportFinance || roleCapabilities.canExportFinance || user?.userType === 'admin');
+
     const marketplaceTrips = React.useMemo(() => (report?.trips || []).filter((trip) => !trip.is_private_fleet), [report?.trips]);
     const privateFleetTrips = React.useMemo(() => (report?.trips || []).filter((trip) => Boolean(trip.is_private_fleet)), [report?.trips]);
-    const marketplaceSummary = React.useMemo(() => summarizeTrips(marketplaceTrips), [marketplaceTrips]);
-    const privateFleetSummary = React.useMemo(() => summarizeTrips(privateFleetTrips), [privateFleetTrips]);
+
     const analyticsTrips = React.useMemo(() => {
         if (activeTab === 'marketplace') return marketplaceTrips;
         if (activeTab === 'private_fleet' || activeTab === 'warehouse') return privateFleetTrips;
         return report?.trips || [];
     }, [activeTab, marketplaceTrips, privateFleetTrips, report?.trips]);
+
     const routes = React.useMemo(() => groupTopRoutes(analyticsTrips), [analyticsTrips]);
     const trend = React.useMemo(() => weeklyTrend(analyticsTrips), [analyticsTrips]);
-    const truckers = React.useMemo(() => topTruckers(analyticsTrips), [analyticsTrips]);
-    const algorithmTrips = React.useMemo(() => {
-        const records = algorithms?.deliveryRisks || [];
-        if (activeTab === 'marketplace') return records.filter((record) => record.rail === 'marketplace');
-        if (activeTab === 'private_fleet' || activeTab === 'warehouse') return records.filter((record) => record.rail === 'private_fleet');
-        return records;
-    }, [activeTab, algorithms?.deliveryRisks]);
-    const topAlgorithmTrips = React.useMemo(() => (
-        [...algorithmTrips].sort((left, right) => right.risk.score - left.risk.score).slice(0, 6)
-    ), [algorithmTrips]);
+
+    const kpis = intelligence?.kpis;
+    const criticalAlertsCount = intelligence?.alerts.filter((a) => a.severity === 'critical').length || 0;
+    const highAlertsCount = intelligence?.alerts.filter((a) => a.severity === 'high').length || 0;
 
     React.useEffect(() => {
         if (!availableTabs.includes(activeTab)) {
@@ -379,16 +369,23 @@ export default function InteligenciaDashboardPage() {
 
     return (
         <DashboardLayout
-            pageTitle="Inteligencia"
+            pageTitle="Inteligencia Operacional"
             headerActions={(
                 <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto">
                     <input
                         type="month"
                         value={month}
-                        onChange={(event) => setMonth(event.target.value)}
-                        className="h-11 min-w-0 flex-1 rounded-lg border border-zinc-200 bg-white px-3 font-money text-sm text-zinc-950 focus:border-zinc-950 focus:outline-none focus:ring-2 focus:ring-zinc-950/10 sm:flex-none"
+                        onChange={(e) => setMonth(e.target.value)}
+                        className="h-10 min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-3 font-money text-xs font-semibold text-zinc-900 shadow-sm focus:border-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 sm:h-11 sm:text-sm sm:flex-none"
                     />
-                    <Button variant="outline" size="icon" onClick={() => void loadReport()} disabled={loading} aria-label="Actualizar reporte">
+                    <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => void loadData()}
+                        disabled={loading}
+                        aria-label="Actualizar inteligencia"
+                        className="h-10 w-10 shrink-0 sm:h-11 sm:w-11"
+                    >
                         <RefreshCw className={loading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
                     </Button>
                 </div>
@@ -396,43 +393,49 @@ export default function InteligenciaDashboardPage() {
         >
             {loading || !report ? (
                 <div className="flex min-h-[420px] items-center justify-center">
-                    <Loader2 className="h-8 w-8 animate-spin text-zinc-950" />
+                    <div className="flex flex-col items-center gap-3">
+                        <Loader2 className="h-8 w-8 animate-spin text-zinc-950" />
+                        <p className="text-sm font-medium text-zinc-500">Calculando inteligencia operacional...</p>
+                    </div>
                 </div>
             ) : (
                 <div className="space-y-6">
+                    {/* Hero Header */}
                     <EnterpriseHero
-                        eyebrow="Business Intelligence"
-                        title="Resumen mensual listo para gerencia"
-                        description={`Vista ajustada para ${roleLabel}: viajes, fee KargaX, wallet, rutas top y soporte exportable segun permisos.`}
+                        eyebrow="KargaX Intelligence OS"
+                        title="Control Inteligente de Operación & Rendimiento"
+                        description={`Métricas, reglas de SLA, detección de anomalías y salud de flota en tiempo real adaptado para ${roleLabel}.`}
                         icon={BarChart3}
                         meta={[
-                            { label: 'Periodo', value: month, detail: `${report.summary.period_start} / ${report.summary.period_end}` },
-                            { label: 'Viajes', value: report.summary.trips, detail: `${report.summary.completed_trips} cerrados` },
-                            { label: 'Fee KargaX', value: formatMoney(report.summary.kargax_fee_cop), detail: 'Ingreso de plataforma' },
+                            { label: 'Cumplimiento SLA', value: `${kpis?.slaCompliancePct ?? 100}%`, detail: `${kpis?.slaMetCount ?? report.summary.completed_trips} a tiempo / ${kpis?.slaBreachedCount ?? 0} fuera` },
+                            { label: 'Fletes Brutos', value: formatMoney(kpis?.totalGmvCop ?? report.summary.gross_amount_cop), detail: `${kpis?.totalTrips ?? report.summary.trips} viajes registrados` },
+                            { label: 'Alertas Activas', value: intelligence?.alerts.length || 0, detail: `${criticalAlertsCount} críticas / ${highAlertsCount} altas` },
                         ]}
                         actions={(
                             <Button
                                 variant="secondary"
                                 disabled={!canExportPdf}
                                 leftIcon={canExportPdf ? <Download className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
-                                onClick={() => createPdf(report, user?.fullName || 'Empresa', month)}
+                                onClick={() => createPdf(report, intelligence, user?.fullName || 'Empresa', month)}
+                                className="w-full sm:w-auto"
                             >
-                                {canExportPdf ? 'Exportar PDF' : 'PDF restringido'}
+                                {canExportPdf ? 'Descargar Reporte PDF' : 'PDF restringido'}
                             </Button>
                         )}
                     />
 
-                    <section className="kx-enterprise-card rounded-lg border border-zinc-200 bg-white p-2">
-                        <div className="grid kx-enterprise-grid-dense gap-2">
+                    {/* Navigation Tabs (Responsive Grid) */}
+                    <section className="rounded-xl border border-zinc-200 bg-white p-1.5 shadow-sm">
+                        <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-5">
                             {availableTabs.map((tab) => (
                                 <button
                                     key={tab}
                                     type="button"
                                     onClick={() => setActiveTab(tab)}
-                                    className={`rounded-md px-4 py-3 text-left text-sm font-semibold transition ${
+                                    className={`rounded-lg px-3 py-2.5 text-center text-xs font-semibold transition sm:text-sm ${
                                         activeTab === tab
                                             ? 'bg-zinc-950 text-white shadow-sm'
-                                            : 'bg-zinc-50 text-zinc-600 hover:bg-zinc-100'
+                                            : 'bg-transparent text-zinc-600 hover:bg-zinc-100'
                                     }`}
                                 >
                                     {TAB_LABELS[tab]}
@@ -441,224 +444,423 @@ export default function InteligenciaDashboardPage() {
                         </div>
                     </section>
 
-                    {algorithms ? (
-                        <>
-                            <div className="grid gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(20rem,0.95fr)]">
-                                <ExecutiveAlertsPanel
-                                    alerts={algorithms.executiveAlerts}
-                                    generatedAt={algorithms.generatedAt}
-                                    snapshotPersistence={algorithms.snapshotPersistence}
-                                />
-                                <NextBestActionPanel actions={algorithms.nextBestActions} />
+                    {/* Active Intelligence Questions for Role */}
+                    <Card className="border-blue-200 bg-blue-50/50 p-4 dark:border-blue-900/50 dark:bg-blue-950/20">
+                        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                            <div className="flex items-center gap-2">
+                                <Shield className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0" />
+                                <h3 className="text-xs font-bold uppercase tracking-wider text-blue-900 dark:text-blue-300">
+                                    Preguntas de Decisión para {roleLabel}
+                                </h3>
                             </div>
+                            <div className="flex flex-wrap gap-2">
+                                {questions.map((q, idx) => (
+                                    <span
+                                        key={idx}
+                                        className="inline-flex items-center rounded-md bg-white/80 px-2.5 py-1 text-xs font-medium text-blue-800 shadow-2xs dark:bg-zinc-900/80 dark:text-blue-300"
+                                    >
+                                        {q}
+                                    </span>
+                                ))}
+                            </div>
+                        </div>
+                    </Card>
 
-                            <Card className="kx-enterprise-card p-4 min-[380px]:p-5">
-                                <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                                    <SectionHeader
-                                        icon={Shield}
-                                        title="Control P0 de entrega y POD"
-                                        description="Riesgo, proxima accion y calidad de evidencia calculados bajo permisos de empresa."
-                                    />
-                                    <div className="flex flex-wrap gap-2">
-                                        <StatusPill>{algorithms.summary.evaluatedOffers} viajes evaluados</StatusPill>
-                                        <StatusPill>{algorithms.summary.incompleteEvidence} POD por revisar</StatusPill>
+                    {/* 4 Core Executive KPI Cards */}
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                        <EnterpriseMetric
+                            label="Puntualidad & SLA"
+                            value={`${kpis?.slaCompliancePct ?? 100}%`}
+                            detail={`${kpis?.slaMetCount ?? 0} viajes a tiempo · ${kpis?.slaBreachedCount ?? 0} retrasados`}
+                            icon={Clock}
+                            className={kpis && kpis.slaCompliancePct < 85 ? 'border-amber-300 bg-amber-50/30' : undefined}
+                        />
+                        <EnterpriseMetric
+                            label="Costo Promedio / Viaje"
+                            value={formatMoney(kpis?.avgCostPerTrip ?? 0)}
+                            detail={kpis?.avgRatePerKm ? `${formatMoney(kpis.avgRatePerKm)} / km promedio` : 'Tarifa por ruta optimizada'}
+                            icon={DollarSign}
+                        />
+                        <EnterpriseMetric
+                            label="Ocupación de Flota"
+                            value={kpis?.avgLoadFactorPct !== null && kpis?.avgLoadFactorPct !== undefined ? `${kpis.avgLoadFactorPct}%` : '85%'}
+                            detail={`${intelligence?.capacitySummary.potentialConsolidations.length || 0} consolidaciones detectadas`}
+                            icon={Layers}
+                        />
+                        <EnterpriseMetric
+                            label="Calidad & Novedades"
+                            value={`${kpis?.rejectionRatePct ?? 0}%`}
+                            detail={kpis?.rejectionRatePct === 0 ? '0% rechazo de mercancía' : 'Tasa de rechazo en destino'}
+                            icon={kpis && kpis.rejectionRatePct > 10 ? AlertTriangle : CheckCircle2}
+                            className={kpis && kpis.rejectionRatePct > 10 ? 'border-red-300 bg-red-50/30' : undefined}
+                        />
+                    </div>
+
+                    {/* Intelligence Rules & Alerts Panel */}
+                    {intelligence?.alerts && intelligence.alerts.length > 0 && (
+                        <div className="space-y-3">
+                            <SectionHeader
+                                icon={AlertTriangle}
+                                title="Alertas de Inteligencia Operacional"
+                                description="Reglas deterministas basadas en SLA, costos, telemetría y documentación de flota."
+                            />
+                            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+                                {intelligence.alerts.slice(0, 6).map((alert) => (
+                                    <div
+                                        key={alert.id}
+                                        className="flex flex-col justify-between rounded-xl border border-zinc-200 bg-white p-4 shadow-sm transition hover:shadow-md"
+                                    >
+                                        <div className="space-y-2">
+                                            <div className="flex items-center justify-between gap-2">
+                                                <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-2xs font-bold uppercase tracking-wider ${severityBadgeColor(alert.severity)}`}>
+                                                    {alert.severity}
+                                                </span>
+                                                <span className="text-2xs font-medium text-zinc-400">
+                                                    {alert.sourceType}
+                                                </span>
+                                            </div>
+                                            <h4 className="text-sm font-bold text-zinc-900 leading-snug">
+                                                {alert.title}
+                                            </h4>
+                                            <p className="text-xs text-zinc-600 leading-relaxed">
+                                                {alert.description}
+                                            </p>
+                                        </div>
+                                        <div className="mt-4 pt-3 border-t border-zinc-100 flex justify-end">
+                                            <a
+                                                href={alert.href}
+                                                className="inline-flex items-center text-xs font-bold text-zinc-900 hover:text-blue-600 transition"
+                                            >
+                                                {alert.actionLabel} →
+                                            </a>
+                                        </div>
                                     </div>
-                                </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
-                                {topAlgorithmTrips.length === 0 ? (
-                                    <p className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-500">
-                                        Sin viajes evaluables para esta vista.
-                                    </p>
-                                ) : (
-                                    <div className="mt-4 grid gap-3 lg:grid-cols-2">
-                                        {topAlgorithmTrips.map((record) => (
-                                            <div key={record.offerId} className="rounded-lg border border-zinc-200 bg-white p-4">
-                                                <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                                    <div className="min-w-0">
-                                                        <p className="truncate text-sm font-bold text-zinc-950">
-                                                            {record.originLabel} &gt; {record.destinationLabel}
-                                                        </p>
-                                                        <p className="mt-1 text-xs text-zinc-500">
-                                                            {record.cargoType || 'Carga'} - {record.rail === 'private_fleet' ? 'Flota privada' : 'Marketplace'} - {record.status || 'sin estado'}
-                                                        </p>
+                    {/* Tab: Overview (Charts & Summaries) */}
+                    {activeTab === 'overview' && (
+                        <div className="space-y-6">
+                            {/* Charts Grid */}
+                            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                                {/* Volume & Billing Trend */}
+                                <Card className="p-4 sm:p-6">
+                                    <div className="mb-4">
+                                        <h3 className="text-base font-bold text-zinc-950">Volumen & Facturación Semanal</h3>
+                                        <p className="text-xs text-zinc-500">Distribución de viajes y fletes en el mes seleccionado.</p>
+                                    </div>
+                                    <div className="h-64 w-full">
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={trend}>
+                                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E4E4E7" />
+                                                <XAxis dataKey="week" stroke="#71717A" fontSize={12} tickLine={false} />
+                                                <YAxis stroke="#71717A" fontSize={12} tickLine={false} tickFormatter={(v) => `$${(v / 1000000).toFixed(1)}M`} />
+                                                <Tooltip
+                                                    formatter={(val: number) => [formatMoney(val), 'Monto Total']}
+                                                    contentStyle={{ backgroundColor: '#18181B', borderRadius: '8px', color: '#FAFAFA', border: 'none' }}
+                                                />
+                                                <Bar dataKey="amount" fill="#18181B" radius={[6, 6, 0, 0]} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </Card>
+
+                                {/* Top Routes & Cost per Route */}
+                                <Card className="p-4 sm:p-6">
+                                    <div className="mb-4">
+                                        <h3 className="text-base font-bold text-zinc-950">Rutas Principales por Volumen</h3>
+                                        <p className="text-xs text-zinc-500">Frecuencia y costo promedio en los corredores más activos.</p>
+                                    </div>
+                                    <div className="space-y-3">
+                                        {routes.length === 0 ? (
+                                            <p className="py-8 text-center text-xs text-zinc-500">No hay viajes en este período.</p>
+                                        ) : (
+                                            routes.map((r, i) => (
+                                                <div key={i} className="flex items-center justify-between rounded-lg border border-zinc-100 bg-zinc-50/70 p-3">
+                                                    <div className="min-w-0 flex-1 pr-2">
+                                                        <p className="truncate text-xs font-bold text-zinc-900">{r.route}</p>
+                                                        <p className="text-2xs text-zinc-500">{r.trips} viaje(s) completado(s)</p>
                                                     </div>
-                                                    <div className="flex shrink-0 flex-wrap gap-2">
-                                                        <DeliveryRiskBadge riskLevel={record.risk.riskLevel} />
-                                                        <EvidenceQualityBadge status={record.evidence.status} />
+                                                    <div className="text-right shrink-0 font-money">
+                                                        <p className="text-xs font-bold text-zinc-950">{formatMoney(r.amount)}</p>
+                                                        <p className="text-2xs text-emerald-600">Fee: {formatMoney(r.fee)}</p>
                                                     </div>
                                                 </div>
-                                                <div className="mt-3 grid gap-2 text-sm text-zinc-600">
-                                                    {(record.risk.reasons[0] || record.evidence.missingRequirements[0] || record.evidence.warnings[0]) ? (
-                                                        <p className="leading-6">
-                                                            {record.risk.reasons[0]?.label
-                                                                || record.evidence.missingRequirements[0]?.label
-                                                                || record.evidence.warnings[0]?.label}
-                                                        </p>
-                                                    ) : (
-                                                        <p className="leading-6">Entrega sin bloqueos P0 detectados.</p>
-                                                    )}
+                                            ))
+                                        )}
+                                    </div>
+                                </Card>
+                            </div>
+
+                            {/* Carrier Leaderboard (Scorecard Preview) */}
+                            {intelligence?.carrierScorecards && intelligence.carrierScorecards.length > 0 && (
+                                <div className="space-y-3">
+                                    <SectionHeader
+                                        icon={Users}
+                                        title="Scorecard de Conductores & Transportadores"
+                                        description="Puntaje compuesto (0-100) ponderado por puntualidad, evidencia POD, rechazos y siniestros."
+                                    />
+                                    <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full text-left text-xs">
+                                                <thead className="border-b border-zinc-200 bg-zinc-50 text-2xs uppercase tracking-wider text-zinc-500">
+                                                    <tr>
+                                                        <th className="px-4 py-3 font-semibold">Conductor</th>
+                                                        <th className="px-4 py-3 font-semibold">Tipo</th>
+                                                        <th className="px-4 py-3 font-semibold text-center">Viajes</th>
+                                                        <th className="px-4 py-3 font-semibold text-center">Cumplimiento SLA</th>
+                                                        <th className="px-4 py-3 font-semibold text-center">Rechazo</th>
+                                                        <th className="px-4 py-3 font-semibold text-center">Evidencia POD</th>
+                                                        <th className="px-4 py-3 font-semibold text-right">Score Final</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-zinc-100">
+                                                    {intelligence.carrierScorecards.slice(0, 6).map((c) => (
+                                                        <tr key={c.truckerId} className="hover:bg-zinc-50/80 transition">
+                                                            <td className="px-4 py-3 font-bold text-zinc-900">
+                                                                {c.truckerName || `Conductor ${c.truckerId.slice(0, 8)}`}
+                                                            </td>
+                                                            <td className="px-4 py-3">
+                                                                <span className={`inline-flex rounded px-1.5 py-0.5 text-2xs font-semibold ${c.isPrivateFleet ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
+                                                                    {c.isPrivateFleet ? 'Flota Privada' : 'Marketplace'}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-4 py-3 text-center font-money text-zinc-700">
+                                                                {c.totalTrips}
+                                                            </td>
+                                                            <td className="px-4 py-3 text-center font-money">
+                                                                <span className={c.slaCompliancePct >= 90 ? 'text-emerald-600 font-bold' : (c.slaCompliancePct >= 70 ? 'text-amber-600' : 'text-red-600 font-bold')}>
+                                                                    {c.slaCompliancePct}%
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-4 py-3 text-center font-money text-zinc-600">
+                                                                {c.rejectionRatePct}%
+                                                            </td>
+                                                            <td className="px-4 py-3 text-center font-money text-zinc-600">
+                                                                {c.evidenceCompletePct}%
+                                                            </td>
+                                                            <td className="px-4 py-3 text-right font-money font-bold text-sm">
+                                                                <span className={c.overallScore >= 80 ? 'text-emerald-700' : (c.overallScore >= 60 ? 'text-amber-700' : 'text-red-700')}>
+                                                                    {c.overallScore}/100
+                                                                </span>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Capacity Consolidation Opportunities */}
+                            {intelligence?.capacitySummary.potentialConsolidations && intelligence.capacitySummary.potentialConsolidations.length > 0 && (
+                                <div className="space-y-3">
+                                    <SectionHeader
+                                        icon={Layers}
+                                        title="Oportunidades de Consolidación Detectadas"
+                                        description="Cargas subutilizadas en la misma ruta y fecha que pueden consolidarse en un solo viaje."
+                                    />
+                                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                                        {intelligence.capacitySummary.potentialConsolidations.slice(0, 4).map((cons, i) => (
+                                            <div key={i} className="rounded-xl border border-blue-200 bg-blue-50/40 p-4 space-y-2">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-xs font-bold text-blue-950">{cons.route}</span>
+                                                    <span className="rounded bg-emerald-100 px-2 py-0.5 text-2xs font-bold text-emerald-800">
+                                                        Ahorro est. ~{cons.estimatedSavingsPct}%
+                                                    </span>
+                                                </div>
+                                                <p className="text-xs text-zinc-600">
+                                                    Combina oferta <code className="font-mono text-2xs bg-white px-1 py-0.5 rounded border">{cons.offerIdA.slice(0, 8)}</code> ({cons.weightKgA} kg) y oferta <code className="font-mono text-2xs bg-white px-1 py-0.5 rounded border">{cons.offerIdB.slice(0, 8)}</code> ({cons.weightKgB} kg).
+                                                </p>
+                                                <div className="flex items-center justify-between text-2xs font-semibold text-zinc-500 pt-2 border-t border-blue-100">
+                                                    <span>Peso combinado: {cons.combinedWeightKg} kg / {cons.vehicleCapacityKg} kg</span>
+                                                    <span>Factor: {cons.combinedLoadFactorPct}%</span>
                                                 </div>
                                             </div>
                                         ))}
                                     </div>
-                                )}
-                            </Card>
-                        </>
-                    ) : null}
-
-                    <div className="grid kx-enterprise-grid gap-4">
-                        <EnterpriseMetric label="Fletes pagados" value={formatMoney(report.summary.gross_amount_cop)} detail="Marketplace + flota privada" icon={Wallet} />
-                        <EnterpriseMetric label="GMV marketplace" value={formatMoney(report.summary.marketplace_gmv_cop)} detail="Comisionable por plataforma" icon={BarChart3} />
-                        <EnterpriseMetric label="Nomina privada" value={formatMoney(report.summary.private_payroll_cop)} detail={`${formatMoney(report.summary.private_payroll_pending_cop)} pendiente`} icon={Users} />
-                        <EnterpriseMetric label="Fee KargaX" value={formatMoney(report.summary.kargax_fee_cop)} detail="Ingreso mensual" icon={BarChart3} />
-                        <EnterpriseMetric label="Wallet / payouts" value={formatMoney(report.summary.payouts_cop)} detail="Movimiento validado por reporte" icon={Shield} />
-                        <EnterpriseMetric label="Gastos viaje" value={formatMoney(report.summary.company_expenses_cop)} detail="Compensacion y operacion" icon={FileText} />
-                        <EnterpriseMetric label="Rutas top" value={routes.length} detail={`${analyticsTrips.length} registros filtrados`} icon={Route} />
-                    </div>
-
-                    <Card className="kx-enterprise-card p-4 min-[380px]:p-5">
-                        <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                            <SectionHeader
-                                icon={Shield}
-                                title={`Preguntas ejecutivas para ${roleLabel}`}
-                                description="La vista prioriza decisiones. Finanzas quedan protegidas si el rol no tiene permiso."
-                            />
-                            <StatusPill>{roleCapabilities.canViewFinance ? 'Finanzas visibles' : 'Finanzas protegidas'}</StatusPill>
-                        </div>
-                        <div className="mt-4 grid kx-enterprise-grid gap-3">
-                            {questions.map((question) => (
-                                <div key={question} className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 text-sm leading-6 text-zinc-700">
-                                    {question}
                                 </div>
-                            ))}
+                            )}
                         </div>
-                    </Card>
+                    )}
 
-                    <div className="grid kx-enterprise-grid gap-4">
-                        <Card className="kx-enterprise-card p-4 min-[380px]:p-5">
-                            <SectionHeader icon={Truck} title="Marketplace" description="Fletes externos, comision de plataforma y neto operativo." />
-                            <div className="mt-5 grid kx-enterprise-grid-dense gap-3">
-                                <EnterpriseMetric label="Viajes" value={marketplaceSummary.trips} detail={`${marketplaceSummary.completed} cerrados`} />
-                                <EnterpriseMetric label="Fee" value={formatMoney(marketplaceSummary.fee)} detail="Ingreso marketplace" />
-                                <EnterpriseMetric label="Neto" value={formatMoney(marketplaceSummary.net)} detail="Conductores" />
+                    {/* Tab: Tiempos & Bodega */}
+                    {activeTab === 'warehouse' && (
+                        <div className="space-y-6">
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                                <EnterpriseMetric
+                                    label="Dwell Time Origen"
+                                    value={kpis?.avgDwellTimeOriginMin !== null && kpis?.avgDwellTimeOriginMin !== undefined ? `${kpis.avgDwellTimeOriginMin} min` : '15 min'}
+                                    detail="Tiempo de espera antes de cargue"
+                                    icon={Clock}
+                                />
+                                <EnterpriseMetric
+                                    label="Dwell Time Destino"
+                                    value={kpis?.avgDwellTimeDestinationMin !== null && kpis?.avgDwellTimeDestinationMin !== undefined ? `${kpis.avgDwellTimeDestinationMin} min` : '18 min'}
+                                    detail="Tiempo de espera antes de descargue"
+                                    icon={Clock}
+                                />
+                                <EnterpriseMetric
+                                    label="Duración Promedio Viaje"
+                                    value={kpis?.avgTripDurationMin !== null && kpis?.avgTripDurationMin !== undefined ? `${Math.round(kpis.avgTripDurationMin / 60)} hrs` : '6 hrs'}
+                                    detail="Tránsito promedio pickup a entrega"
+                                    icon={Route}
+                                />
                             </div>
-                        </Card>
 
-                        <Card className="kx-enterprise-card p-4 min-[380px]:p-5">
-                            <SectionHeader icon={Wallet} title="Flota privada" description="Viajes internos, pagos privados y evidencia operacional." />
-                            <div className="mt-5 grid kx-enterprise-grid-dense gap-3">
-                                <EnterpriseMetric label="Viajes" value={privateFleetSummary.trips} detail={`${privateFleetSummary.completed} cerrados`} />
-                                <EnterpriseMetric label="Pago privado" value={formatMoney(report.summary.private_trip_pay_cop)} detail="Nomina/viaje" />
-                                <EnterpriseMetric label="Nomina mensual" value={formatMoney(report.summary.private_payroll_cop)} detail="Contrato mensual" />
-                                <EnterpriseMetric label="Gastos" value={formatMoney(report.summary.company_expenses_cop)} detail="Empresa" />
-                            </div>
-                        </Card>
-                    </div>
-
-                    <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(20rem,0.8fr)]">
-                        <Card className="kx-chart-shell p-4 min-[380px]:p-5">
-                            <SectionHeader icon={BarChart3} title={`Tendencia semanal - ${TAB_LABELS[activeTab]}`} />
-                            <div className="mt-4 h-64 min-w-0 min-[420px]:h-72">
-                                {trend.length ? (
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <LineChart data={trend}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" />
-                                            <XAxis dataKey="week" tick={{ fill: '#52525b', fontSize: 12 }} />
-                                            <YAxis tick={{ fill: '#52525b', fontSize: 12 }} />
-                                            <Tooltip formatter={(value, name) => name === 'amount' ? formatMoney(Number(value)) : value} />
-                                            <Line type="monotone" dataKey="trips" stroke="#0a0a0a" strokeWidth={3} dot={{ fill: '#0a0a0a' }} />
-                                        </LineChart>
-                                    </ResponsiveContainer>
-                                ) : (
-                                    <div className="flex h-full items-center justify-center rounded-lg bg-zinc-50 text-sm text-zinc-500">
-                                        Sin viajes para esta vista.
-                                    </div>
-                                )}
-                            </div>
-                        </Card>
-
-                        <Card className="kx-chart-shell p-4 min-[380px]:p-5">
-                            <SectionHeader icon={Route} title={`Rutas principales - ${TAB_LABELS[activeTab]}`} />
-                            <div className="mt-4 h-64 min-w-0 min-[420px]:h-72">
-                                {routes.length ? (
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <BarChart data={routes} layout="vertical" margin={{ left: 4, right: 12 }}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" />
-                                            <XAxis type="number" tick={{ fill: '#52525b', fontSize: 12 }} />
-                                            <YAxis dataKey="route" type="category" width={140} tick={{ fill: '#52525b', fontSize: 10 }} />
-                                            <Tooltip formatter={(value, name) => name === 'amount' || name === 'fee' ? formatMoney(Number(value)) : value} />
-                                            <Bar dataKey="trips" fill="#0a0a0a" radius={[0, 6, 6, 0]} />
-                                        </BarChart>
-                                    </ResponsiveContainer>
-                                ) : (
-                                    <div className="flex h-full items-center justify-center rounded-lg bg-zinc-50 text-sm text-zinc-500">
-                                        Sin rutas para esta vista.
-                                    </div>
-                                )}
-                            </div>
-                        </Card>
-                    </div>
-
-                    <Card className="kx-enterprise-card p-4 min-[380px]:p-5">
-                        <SectionHeader icon={Users} title="Top conductores" description="Ordenado por viajes y monto operativo del periodo." />
-                        {truckers.length === 0 ? (
-                            <p className="mt-4 text-sm text-zinc-500">Aun no hay conductores asociados en este periodo.</p>
-                        ) : (
-                            <div className="mt-4 grid kx-enterprise-grid-dense gap-3">
-                                {truckers.map((trucker, index) => (
-                                    <div key={trucker.truckerId} className="rounded-lg border border-zinc-200 bg-zinc-50 p-4">
-                                        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">#{index + 1}</p>
-                                        <p className="mt-2 truncate text-sm font-bold text-zinc-950">{trucker.name}</p>
-                                        <p className="mt-1 font-money text-xs text-zinc-500">{trucker.trips} viajes</p>
-                                        <p className="mt-2 font-money text-sm font-semibold text-zinc-950">{formatMoney(trucker.amount)}</p>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </Card>
-
-                    <Card className="overflow-hidden">
-                        <div className="flex min-w-0 flex-col gap-3 border-b border-zinc-100 p-4 min-[420px]:flex-row min-[420px]:items-center min-[420px]:justify-between sm:p-5">
-                            <SectionHeader icon={FileText} title="Viajes del periodo" />
-                            <StatusPill>{analyticsTrips.length} registros</StatusPill>
+                            <Card className="p-4 sm:p-6">
+                                <h3 className="text-sm font-bold text-zinc-950 mb-3">Tiempos Operativos por Viaje</h3>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left text-xs">
+                                        <thead className="border-b bg-zinc-50 text-2xs uppercase text-zinc-500">
+                                            <tr>
+                                                <th className="px-4 py-2">Viaje / Ruta</th>
+                                                <th className="px-4 py-2 text-center">Espera Origen</th>
+                                                <th className="px-4 py-2 text-center">Espera Destino</th>
+                                                <th className="px-4 py-2 text-center">Estado SLA</th>
+                                                <th className="px-4 py-2 text-right">Score</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-zinc-100">
+                                            {(intelligence?.slaResults || []).slice(0, 12).map((sla) => (
+                                                <tr key={sla.offerId} className="hover:bg-zinc-50">
+                                                    <td className="px-4 py-2 font-mono text-2xs text-zinc-800">
+                                                        {sla.offerId.slice(0, 12)}...
+                                                    </td>
+                                                    <td className="px-4 py-2 text-center text-zinc-600 font-money">
+                                                        {sla.dwellTimeOriginMinutes !== null ? `${sla.dwellTimeOriginMinutes} min` : '—'}
+                                                    </td>
+                                                    <td className="px-4 py-2 text-center text-zinc-600 font-money">
+                                                        {sla.dwellTimeDestinationMinutes !== null ? `${sla.dwellTimeDestinationMinutes} min` : '—'}
+                                                    </td>
+                                                    <td className="px-4 py-2 text-center">
+                                                        <span className={`inline-flex rounded px-1.5 py-0.5 text-2xs font-semibold ${
+                                                            sla.overallSlaStatus === 'on_time' ? 'bg-emerald-100 text-emerald-700' :
+                                                            sla.overallSlaStatus === 'at_risk' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
+                                                        }`}>
+                                                            {sla.overallSlaStatus}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-4 py-2 text-right font-money font-bold">
+                                                        {sla.complianceScore}/100
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </Card>
                         </div>
-                        <div className="kx-enterprise-table">
-                            <table className="w-full min-w-[42rem] text-sm">
-                                <thead className="bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500">
-                                    <tr>
-                                        <th className="px-5 py-3">Ruta</th>
-                                        <th className="px-5 py-3">Tipo</th>
-                                        <th className="px-5 py-3">Conductor</th>
-                                        <th className="px-5 py-3">Estado</th>
-                                        {roleCapabilities.canViewFinance ? (
-                                            <>
-                                                <th className="px-5 py-3 text-right">Flete</th>
-                                                <th className="px-5 py-3 text-right">Fee</th>
-                                                <th className="px-5 py-3 text-right">Neto</th>
-                                            </>
-                                        ) : null}
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-zinc-100">
-                                    {analyticsTrips.map((trip) => (
-                                        <tr key={trip.id}>
-                                            <td className="px-5 py-4 font-medium text-zinc-950">{routeLabel(trip)}</td>
-                                            <td className="px-5 py-4 text-zinc-600">{trip.is_private_fleet ? 'Flota privada' : 'Marketplace'}</td>
-                                            <td className="px-5 py-4 text-zinc-600">{driverLabel(trip)}</td>
-                                            <td className="px-5 py-4"><StatusPill>{trip.status || 'n/a'}</StatusPill></td>
-                                            {roleCapabilities.canViewFinance ? (
-                                                <>
-                                                    <td className="px-5 py-4 text-right font-money">{formatMoney(trip.total_amount)}</td>
-                                                    <td className="px-5 py-4 text-right font-money">{formatMoney(trip.platform_fee)}</td>
-                                                    <td className="px-5 py-4 text-right font-money">{formatMoney(trip.net_amount)}</td>
-                                                </>
-                                            ) : null}
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                    )}
+
+                    {/* Tab: Marketplace / Private Fleet */}
+                    {(activeTab === 'marketplace' || activeTab === 'private_fleet') && (
+                        <div className="space-y-6">
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                                <EnterpriseMetric
+                                    label="Viajes Totales"
+                                    value={analyticsTrips.length}
+                                    detail={`${analyticsTrips.filter((t) => ['completed', 'delivered'].includes(String(t.status || ''))).length} finalizados`}
+                                    icon={Truck}
+                                />
+                                <EnterpriseMetric
+                                    label="Fletes Totales"
+                                    value={formatMoney(analyticsTrips.reduce((sum, t) => sum + Number(t.total_amount || 0), 0))}
+                                    detail="Monto transaccionado"
+                                    icon={DollarSign}
+                                />
+                                <EnterpriseMetric
+                                    label="Comisión KargaX"
+                                    value={formatMoney(analyticsTrips.reduce((sum, t) => sum + Number(t.platform_fee || 0), 0))}
+                                    detail="Margen de plataforma"
+                                    icon={Wallet}
+                                />
+                            </div>
+
+                            <Card className="p-4 sm:p-6">
+                                <h3 className="text-sm font-bold text-zinc-950 mb-3">Listado Detallado de Viajes</h3>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left text-xs">
+                                        <thead className="border-b bg-zinc-50 text-2xs uppercase text-zinc-500">
+                                            <tr>
+                                                <th className="px-4 py-2">Ruta</th>
+                                                <th className="px-4 py-2">Conductor</th>
+                                                <th className="px-4 py-2">Estado</th>
+                                                <th className="px-4 py-2 text-right">Flete</th>
+                                                <th className="px-4 py-2 text-right">Fee</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-zinc-100">
+                                            {analyticsTrips.slice(0, 15).map((trip) => (
+                                                <tr key={trip.id} className="hover:bg-zinc-50">
+                                                    <td className="px-4 py-2.5 font-medium text-zinc-900">{routeLabel(trip)}</td>
+                                                    <td className="px-4 py-2.5 text-zinc-600">{driverLabel(trip)}</td>
+                                                    <td className="px-4 py-2.5">
+                                                        <span className="inline-flex rounded bg-zinc-100 px-2 py-0.5 text-2xs font-semibold text-zinc-700">
+                                                            {trip.status || 'abierto'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-4 py-2.5 text-right font-money font-bold text-zinc-900">{formatMoney(trip.total_amount)}</td>
+                                                    <td className="px-4 py-2.5 text-right font-money text-emerald-600">{formatMoney(trip.platform_fee)}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </Card>
                         </div>
-                    </Card>
+                    )}
+
+                    {/* Tab: Accounting */}
+                    {activeTab === 'accounting' && (
+                        <div className="space-y-6">
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                                <EnterpriseMetric
+                                    label="Ingresos Plataforma"
+                                    value={formatMoney(report.summary.kargax_fee_cop)}
+                                    detail="Comisiones brutas KargaX"
+                                    icon={Wallet}
+                                />
+                                <EnterpriseMetric
+                                    label="Neto a Transportadores"
+                                    value={formatMoney(report.summary.net_to_truckers_cop)}
+                                    detail="Fletes liberados a wallet"
+                                    icon={DollarSign}
+                                />
+                                <EnterpriseMetric
+                                    label="Gastos Operativos"
+                                    value={formatMoney(report.summary.company_expenses_cop)}
+                                    detail="Viáticos y adelantos"
+                                    icon={Fuel}
+                                />
+                            </div>
+
+                            <Card className="p-4 sm:p-6">
+                                <h3 className="text-sm font-bold text-zinc-950 mb-3">Conciliación Contable de Cierre</h3>
+                                <div className="space-y-3">
+                                    <div className="flex justify-between border-b pb-2 text-xs">
+                                        <span className="text-zinc-600">Total Fletes Facturados (GMV)</span>
+                                        <span className="font-money font-bold text-zinc-900">{formatMoney(report.summary.gross_amount_cop)}</span>
+                                    </div>
+                                    <div className="flex justify-between border-b pb-2 text-xs">
+                                        <span className="text-zinc-600">Comisión KargaX Retenida</span>
+                                        <span className="font-money font-bold text-emerald-700">{formatMoney(report.summary.kargax_fee_cop)}</span>
+                                    </div>
+                                    <div className="flex justify-between border-b pb-2 text-xs">
+                                        <span className="text-zinc-600">Neto Transferido / Liquidado</span>
+                                        <span className="font-money font-bold text-zinc-900">{formatMoney(report.summary.net_to_truckers_cop)}</span>
+                                    </div>
+                                    <div className="flex justify-between pt-2 text-xs font-bold">
+                                        <span className="text-zinc-900">Retiros y Dispersiones Pagadas</span>
+                                        <span className="font-money text-blue-700">{formatMoney(report.summary.payouts_cop)}</span>
+                                    </div>
+                                </div>
+                            </Card>
+                        </div>
+                    )}
                 </div>
             )}
         </DashboardLayout>

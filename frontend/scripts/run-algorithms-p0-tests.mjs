@@ -36,6 +36,7 @@ const compile = spawnSync(
     '--noEmit',
     'false',
     join(frontendDir, 'src', 'algorithms', 'p0.node-test.ts'),
+    join(frontendDir, 'src', 'algorithms', 'intelligence.node-test.ts'),
   ],
   { cwd: frontendDir, stdio: 'inherit' }
 );
@@ -44,11 +45,23 @@ if (compile.status !== 0) {
   process.exit(compile.status || 1);
 }
 
-const run = spawnSync(process.execPath, ['--test', join(outputDir, 'p0.node-test.js')], {
+const runP0 = spawnSync(process.execPath, ['--test', join(outputDir, 'p0.node-test.js')], {
+  cwd: frontendDir,
+  stdio: 'inherit',
+});
+
+if (runP0.status !== 0) {
+  rmSync(outputDir, { recursive: true, force: true });
+  process.exit(runP0.status || 1);
+}
+
+const runIntel = spawnSync(process.execPath, ['--test', join(outputDir, 'intelligence.node-test.js')], {
   cwd: frontendDir,
   stdio: 'inherit',
 });
 
 rmSync(outputDir, { recursive: true, force: true });
+
+process.exit(runIntel.status || 0);
 
 process.exit(run.status || 0);
